@@ -1595,3 +1595,87 @@ textarea { resize: vertical; font-family: var(--font-body); }
   word-break: break-word;
   color: var(--silver);
 }
+
+/* ============================================================
+   v2 "The Archivist" — manual-first additions
+   ============================================================ */
+
+/* ---- home form strip ---- */
+.form-strip {
+  display: flex; align-items: center; gap: 8px;
+  margin: 14px 0 4px; flex-wrap: wrap;
+}
+.form-label {
+  font-family: "Oswald", sans-serif; font-size: 0.72rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--silver);
+}
+.form-hint { font-size: 0.7rem; color: var(--silver); opacity: 0.55; }
+.pill-small {
+  min-width: 26px; height: 26px; line-height: 26px;
+  font-size: 0.72rem; padding: 0 6px;
+}
+
+/* ---- results: mod edit pencil ---- */
+.result-edit {
+  background: rgba(105, 22, 204, 0.18);
+  border: 1px solid rgba(105, 22, 204, 0.55);
+  color: #b78aff; border-radius: 8px;
+  width: 30px; height: 30px; font-size: 0.85rem;
+  cursor: pointer; transition: background 0.15s ease, transform 0.15s ease;
+}
+.result-edit:hover { background: rgba(105, 22, 204, 0.35); transform: translateY(-1px); }
+
+/* ---- stats: career table tag ---- */
+.career-table .lb-club { display: block; font-size: 0.68rem; }
+
+/* ---- housekeeping: match list ---- */
+.admin-matchlist { max-height: 420px; overflow-y: auto; padding-right: 4px; }
+.admin-row-side { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.admin-detail-dot { color: var(--gold-bright); font-size: 0.6rem; vertical-align: middle; }
+
+/* ---- housekeeping: match editor ---- */
+.match-editor {
+  background: rgba(34, 6, 88, 0.35);
+  border: 1px solid rgba(105, 22, 204, 0.45);
+  border-radius: 14px; padding: 16px; margin: 12px 0 16px;
+  animation: rowIn 0.3s ease both;
+}
+.me-head {
+  font-family: "Anton", sans-serif; font-size: 1.05rem; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--gold-bright); margin-bottom: 12px;
+}
+.me-scorer { align-items: end; }
+.me-scorer .field, .me-player .field { margin-bottom: 8px; }
+.me-narrow { max-width: 110px; }
+.me-row-del { align-self: end; margin-bottom: 8px; flex-shrink: 0; }
+.me-player {
+  border-top: 1px dashed rgba(164, 165, 166, 0.25);
+  padding-top: 10px; margin-top: 10px;
+}
+.me-statgrid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px; margin: 4px 0 8px;
+}
+.me-mini { display: flex; flex-direction: column; gap: 3px; }
+.me-mini span {
+  font-family: "Oswald", sans-serif; font-size: 0.62rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--silver);
+}
+.me-mini input {
+  width: 100%; background: var(--navy); color: var(--white);
+  border: 1px solid rgba(164, 165, 166, 0.3); border-radius: 8px;
+  padding: 7px 8px; font-size: 0.9rem; min-width: 0;
+}
+.me-mini input:focus { outline: none; border-color: var(--purple-electric); }
+
+/* ---- housekeeping: career rows ---- */
+.admin-career-row {
+  border-top: 1px dashed rgba(164, 165, 166, 0.25);
+  padding-top: 12px; margin-top: 12px;
+}
+.admin-career-row:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+.admin-career-row .cr-id[readonly] { opacity: 0.6; }
+
+@media (min-width: 640px) {
+  .me-statgrid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
