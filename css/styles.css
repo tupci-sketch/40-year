@@ -1523,3 +1523,60 @@ textarea { resize: vertical; font-family: var(--font-body); }
   }
   html { scroll-behavior: auto; }
 }
+
+/* ---------- profile · where they play ---------- */
+.roles-block {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: rgba(22, 25, 30, 0.5);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.role-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(164, 165, 166, 0.1);
+}
+.role-row:last-of-type { border-bottom: 0; }
+.role-formation {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  color: var(--gold-bright);
+  min-width: 92px;
+  flex: none;
+}
+.role-pos {
+  font-family: var(--font-sub);
+  font-weight: 600;
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  color: var(--white);
+  background: rgba(105, 22, 204, 0.3);
+  border: 1px solid rgba(105, 22, 204, 0.5);
+  border-radius: 6px;
+  padding: 3px 9px;
+  flex: none;
+}
+.role-label { font-size: 0.86rem; color: var(--silver); }
+.role-bench {
+  font-family: var(--font-sub);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--magenta);
+  background: rgba(185, 46, 176, 0.16);
+  border: 1px solid rgba(185, 46, 176, 0.45);
+  border-radius: 6px;
+  padding: 3px 9px;
+}
+.roles-foot {
+  font-size: 0.76rem;
+  color: var(--silver);
+  font-style: italic;
+  padding: 10px 14px 12px;
+  background: rgba(7, 3, 11, 0.35);
+}
