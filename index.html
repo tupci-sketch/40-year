@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>The 40Yr Virgil — One Club. One Squad. One Dream.</title>
+  <meta name="description" content="The official home of The 40Yr Virgil — EA Sports FC Pro Clubs. Est. 2024. Live results, the squad, the tactics board, and the legend in progress.">
+  <meta name="theme-color" content="#07030B">
+
+  <!-- Open Graph · after deploying, swap these two for your full
+       GitHub Pages URLs (e.g. https://YOURNAME.github.io/40yr-virgil/assets/img/crest.png) -->
+  <meta property="og:title" content="The 40Yr Virgil">
+  <meta property="og:description" content="One Club. One Squad. One Dream. Est. 2024 — EA Sports FC Pro Clubs.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/img/crest.png">
+
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ======================= HEADER ======================= -->
+  <header class="site-head">
+    <div class="nav-inner">
+      <a class="crest-link" href="#home" aria-label="The 40Yr Virgil — home">
+        <img class="nav-crest" src="assets/img/crest.png" alt="The 40Yr Virgil crest">
+        <span class="wordmark">THE <span>40YR</span> VIRGIL</span>
+      </a>
+      <button id="nav-toggle" aria-label="Open menu">☰</button>
+      <nav id="site-nav" aria-label="Main">
+        <a class="nav-link" data-route="home" href="#home">Hub</a>
+        <a class="nav-link" data-route="squad" href="#squad">Squad</a>
+        <a class="nav-link" data-route="tactics" href="#tactics">Tactics</a>
+        <a class="nav-link" data-route="results" href="#results">Results</a>
+        <a class="nav-link" data-route="stats" href="#stats">Stats</a>
+        <a class="nav-link" data-route="honours" href="#honours">Honours</a>
+        <a class="nav-link" data-route="gaffer" href="#gaffer">Gaffer</a>
+        <a class="nav-link" data-route="about" href="#about">About</a>
+        <a class="nav-link" data-route="chat" href="#chat">Chat</a>
+        <a class="nav-link" data-route="admin" href="#admin" id="nav-admin" hidden>Housekeeping</a>
+        <div id="account-bar"></div>
+      </nav>
+    </div>
+  </header>
+
+  <div id="site-banner" hidden><span id="site-banner-text"></span></div>
+
+  <main>
+
+    <!-- ======================= HOME ======================= -->
+    <section class="screen" id="screen-home">
+      <div class="hero">
+        <div class="hero-crest-wrap">
+          <div class="hero-glow"></div>
+          <img class="hero-crest" src="assets/img/crest.png" alt="The 40Yr Virgil crest" decoding="async">
+        </div>
+        <h1 class="hero-name">THE <span class="accent">40YR</span> VIRGIL</h1>
+        <span class="hero-est">EST. 2024</span>
+        <p class="hero-tagline">One Club. One Squad. One Dream.</p>
+        <p class="hero-game">EA Sports FC 26 · Pro Clubs · Season 2</p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary" href="#squad">Meet the squad</a>
+          <a class="btn btn-gold" href="#tactics">The tactics board</a>
+        </div>
+      </div>
+
+      <div class="section-label">This season, live <span class="live-dot" title="Straight from the EA archive"></span></div>
+      <div id="home-live"></div>
+
+      <div class="section-label">What we stand for</div>
+      <div class="values-grid">
+        <div class="panel value-card">
+          <span class="value-icon">🛡️</span>
+          <span class="value-label">LOYALTY</span>
+          <p class="value-blurb">You don't leave. You can't leave. The group chat would notice.</p>
+        </div>
+        <div class="panel value-card">
+          <span class="value-icon">❤️</span>
+          <span class="value-label">HEART</span>
+          <p class="value-blurb">Full commitment to every tackle the game engine allows us to make.</p>
+        </div>
+        <div class="panel value-card">
+          <span class="value-icon">⭐</span>
+          <span class="value-label">GLORY</span>
+          <p class="value-blurb">Promotion, silverware, or at minimum a very dramatic screenshot.</p>
+        </div>
+      </div>
+
+      <div class="section-label">Around the club</div>
+      <div class="tile-row">
+        <a class="stat-tile" href="#results"><span class="stat-tile-value">📋</span><span class="stat-tile-label">Results</span></a>
+        <a class="stat-tile" href="#stats"><span class="stat-tile-value">📊</span><span class="stat-tile-label">Stats</span></a>
+        <a class="stat-tile" href="#honours"><span class="stat-tile-value">🏆</span><span class="stat-tile-label">Honours</span></a>
+        <a class="stat-tile" href="#gaffer"><span class="stat-tile-value">🎩</span><span class="stat-tile-label">The Gaffer</span></a>
+      </div>
+    </section>
+
+    <!-- ======================= SQUAD ======================= -->
+    <section class="screen" id="screen-squad">
+      <div class="screen-head">
+        <h1 class="screen-title">The Squad</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-sub">Fifteen names. Three humans, twelve loyal algorithms, one badge. Tap a card for the full dossier.</p>
+      <div id="squad-filters"></div>
+      <div id="squad-grid"></div>
+    </section>
+
+    <!-- ======================= PLAYER ======================= -->
+    <section class="screen" id="screen-player">
+      <div class="screen-head">
+        <h1 class="screen-title">Player Dossier</h1>
+        <a class="back-link" href="#squad">← Squad</a>
+      </div>
+      <div id="player-view"></div>
+    </section>
+
+    <!-- ======================= TACTICS ======================= -->
+    <section class="screen" id="screen-tactics">
+      <div class="screen-head">
+        <h1 class="screen-title">Tactics Board</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-sub">Three shapes, one philosophy: Tupci at CAM and Rizzy Dave on the bench. Gold rings mark the humans.</p>
+      <div id="tactics-view"></div>
+    </section>
+
+    <!-- ======================= RESULTS ======================= -->
+    <section class="screen" id="screen-results">
+      <div class="screen-head">
+        <h1 class="screen-title">Results</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-sub">Every match the archive has ever seen — league, playoffs, and the ones the API missed but the club remembers. Open a row for the opposition's numbers.</p>
+      <div id="results-list"></div>
+    </section>
+
+    <!-- ======================= STATS ======================= -->
+    <section class="screen" id="screen-stats">
+      <div class="screen-head">
+        <h1 class="screen-title">Stats Centre</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-sub">Live from the EA archive. Nothing on this page is typed in by hand — house rule.</p>
+      <div class="section-label">Club <span class="live-dot"></span></div>
+      <div id="stats-club"></div>
+      <div class="section-label">Leaderboards <span class="live-dot"></span></div>
+      <div id="stats-leaders"></div>
+      <div id="stats-opposition"></div>
+    </section>
+
+    <!-- ======================= HONOURS ======================= -->
+    <section class="screen" id="screen-honours">
+      <div class="screen-head">
+        <h1 class="screen-title">Honours</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-sub">The cabinet and the climb. Division moves chart themselves from the archive's time series.</p>
+      <div id="honours-cabinet"></div>
+      <div id="honours-timeline"></div>
+    </section>
+
+    <!-- ======================= GAFFER ======================= -->
+    <section class="screen" id="screen-gaffer">
+      <div class="screen-head">
+        <h1 class="screen-title">The Gaffer</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-sub">No permanent manager since 2024. The board prefers it that way — accountability stays theoretical.</p>
+      <div id="gaffer-box"></div>
+    </section>
+
+    <!-- ======================= ABOUT ======================= -->
+    <section class="screen" id="screen-about">
+      <div class="screen-head">
+        <h1 class="screen-title">About the Club</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+
+      <div class="section-label">Mission statement</div>
+      <div class="panel about-block">
+        <p>The 40Yr Virgil exists to pursue footballing excellence within the strict confines of whatever the servers allow. We honour the badge, we trust the process, and we hold the unshakeable belief that this is our season — a belief renewed automatically at the start of every season.</p>
+        <p>We are committed to total football, total loyalty, and a strict rotation policy of never rotating Tupci off CAM.</p>
+      </div>
+
+      <div class="section-label">The name</div>
+      <div class="panel about-block">
+        <p>Why "The 40Yr Virgil"? Some legends are written. Ours is still loading.</p>
+        <p>The founders know. The founders aren't telling — yet. When the story drops, it drops right below this paragraph.</p>
+      </div>
+
+      <div id="about-lore" hidden></div>
+
+      <div class="section-label">Club facts</div>
+      <div class="panel about-block">
+        <ul class="about-facts">
+          <li><strong>Founded</strong> 2024 — and never looked back, mostly because the rear-view mirror is unlicensed DLC.</li>
+          <li><strong>Competition</strong> EA Sports FC 26 · Pro Clubs · Season 2.</li>
+          <li><strong>Personnel</strong> Three humans. Twelve algorithms. One badge.</li>
+          <li><strong>Captain</strong> Tupci. Always CAM. Non-negotiable.</li>
+          <li><strong>Super-sub</strong> Rizzy Dave. Not starting. Still dangerous.</li>
+          <li><strong>Motto</strong> One Club. One Squad. One Dream.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ======================= CHAT ======================= -->
+    <section class="screen" id="screen-chat">
+      <div class="screen-head">
+        <h1 class="screen-title">Club Chat</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-sub">The terrace, digitised. Moderated by the stewards. 280 characters of pure conviction per message.</p>
+
+      <div class="panel" id="chat-gate" hidden>
+        <p class="chat-gate-line">Sign in to join the chat</p>
+        <p class="chat-gate-sub">Reading is free. Talking takes a name on the team sheet.</p>
+        <button class="btn btn-primary" id="chat-gate-btn">Sign in · Register</button>
+      </div>
+
+      <div id="chat-list"></div>
+
+      <form id="chat-form" autocomplete="off">
+        <input type="text" id="chat-input" maxlength="280" placeholder="Say it like you mean it…" aria-label="Chat message">
+        <span id="chat-count">280</span>
+        <button type="submit" class="btn btn-primary btn-small" id="chat-send">Send</button>
+      </form>
+    </section>
+
+    <!-- ======================= ADMIN ======================= -->
+    <section class="screen" id="screen-admin">
+      <div class="screen-head">
+        <h1 class="screen-title">Housekeeping</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-sub">Banner, lore, results, the EA pull and the user register. The server re-checks your keys on every action.</p>
+      <div id="admin-view"></div>
+    </section>
+
+  </main>
+
+  <!-- ======================= FOOTER ======================= -->
+  <footer class="site-foot">
+    <img class="foot-crest" src="assets/img/crest.png" alt="" loading="lazy">
+    <span class="foot-values">Loyalty · Heart · Glory</span>
+    <span class="foot-tagline">One Club. One Squad. One Dream.</span>
+    <span class="foot-est">Est. 2024 · EA Sports FC Pro Clubs</span>
+  </footer>
+
+  <!-- ======================= AUTH MODAL ======================= -->
+  <div id="auth-modal" data-mode="login" hidden>
+    <div class="auth-box" role="dialog" aria-modal="true" aria-labelledby="auth-head">
+      <button class="auth-close" id="auth-close" aria-label="Close">×</button>
+      <div class="auth-head" id="auth-head">The Clubhouse Door</div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login" type="button">Sign in</button>
+        <button class="auth-tab" data-tab="register" type="button">Register</button>
+      </div>
+      <form id="auth-form" autocomplete="off">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input type="text" id="auth-name" maxlength="20" required autocomplete="username">
+          <span class="field-hint">In-game names only — house rule.</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Password</span>
+          <input type="password" id="auth-pass" minlength="6" required autocomplete="current-password">
+        </label>
+        <label class="field" id="auth-confirm-row" hidden>
+          <span class="field-label">Confirm password</span>
+          <input type="password" id="auth-confirm" autocomplete="new-password">
+        </label>
+        <p class="auth-error" id="auth-error" role="alert"></p>
+        <button type="submit" class="btn btn-primary" id="auth-submit">Sign in</button>
+      </form>
+      <p class="auth-note">First account registered becomes the club admin. Choose wisely.</p>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- script order matters: config → data → net → ui → tactics → admin → app -->
+  <script src="js/config.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/tactics.js"></script>
+  <script src="js/admin.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
