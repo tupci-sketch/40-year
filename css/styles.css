@@ -1580,3 +1580,18 @@ textarea { resize: vertical; font-family: var(--font-body); }
   padding: 10px 14px 12px;
   background: rgba(7, 3, 11, 0.35);
 }
+
+/* ---------- admin · inline preformatted output (browser EA test) ---------- */
+.admin-pre {
+  margin-top: 8px;
+  background: rgba(7, 3, 11, 0.7);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font-size: 0.68rem;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--silver);
+}
