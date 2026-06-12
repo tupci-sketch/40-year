@@ -156,7 +156,12 @@
         '<span class="admin-inline-note">Last pulled: <strong id="adm-lastpull">' + U.esc(c.ea_lastPulled ? U.fmtDateTime(c.ea_lastPulled) : "never") + "</strong></span>" +
       "</div>" +
       '<div id="adm-pull-out" class="admin-pull-out"></div>' +
-      '<details class="admin-raw"><summary>Latest raw club snapshot</summary><pre id="adm-raw-club">loading…</pre></details>',
+      '<details class="admin-raw"><summary>Latest raw club snapshot</summary><pre id="adm-raw-club">loading…</pre></details>' +
+      '<p class="admin-note" style="margin-top:14px">If the button above keeps timing out, this checks whether EA will talk to your browser instead — instant, nothing saved.</p>' +
+      '<div class="admin-actions">' +
+        '<button class="btn btn-ghost btn-small" id="adm-ea-clienttest">Test from this browser</button>' +
+      "</div>" +
+      '<div id="adm-ea-clientout" class="admin-pull-out"></div>',
       "L9");
   }
 
@@ -390,6 +395,42 @@
             out.innerHTML = '<p class="admin-note">✗ Pull failed' + (r && r.error ? " — " + U.esc(r.error) : "") + ". EA might be sulking; try again shortly.</p>";
           }
         });
+      });
+    }
+
+    /* EA browser-side test — bypasses the backend entirely */
+    b = U.$("#adm-ea-clienttest", root);
+    if (b) {
+      b.addEventListener("click", function () {
+        b.disabled = true;
+        b.textContent = "Testing…";
+        var out = U.$("#adm-ea-clientout", root);
+        out.innerHTML = '<p class="admin-note">Asking EA, from your browser…</p>';
+        var url = "https://proclubs.ea.com/api/fc/clubs/info?platform=common-gen5&clubIds=1944238";
+
+        fetch(url, { headers: { "Accept": "application/json" } })
+          .then(function (res) {
+            return res.text().then(function (txt) {
+              return { status: res.status, ok: res.ok, txt: txt };
+            });
+          })
+          .then(function (r) {
+            var preview = r.txt.length > 600 ? r.txt.slice(0, 600) + "\n…(truncated)" : r.txt;
+            var statusLine = "HTTP " + r.status + (r.ok ? " — got a response ✓" : " — error ✗");
+            out.innerHTML =
+              '<p class="admin-note' + (r.ok ? " admin-pull-ok" : "") + '">' + U.esc(statusLine) + "</p>" +
+              "<pre class=\"admin-pre\">" + U.esc(preview || "(empty body)") + "</pre>";
+          })
+          .catch(function (err) {
+            out.innerHTML =
+              '<p class="admin-note">✗ Your browser blocked or could not complete this request.</p>' +
+              "<pre class=\"admin-pre\">" + U.esc(String(err && err.message || err)) + "</pre>" +
+              '<p class="admin-note">If this says "Failed to fetch" with no status code, that\u2019s usually CORS — EA\u2019s API is refusing cross-site browser requests from this domain, not just our server.</p>';
+          })
+          .finally(function () {
+            b.disabled = false;
+            b.textContent = "Test from this browser";
+          });
       });
     }
 
