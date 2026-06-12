@@ -45,6 +45,10 @@
       return !!(window.APP_URL && String(window.APP_URL).indexOf("http") === 0);
     },
 
+    hasStoredSession: function () {
+      return !!(this._token && this._name);
+    },
+
     /* ---------- transport ---------- */
     _call: function (kind, payload) {
       if (!this.hasBackend()) {

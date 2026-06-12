@@ -43,27 +43,12 @@
     U = window.UI; NET = window.NET; DATA = window.DATA; helpers = h || helpers || {};
     root = container;
 
-    if (!NET.hasBackend()) {
-      root.innerHTML = U.waitingState("the console");
-      return;
-    }
-    if (!NET.me) {
-      root.innerHTML =
-        '<div class="panel admin-gate">' +
-          '<p class="admin-gate-line">Housekeeping is for signed-in staff.</p>' +
-          '<button class="btn btn-primary" id="admin-signin">Sign in</button>' +
-        "</div>";
-      U.$("#admin-signin", root).addEventListener("click", function () {
-        if (window.APP && window.APP.openAuth) window.APP.openAuth("login");
-      });
-      return;
-    }
+    // The router already bounces anyone who isn't a signed-in mod, so the only
+    // time a non-mod reaches here is the brief grace window while a real admin's
+    // session is still verifying. Show a neutral placeholder — never describe
+    // what this area does to someone who can't use it.
     if (!NET.isMod()) {
-      root.innerHTML =
-        '<div class="panel admin-gate">' +
-          '<p class="admin-gate-line">Mods only beyond this door.</p>' +
-          '<p class="admin-gate-sub">If you think you should have keys, have a word with the admin.</p>' +
-        "</div>";
+      root.innerHTML = '<div class="panel admin-gate"><p class="admin-gate-line">Checking access…</p></div>';
       return;
     }
 

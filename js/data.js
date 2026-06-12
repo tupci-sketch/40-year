@@ -122,7 +122,7 @@ window.SQUAD = [
     id: "walker", number: 9, name: "Flake Walker", position: "RM",
     card: "walker.png", controlledBy: "human", eaPersona: "",
     isCaptain: false, permaBench: false,
-    flavour: "The other end of the human trio. All chalk, all action, all flank.",
+    flavour: "The other end of the human trio. Owns the right flank — and shifts up to striker when we go two up top.",
     roles: {
       "4-2-1-3":   { start: true, pos: "RW" },
       "4-4-1-1":   { start: true, pos: "RM" },
@@ -163,7 +163,7 @@ window.SQUAD = [
     }
   },
   {
-    id: "tmidi", number: 32, name: "Tmidi", position: "CDM",
+    id: "tmidi", number: 32, name: "Timidi", position: "CDM",
     card: "tmidi.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "Wins the ball first. Asks the questions later. Files no paperwork.",

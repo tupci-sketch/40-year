@@ -10,6 +10,7 @@
 
   var U = null, NET = null;
   var currentPage = null;
+  var sessionChecked = false; // true once the initial session check has resolved
 
   /* ========================================================
      DATA — memoised loaders over the backend
@@ -61,6 +62,15 @@
   function route() {
     var r = parseHash();
     if (ROUTES.indexOf(r.name) === -1) { location.replace("#home"); return; }
+
+    // Housekeeping is staff-only and never presented to the public. Bounce
+    // anyone who isn't a known mod — but give a signed-in admin a grace window
+    // while their session is still being verified (e.g. on a hard reload),
+    // so we don't kick them out before we know who they are.
+    if (r.name === "admin" && !NET.isMod()) {
+      var pending = NET.hasBackend() && NET.hasStoredSession() && !sessionChecked;
+      if (!pending) { location.replace("#home"); return; }
+    }
 
     if (currentPage && PAGES[currentPage] && PAGES[currentPage].leave) PAGES[currentPage].leave();
     currentPage = r.name;
@@ -175,7 +185,9 @@
             : "Welcome back, " + r.name + ".");
           route(); // refresh anything gated
         } else {
-          err.textContent = AUTH_ERR[r && r.error] || "Something went wrong. Try again.";
+          var code = r && r.error;
+          if (code && !AUTH_ERR[code]) console.error("[auth] backend returned:", code, r);
+          err.textContent = AUTH_ERR[code] || ("Something went wrong" + (code ? " (" + code + ")" : "") + ". Try again.");
         }
       });
     });
@@ -279,6 +291,38 @@
   };
 
   /* ------------------------------------------------ PLAYER */
+  /* ------------------------------------------------ PLAYER */
+  var POS_LABEL = {
+    GK: "Goalkeeper", RB: "Right back", LB: "Left back", CB: "Centre back",
+    DM: "Defensive mid", CM: "Centre mid", LM: "Left mid", RM: "Right mid",
+    CAM: "Attacking mid", LW: "Left wing", RW: "Right wing",
+    ST: "Striker", LST: "Striker (L)", RST: "Striker (R)"
+  };
+
+  function rolesBlock(p) {
+    var rows = Object.keys(window.FORMATIONS).map(function (fkey) {
+      var role = (p.roles && p.roles[fkey]) || {};
+      var cell;
+      if (role.start) {
+        var pos = role.pos || p.position;
+        var label = POS_LABEL[pos] || pos;
+        cell = '<span class="role-pos">' + U.esc(pos) + '</span><span class="role-label">' + U.esc(label) + "</span>";
+      } else {
+        cell = '<span class="role-bench">Bench</span>';
+      }
+      return '<div class="role-row">' +
+        '<span class="role-formation">' + U.esc(fkey) + "</span>" + cell +
+      "</div>";
+    }).join("");
+
+    var foot = p.permaBench ? "Every formation. Same seat. He's made it his."
+      : p.isCaptain ? "Three shapes, one position. That's the deal."
+      : "How the gaffer lines him up, shape by shape.";
+
+    return '<div class="section-label">Where he plays</div>' +
+      '<div class="roles-block">' + rows + '<p class="roles-foot">' + foot + "</p></div>";
+  }
+
   PAGES.player = {
     enter: function (id) {
       var p = U.playerById(id);
@@ -305,6 +349,7 @@
             '<p class="profile-flavour">' + U.esc(flavourOf(p)) + "</p>" +
             (p.isCaptain ? '<p class="profile-line profile-captain-line">Wears the armband. Picks the formation. Plays CAM in all of them.</p>' : "") +
             benchGag +
+            rolesBlock(p) +
             '<div class="section-label">Season record <span class="live-dot" title="Live from the EA archive"></span></div>' +
             '<div id="player-stats">' + '<div class="tile-row">' + U.statTile("Apps", null) + U.statTile("Goals", null) + U.statTile("Assists", null) + "</div>" + "</div>" +
             '<a class="btn btn-ghost btn-small" href="#squad">← Back to squad</a>' +
@@ -809,10 +854,14 @@
 
     if (NET.hasBackend()) {
       NET.session().then(function () {
+        sessionChecked = true;
         renderAccount();
         var page = parseHash().name;
         if (page === "chat" || page === "admin") route();
       });
+    } else {
+      sessionChecked = true;
+      if (parseHash().name === "admin") route(); // bounce — no backend, no staff area
     }
   }
 
