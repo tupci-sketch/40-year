@@ -1,52 +1,61 @@
 /* ============================================================
-   The 40Yr Virgil — Housekeeping (admin console)
+   The 40Yr Virgil — Housekeeping console  v2 "The Ledger"
    ------------------------------------------------------------
-   Renders into #admin-view. Every control here is a convenience
-   wrapper: the SERVER re-checks the caller's level on every
-   single call. Hiding a button is cosmetics, not security.
-   Levels: 5+ = mod (view users, moderate chat) · 9 = admin.
+   The archive is managed here, game by game.
+     L5+ (mods)  · add matches, edit any match + per-player stats
+     L9 (admin)  · delete matches, career baselines, club record,
+                   banner, lore, users, flavour, milestones
+   The server re-checks every level on every action; this file
+   only decides what to draw.
    ============================================================ */
 (function () {
   "use strict";
 
-  var U, NET, DATA, helpers;
+  var U = null, NET = null, DATA = null, helpers = {};
   var root = null;
 
-  /* ---------- tiny form helpers ---------- */
-  function field(label, inputHtml, hint) {
-    return '<label class="field"><span class="field-label">' + label + "</span>" + inputHtml +
-      (hint ? '<span class="field-hint">' + hint + "</span>" : "") + "</label>";
-  }
-
+  /* ========================================================
+     SHARED SCAFFOLD
+     ======================================================== */
   function block(title, bodyHtml, levelNote) {
-    return '<section class="panel admin-block">' +
+    return '<div class="panel admin-block">' +
       '<div class="section-label">' + title +
-        (levelNote ? ' <span class="admin-lvl">' + levelNote + "</span>" : "") + "</div>" +
-      bodyHtml +
-    "</section>";
+        (levelNote ? ' <span class="admin-lvl">' + levelNote + "</span>" : "") +
+      "</div>" + bodyHtml +
+    "</div>";
   }
 
   function refreshConfig() {
     DATA.bust();
     return DATA.config().then(function (res) {
-      helpers.applyConfig(res);
+      if (helpers.applyConfig) helpers.applyConfig(res);
       return res;
     });
   }
 
   function cfgFrom(res) { return (res && res.config) || {}; }
 
+  function field(label, inner, hint) {
+    return '<label class="field"><span class="field-label">' + label + "</span>" + inner +
+      (hint ? '<span class="field-hint">' + hint + "</span>" : "") + "</label>";
+  }
+
+  function playerOptions(selected) {
+    return window.SQUAD.slice().sort(function (a, b) { return a.number - b.number; })
+      .map(function (p) {
+        return '<option value="' + p.id + '"' + (p.id === selected ? " selected" : "") + ">#" + p.number + " " + U.esc(p.name) + "</option>";
+      }).join("");
+  }
+
   /* ========================================================
-     RENDER
+     ENTRY
      ======================================================== */
   function enter(container, h) {
     U = window.UI; NET = window.NET; DATA = window.DATA; helpers = h || helpers || {};
     root = container;
 
-    // The router already bounces anyone who isn't a signed-in mod, so the only
-    // time a non-mod reaches here is the brief grace window while a real admin's
-    // session is still verifying. Show a neutral placeholder — never describe
-    // what this area does to someone who can't use it.
+    // The router bounces non-mods; this neutral card only covers the
+    // grace window while a real staff session is still verifying.
     if (!NET.isMod()) {
       root.innerHTML = '<div class="panel admin-gate"><p class="admin-gate-line">Checking access…</p></div>';
       return;
@@ -54,265 +63,428 @@
 
     root.innerHTML = '<div class="admin-grid" id="admin-grid">' + U.emptyState("Opening the office…", "", "🗝") + "</div>";
 
-    DATA.config().then(function (res) {
+    Promise.all([DATA.config(), DATA.matches(), DATA.career(), DATA.record()]).then(function (rs) {
       var grid = U.$("#admin-grid", root);
       if (!grid) return;
-      var c = cfgFrom(res);
+      var c = cfgFrom(rs[0]);
+      var matches = (rs[1] && rs[1].matches) || [];
+      var baselineSeq = (rs[1] && rs[1].baselineSeq) || 0;
+      var career = (rs[2] && rs[2].career) || [];
+      var record = (rs[3] && rs[3].record) || {};
       var admin = NET.isAdmin();
-      var html = "";
 
-      if (admin) html += blockBanner(c);
-      if (admin) html += blockLore(c);
-      if (admin) html += blockResults();
-      if (admin) html += blockEA(c);
-      html += blockUsers(admin);
-      html += blockChatNote();
-      if (admin) html += blockFlavour(c);
-      if (admin) html += blockMilestones(c);
-      if (!admin) {
-        html += block("The rest of the console",
-          '<p class="admin-note">Banner, lore, results and EA controls unlock at level 9. The admin holds that key.</p>');
+      grid.innerHTML =
+        blockMatchManager(matches) +
+        (admin ? blockRecord(record) : "") +
+        (admin ? blockCareer(career, baselineSeq) : "") +
+        blockBanner(c, admin) +
+        (admin ? blockLore(c) : "") +
+        blockUsers(admin) +
+        (admin ? blockFlavour(c) : "") +
+        (admin ? blockMilestones(c) : "") +
+        blockChatNote();
+
+      bind(matches, career, record, baselineSeq, admin);
+
+      // A pencil on the Results page may have sent us here with a target.
+      var jump = null;
+      try { jump = sessionStorage.getItem("v40.editseq"); sessionStorage.removeItem("v40.editseq"); } catch (e) { /* fine */ }
+      if (jump) {
+        var m = matches.filter(function (x) { return String(x.seq) === String(jump); })[0];
+        if (m) openEditor(m, matches);
       }
-
-      grid.innerHTML = html;
-      bindAll(c);
     });
   }
 
-  /* ---------- 1 · Banner ---------- */
-  function blockBanner(c) {
-    var b = c.banner || {};
-    return block("Announcement banner",
-      field("Banner text", '<input type="text" id="adm-banner-text" maxlength="160" value="' + U.esc(b.text || "") + '" placeholder="e.g. Cup night Thursday — full squad expected">') +
-      '<label class="field field-check"><input type="checkbox" id="adm-banner-active"' + (b.active ? " checked" : "") + '> <span>Banner is live on every screen</span></label>' +
-      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-banner-save">Save banner</button></div>',
-      "L9");
-  }
-
-  /* ---------- 2 · Lore ---------- */
-  function blockLore(c) {
-    return block("Lore — the name's origin",
-      '<p class="admin-note">Shown on the About screen the moment it\u2019s non-empty. Blank line = new paragraph.</p>' +
-      '<textarea id="adm-lore" rows="6" placeholder="The true story of The 40Yr Virgil…">' + U.esc(c.lore || "") + "</textarea>" +
-      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-lore-save">Publish lore</button>' +
-      '<button class="btn btn-ghost btn-small" id="adm-lore-clear">Clear</button></div>',
-      "L9");
-  }
-
-  /* ---------- 3 · Manual results ---------- */
-  function blockResults() {
-    return block("Manual results",
-      '<p class="admin-note">For matches the API never caught. Saved by season + matchday — re-saving the same pair updates it. If EA later reports the same fixture, the API version wins.</p>' +
-      '<div class="field-row">' +
-        field("Season", '<input type="number" id="adm-r-season" min="1" value="2">') +
-        field("Matchday", '<input type="number" id="adm-r-md" min="1" value="1">') +
-        field("Date", '<input type="date" id="adm-r-date">') +
-      "</div>" +
-      field("Opponent", '<input type="text" id="adm-r-opp" maxlength="60" placeholder="e.g. Bald FC">') +
-      '<div class="field-row">' +
-        field("Our goals", '<input type="number" id="adm-r-our" min="0" value="0">') +
-        field("Their goals", '<input type="number" id="adm-r-their" min="0" value="0">') +
-      "</div>" +
-      field("Scorers", '<input type="text" id="adm-r-scorers" placeholder="Danwhizzy x2, Tupci">', "Comma-separated · use \u201Cx2\u201D for braces") +
-      field("Note", '<input type="text" id="adm-r-note" maxlength="160" placeholder="Optional — e.g. server crashed at 80\u2019">') +
-      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-r-save">Save result</button></div>' +
-      '<div id="adm-r-list" class="admin-sublist"></div>',
-      "L9");
-  }
-
-  function renderManualList() {
-    var mt = U.$("#adm-r-list", root);
-    if (!mt) return;
-    mt.innerHTML = '<p class="admin-note">Loading saved manual results…</p>';
-    DATA.results().then(function (res) {
-      if (!res || !res.ok) { mt.innerHTML = ""; return; }
-      var manual = (res.results || []).filter(function (r) { return r.source === "manual"; });
-      if (!manual.length) { mt.innerHTML = '<p class="admin-note">No manual results saved yet.</p>'; return; }
-      mt.innerHTML = manual.map(function (r) {
-        return '<div class="admin-row">' +
-          '<span class="admin-row-main">S' + U.esc(String(r.season)) + " MD" + U.esc(String(r.matchday)) + " · " +
-            U.esc(r.opponent || "?") + " · " + r.ourGoals + "–" + r.theirGoals + " · " + U.fmtDate(r.ts) + "</span>" +
-          '<button class="btn btn-ghost btn-small adm-r-del" data-id="' + U.esc(r.id) + '">Delete</button>' +
-        "</div>";
-      }).join("");
-      U.$$(".adm-r-del", mt).forEach(function (b) {
-        b.addEventListener("click", function () {
-          b.disabled = true;
-          NET.adminDelResult(b.getAttribute("data-id")).then(function (r2) {
-            if (r2 && r2.ok) { U.toast("Manual result deleted."); DATA.bust(); renderManualList(); }
-            else { b.disabled = false; U.toast("Couldn't delete that."); }
-          });
-        });
-      });
-    });
-  }
-
-  /* ---------- 4 · EA controls ---------- */
-  function blockEA(c) {
-    return block("EA sync",
-      '<p class="admin-note">The backend pulls hourly on its own. This button asks it nicely to go now.</p>' +
+  /* ========================================================
+     1 · MATCH MANAGER  (L5+)
+     ======================================================== */
+  function blockMatchManager(matches) {
+    return block("The ledger · matches",
+      '<p class="admin-note">Every game on record, newest first. Mods add and edit; only the admin can strike one from the books.</p>' +
       '<div class="admin-actions">' +
-        '<button class="btn btn-gold btn-small" id="adm-pull">Pull from EA now</button>' +
-        '<span class="admin-inline-note">Last pulled: <strong id="adm-lastpull">' + U.esc(c.ea_lastPulled ? U.fmtDateTime(c.ea_lastPulled) : "never") + "</strong></span>" +
+        '<button class="btn btn-gold btn-small" id="adm-match-new">+ Log a new match</button>' +
+        '<span class="admin-inline-note">' + matches.length + " matches on file</span>" +
       "</div>" +
-      '<div id="adm-pull-out" class="admin-pull-out"></div>' +
-      '<details class="admin-raw"><summary>Latest raw club snapshot</summary><pre id="adm-raw-club">loading…</pre></details>' +
-      '<p class="admin-note" style="margin-top:14px">If the button above keeps timing out, this checks whether EA will talk to your browser instead — instant, nothing saved.</p>' +
-      '<div class="admin-actions">' +
-        '<button class="btn btn-ghost btn-small" id="adm-ea-clienttest">Test from this browser</button>' +
-      "</div>" +
-      '<div id="adm-ea-clientout" class="admin-pull-out"></div>',
-      "L9");
+      '<div id="adm-match-editor"></div>' +
+      '<div class="admin-sublist admin-matchlist" id="adm-match-list">' + matchListHtml(matches) + "</div>",
+      "L5+");
   }
 
-  function renderRawSnapshot() {
-    var pre = U.$("#adm-raw-club", root);
-    if (!pre) return;
-    DATA.club().then(function (res) {
-      if (!pre.isConnected) return;
-      if (!res || !res.ok || !res.latest) { pre.textContent = "No snapshot saved yet."; return; }
-      try { pre.textContent = JSON.stringify(res.latest, null, 2); }
-      catch (e) { pre.textContent = "Snapshot unreadable."; }
-    });
-  }
-
-  /* ---------- 5 · Users ---------- */
-  function blockUsers(admin) {
-    return block("Users",
-      '<p class="admin-note">' + (admin
-        ? "Levels 1–9. Level 5+ moderates chat; level 9 runs the club. You can\u2019t edit yourself — checks and balances."
-        : "View only at your level. Level 9 manages accounts.") + "</p>" +
-      '<div id="adm-users">' + U.emptyState("Fetching the register…", "", "👥") + "</div>",
-      admin ? "L9 manage" : "L5 view");
-  }
-
-  function renderUsers() {
-    var mt = U.$("#adm-users", root);
-    if (!mt) return;
-    NET.adminUsers().then(function (res) {
-      if (!mt.isConnected) return;
-      if (!res || !res.ok) { mt.innerHTML = U.offlineState(); return; }
-      var admin = NET.isAdmin();
-      var rows = (res.users || []).map(function (u) {
-        var self = NET.me && u.name === NET.me.name;
-        var lvlCell;
-        if (admin && !self) {
-          var opts = "";
-          for (var i = 1; i <= 9; i++) {
-            opts += '<option value="' + i + '"' + (Number(u.level) === i ? " selected" : "") + ">" + i + "</option>";
-          }
-          lvlCell = '<select class="adm-u-level" data-user="' + U.esc(u.name) + '">' + opts + "</select>";
-        } else {
-          lvlCell = String(u.level) + (self ? " (you)" : "");
-        }
-        var status = String(u.banned) === "1" || u.banned === true
-          ? '<span class="admin-banned">banned</span>' : "active";
-        var actions = "";
-        if (admin && !self) {
-          actions = (String(u.banned) === "1" || u.banned === true)
-            ? '<button class="btn btn-ghost btn-small adm-u-unban" data-user="' + U.esc(u.name) + '">Unban</button>'
-            : '<button class="btn btn-ghost btn-small adm-u-ban" data-user="' + U.esc(u.name) + '">Ban</button>';
-        }
-        return "<tr><td>" + U.esc(u.name) + "</td><td>" + lvlCell + "</td><td>" + status + "</td>" +
-          "<td>" + U.fmtDate(u.last || u.created) + "</td><td>" + actions + "</td></tr>";
-      }).join("");
-
-      mt.innerHTML =
-        '<table class="opp-table opp-table-wide admin-users-table">' +
-          "<thead><tr><th>Name</th><th>Level</th><th>Status</th><th>Seen</th><th></th></tr></thead>" +
-          "<tbody>" + rows + "</tbody></table>";
-
-      U.$$(".adm-u-level", mt).forEach(function (sel) {
-        sel.addEventListener("change", function () {
-          NET.adminSetLevel(sel.getAttribute("data-user"), Number(sel.value)).then(function (r) {
-            if (r && r.ok) U.toast("Level updated.");
-            else { U.toast("Couldn't change that level."); renderUsers(); }
-          });
-        });
-      });
-      U.$$(".adm-u-ban", mt).forEach(function (b) {
-        b.addEventListener("click", function () {
-          NET.adminBan(b.getAttribute("data-user")).then(function (r) {
-            if (r && r.ok) { U.toast("Banned. The stewards thank you."); renderUsers(); }
-            else U.toast("Couldn't ban that account.");
-          });
-        });
-      });
-      U.$$(".adm-u-unban", mt).forEach(function (b) {
-        b.addEventListener("click", function () {
-          NET.adminUnban(b.getAttribute("data-user")).then(function (r) {
-            if (r && r.ok) { U.toast("Unbanned. Clean slate."); renderUsers(); }
-            else U.toast("Couldn't unban that account.");
-          });
-        });
-      });
-    });
-  }
-
-  /* ---------- 6 · Chat moderation note ---------- */
-  function blockChatNote() {
-    return block("Chat moderation",
-      '<p class="admin-note">Mods see a <strong>×</strong> on every message in the <a href="#chat">chat screen</a>. Deleting is soft — the archive keeps a copy, the room doesn\u2019t.</p>',
-      "L5");
-  }
-
-  /* ---------- 7 · Flavour overrides ---------- */
-  function blockFlavour(c) {
-    var fl = c.flavour || {};
-    var opts = window.SQUAD.map(function (p) {
-      return '<option value="' + p.id + '">#' + p.number + " " + U.esc(p.name) + "</option>";
+  function matchListHtml(matches) {
+    if (!matches.length) return '<p class="admin-inline-note">The ledger is empty. Historic.</p>';
+    return matches.map(function (m) {
+      return '<div class="admin-row">' +
+        '<span class="admin-row-main">' +
+          '<span class="pill pill-' + (m.result === "W" ? "win" : m.result === "D" ? "draw" : "loss") + ' pill-small">' + m.result + "</span> " +
+          "<strong>Match " + m.seq + "</strong> · " + (m.ourScore !== "" ? m.ourScore : "–") + "–" + (m.theirScore !== "" ? m.theirScore : "–") +
+          " vs " + U.esc(m.opponent) +
+          (m.players && m.players.length ? ' <span class="admin-detail-dot" title="Per-player stats on file">●</span>' : "") +
+        "</span>" +
+        '<span class="admin-row-side">' +
+          '<button class="btn btn-ghost btn-small adm-match-edit" data-seq="' + m.seq + '">Edit</button>' +
+          (NET.isAdmin() ? '<button class="btn btn-ghost btn-small adm-match-del" data-seq="' + m.seq + '">✕</button>' : "") +
+        "</span>" +
+      "</div>";
     }).join("");
-    var current = Object.keys(fl).length
-      ? Object.keys(fl).map(function (id) {
-          var p = U.playerById(id);
-          return '<div class="admin-row"><span class="admin-row-main"><strong>' +
-            (p ? U.esc(p.name) : U.esc(id)) + ":</strong> " + U.esc(fl[id]) + "</span>" +
-            '<button class="btn btn-ghost btn-small adm-fl-clear" data-id="' + U.esc(id) + '">Clear</button></div>';
-        }).join("")
-      : '<p class="admin-note">No overrides — everyone\u2019s on their factory-set one-liner.</p>';
-    return block("Player flavour overrides",
-      field("Player", '<select id="adm-fl-player">' + opts + "</select>") +
-      field("New flavour line", '<input type="text" id="adm-fl-text" maxlength="140" placeholder="Words only — the numbers stay live">') +
-      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-fl-save">Set flavour</button></div>' +
-      '<div class="admin-sublist">' + current + "</div>",
-      "L9");
   }
 
-  /* ---------- 8 · Milestones ---------- */
-  function blockMilestones(c) {
-    var ms = c.milestones || [];
-    var list = ms.length
-      ? ms.map(function (m) {
-          return '<div class="admin-row"><span class="admin-row-main">' + U.fmtDate(m.dateISO) + " · " + U.esc(m.text) + "</span>" +
-            '<button class="btn btn-ghost btn-small adm-ms-del" data-id="' + U.esc(m.id) + '">Delete</button></div>';
-        }).join("")
-      : '<p class="admin-note">No custom milestones yet. Division moves chart themselves.</p>';
-    return block("Honours milestones",
+  /* ---------- the editor itself ---------- */
+  function openEditor(m, matches) {
+    var box = U.$("#adm-match-editor", root);
+    if (!box) return;
+    var isNew = !m;
+    m = m || { seq: 0, stage: "league", dateISO: "", opponent: "", ourScore: 0, theirScore: 0, result: "", scorers: [], note: "", players: [] };
+
+    box.innerHTML =
+      '<div class="match-editor" id="me-box">' +
+        '<div class="me-head">' + (isNew ? "New match — Match " + (maxSeq(matches) + 1) : "Editing Match " + m.seq) + "</div>" +
+        '<div class="field-row">' +
+          field("Opponent", '<input type="text" id="me-opp" maxlength="60" value="' + U.esc(m.opponent) + '">') +
+          field("Stage",
+            '<select id="me-stage">' +
+              ["league", "playoff", "friendly"].map(function (s) {
+                return '<option value="' + s + '"' + (m.stage === s ? " selected" : "") + ">" + s.charAt(0).toUpperCase() + s.slice(1) + "</option>";
+              }).join("") +
+            "</select>") +
+          field("Date", '<input type="date" id="me-date" value="' + U.esc(m.dateISO || "") + '">', "optional") +
+        "</div>" +
+        '<div class="field-row">' +
+          field("Our score", '<input type="number" id="me-our" min="0" max="99" value="' + (m.ourScore === "" ? 0 : m.ourScore) + '">') +
+          field("Their score", '<input type="number" id="me-their" min="0" max="99" value="' + (m.theirScore === "" ? 0 : m.theirScore) + '">') +
+          field("Result",
+            '<select id="me-result">' +
+              '<option value="">Auto from score</option>' +
+              ["W", "D", "L"].map(function (r) {
+                return '<option value="' + r + '"' + (m.result === r ? " selected" : "") + ">" + r + "</option>";
+              }).join("") +
+            "</select>", "override for forfeits etc.") +
+        "</div>" +
+        '<div class="section-label">Scorers</div>' +
+        '<div id="me-scorers"></div>' +
+        '<button class="btn btn-ghost btn-small" id="me-scorer-add" type="button">+ Add scorer</button>' +
+        '<div class="section-label">Per-player stats <span class="admin-inline-note">optional — these keep careers ticking</span></div>' +
+        '<div id="me-players"></div>' +
+        '<button class="btn btn-ghost btn-small" id="me-player-add" type="button">+ Add player line</button>' +
+        field("Match note", '<input type="text" id="me-note" maxlength="200" value="' + U.esc(m.note || "") + '">', "one line for the books") +
+        '<div class="admin-actions">' +
+          '<button class="btn btn-primary btn-small" id="me-save">' + (isNew ? "Add to the ledger" : "Save changes") + "</button>" +
+          '<button class="btn btn-ghost btn-small" id="me-cancel" type="button">Cancel</button>' +
+          '<span class="admin-inline-note" id="me-msg"></span>' +
+        "</div>" +
+      "</div>";
+
+    (m.scorers || []).forEach(function (s) { addScorerRow(s.id, s.goals); });
+    (m.players || []).forEach(function (p) { addPlayerRow(p); });
+
+    U.$("#me-scorer-add", box).addEventListener("click", function () { addScorerRow("", 1); });
+    U.$("#me-player-add", box).addEventListener("click", function () { addPlayerRow(null); });
+    U.$("#me-cancel", box).addEventListener("click", function () { box.innerHTML = ""; });
+
+    U.$("#me-save", box).addEventListener("click", function () {
+      var btn = this;
+      var payload = {
+        seq: isNew ? 0 : m.seq,
+        stage: U.$("#me-stage", box).value,
+        dateISO: U.$("#me-date", box).value,
+        opponent: U.$("#me-opp", box).value.trim(),
+        ourScore: U.$("#me-our", box).value,
+        theirScore: U.$("#me-their", box).value,
+        result: U.$("#me-result", box).value,
+        note: U.$("#me-note", box).value,
+        scorers: U.$$(".me-scorer", box).map(function (row) {
+          return { id: row.querySelector("select").value, goals: row.querySelector("input").value };
+        }).filter(function (s) { return s.id; }),
+        players: U.$$(".me-player", box).map(function (row) {
+          var g = function (cls) { return row.querySelector("." + cls).value; };
+          return {
+            id: row.querySelector("select").value,
+            goals: g("mp-g"), assists: g("mp-a"), rating: g("mp-r"),
+            shots: g("mp-sh"), tackles: g("mp-tk"),
+            passesMade: g("mp-pm"), passAttempts: g("mp-pa"), redCards: g("mp-rc")
+          };
+        }).filter(function (p) { return p.id; })
+      };
+      var msg = U.$("#me-msg", box);
+      if (!payload.opponent) { msg.textContent = "Opponent needed."; return; }
+      btn.disabled = true;
+      msg.textContent = "Writing to the ledger…";
+      NET.matchSave(payload).then(function (r) {
+        btn.disabled = false;
+        if (r && r.ok) {
+          U.toast(isNew ? "Match " + r.seq + " is in the books." : "Match " + r.seq + " updated.");
+          box.innerHTML = "";
+          reloadMatches();
+        } else {
+          msg.textContent = "✗ " + ((r && r.error) || "Couldn't save.");
+        }
+      });
+    });
+
+    box.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    function addScorerRow(id, goals) {
+      var mountS = U.$("#me-scorers", box);
+      var row = document.createElement("div");
+      row.className = "field-row me-scorer";
+      row.innerHTML =
+        '<label class="field"><span class="field-label">Player</span><select>' + playerOptions(id) + "</select></label>" +
+        '<label class="field me-narrow"><span class="field-label">Goals</span><input type="number" min="1" max="20" value="' + (goals || 1) + '"></label>' +
+        '<button class="btn btn-ghost btn-small me-row-del" type="button">✕</button>';
+      row.querySelector(".me-row-del").addEventListener("click", function () { row.remove(); });
+      mountS.appendChild(row);
+    }
+
+    function addPlayerRow(p) {
+      p = p || {};
+      var mountP = U.$("#me-players", box);
+      var row = document.createElement("div");
+      row.className = "me-player";
+      function n(v) { return v === "" || v == null ? "" : v; }
+      row.innerHTML =
+        '<div class="field-row">' +
+          '<label class="field"><span class="field-label">Player</span><select>' + playerOptions(p.id) + "</select></label>" +
+          '<button class="btn btn-ghost btn-small me-row-del" type="button">✕</button>' +
+        "</div>" +
+        '<div class="me-statgrid">' +
+          mini("G", "mp-g", n(p.goals)) + mini("A", "mp-a", n(p.assists)) +
+          mini("Rating", "mp-r", n(p.rating), "0.1") + mini("Shots", "mp-sh", n(p.shots)) +
+          mini("Tackles", "mp-tk", n(p.tackles)) + mini("Passes", "mp-pm", n(p.passesMade)) +
+          mini("Attempts", "mp-pa", n(p.passAttempts)) + mini("Reds", "mp-rc", n(p.redCards)) +
+        "</div>";
+      row.querySelector(".me-row-del").addEventListener("click", function () { row.remove(); });
+      mountP.appendChild(row);
+
+      function mini(label, cls, val, step) {
+        return '<label class="me-mini"><span>' + label + '</span><input class="' + cls + '" type="number" min="0" ' +
+          (step ? 'step="' + step + '" max="10"' : 'max="999"') + ' value="' + (val === "" ? "" : val) + '" placeholder="0"></label>';
+      }
+    }
+  }
+
+  function maxSeq(matches) {
+    var mx = 0;
+    matches.forEach(function (m) { if (Number(m.seq) > mx) mx = Number(m.seq); });
+    return mx;
+  }
+
+  function reloadMatches() {
+    DATA.bust();
+    DATA.matches().then(function (res) {
+      var list = U.$("#adm-match-list", root);
+      if (list) list.innerHTML = matchListHtml((res && res.matches) || []);
+      bindMatchRows((res && res.matches) || []);
+    });
+  }
+
+  function bindMatchRows(matches) {
+    U.$$(".adm-match-edit", root).forEach(function (b) {
+      b.addEventListener("click", function () {
+        var m = matches.filter(function (x) { return String(x.seq) === b.getAttribute("data-seq"); })[0];
+        if (m) openEditor(m, matches);
+      });
+    });
+    U.$$(".adm-match-del", root).forEach(function (b) {
+      b.addEventListener("click", function () {
+        var seq = b.getAttribute("data-seq");
+        if (b.getAttribute("data-armed") !== "1") {
+          b.setAttribute("data-armed", "1");
+          b.textContent = "Sure?";
+          setTimeout(function () { b.setAttribute("data-armed", ""); b.textContent = "✕"; }, 2500);
+          return;
+        }
+        b.disabled = true;
+        NET.matchDelete(Number(seq)).then(function (r) {
+          if (r && r.ok) { U.toast("Match " + seq + " struck from the books."); reloadMatches(); }
+          else { b.disabled = false; U.toast("Couldn't delete that."); }
+        });
+      });
+    });
+  }
+
+  /* ========================================================
+     2 · CLUB RECORD BASELINE  (L9)
+     ======================================================== */
+  function blockRecord(rec) {
+    function inp(id, val) { return '<input type="number" id="' + id + '" min="0" value="' + (val || 0) + '">'; }
+    return block("Club record · baseline",
+      '<p class="admin-note">The all-time totals as of the baseline match. Every match logged after the baseline adds on top automatically — only touch these to correct history.</p>' +
       '<div class="field-row">' +
-        field("Date", '<input type="date" id="adm-ms-date">') +
-        field("Milestone", '<input type="text" id="adm-ms-text" maxlength="120" placeholder="e.g. First clean sheet with all bots">') +
+        field("Wins", inp("rec-w", rec.wins)) + field("Draws", inp("rec-d", rec.draws)) + field("Losses", inp("rec-l", rec.losses)) +
       "</div>" +
-      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-ms-add">Add to the timeline</button></div>' +
-      '<div class="admin-sublist">' + list + "</div>",
+      '<div class="field-row">' +
+        field("Played", inp("rec-p", rec.played)) + field("Goals for", inp("rec-gf", rec.goalsFor)) + field("Goals against", inp("rec-ga", rec.goalsAgainst)) +
+      "</div>" +
+      '<div class="field-row">' +
+        field("League apps", inp("rec-la", rec.leagueApps)) + field("Playoff apps", inp("rec-pa", rec.playoffApps)) +
+        field("Badge", '<input type="text" id="rec-badge" maxlength="40" value="' + U.esc(rec.badge || "") + '">') +
+      "</div>" +
+      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="rec-save">Save baseline</button></div>',
       "L9");
   }
 
   /* ========================================================
-     BIND
+     3 · CAREER BASELINES  (L9)
      ======================================================== */
-  function bindAll(c) {
+  function blockCareer(career, baselineSeq) {
+    var rows = career.map(function (c, i) {
+      return '<div class="admin-career-row" data-id="' + U.esc(c.id) + '">' +
+        '<div class="field-row">' +
+          field("Player id", '<input type="text" class="cr-id" value="' + U.esc(c.id) + '" readonly>') +
+          field("Persona", '<input type="text" class="cr-persona" maxlength="40" value="' + U.esc(c.persona || "") + '">') +
+          field("OVR", '<input type="number" class="cr-ovr" min="0" max="99" value="' + (c.ovr || "") + '">') +
+        "</div>" +
+        '<div class="me-statgrid">' +
+          cmini("Games", "cr-games", c.games) + cmini("Goals", "cr-goals", c.goals) +
+          cmini("Assists", "cr-assists", c.assists) + cmini("Passes", "cr-passes", c.passesMade) +
+          cmini("Pass %", "cr-passpct", c.passPct) + cmini("Tackles", "cr-tackles", c.tackles) +
+          cmini("Tkl %", "cr-tklpct", c.tacklePct) + cmini("Win %", "cr-winpct", c.winPct) +
+        "</div>" +
+      "</div>";
+    }).join("");
+
+    return block("Career baselines · the humans",
+      '<p class="admin-note">The EA-era career snapshot. Matches logged after the baseline top these up automatically (goals from scorer lists; apps and assists from detailed stat lines).</p>' +
+      rows +
+      '<div class="field-row">' +
+        field("Baseline through match #", '<input type="number" id="cr-baseline" min="0" value="' + baselineSeq + '">',
+          "matches after this number count on top of the snapshot") +
+      "</div>" +
+      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="cr-save">Save careers</button></div>',
+      "L9");
+
+    function cmini(label, cls, val) {
+      return '<label class="me-mini"><span>' + label + '</span><input class="' + cls + '" type="number" min="0" max="99999" value="' + (val === "" || val == null ? "" : val) + '"></label>';
+    }
+  }
+
+  /* ========================================================
+     4 · BANNER / LORE / USERS / FLAVOUR / MILESTONES / CHAT
+     ======================================================== */
+  function blockBanner(c, admin) {
+    if (!admin) return "";
+    var b = c.banner || { text: "", active: false };
+    return block("Announcement banner",
+      field("Banner text", '<input type="text" id="adm-banner-text" maxlength="160" value="' + U.esc(b.text || "") + '">') +
+      '<label class="field field-check"><input type="checkbox" id="adm-banner-active"' + (b.active ? " checked" : "") + "> Banner is live</label>" +
+      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-banner-save">Save banner</button></div>',
+      "L9");
+  }
+
+  function blockLore(c) {
+    return block("The lore",
+      '<p class="admin-note">Why \u201CThe 40Yr Virgil\u201D? When this box is filled, the story appears on the About page. Until then the mystery does the heavy lifting.</p>' +
+      '<textarea id="adm-lore" rows="5" placeholder="The truth, when the founders are ready…">' + U.esc(c.lore || "") + "</textarea>" +
+      '<div class="admin-actions">' +
+        '<button class="btn btn-primary btn-small" id="adm-lore-save">Publish lore</button>' +
+        '<button class="btn btn-ghost btn-small" id="adm-lore-clear">Re-seal the vault</button>' +
+      "</div>",
+      "L9");
+  }
+
+  function blockUsers(admin) {
+    return block("The register",
+      '<p class="admin-note">' + (admin ? "Levels: 1 fan · 5+ steward (mod) · 9 the keys. You can't edit yourself — separation of powers." : "View only at your level. Stewards keep the chat tidy.") + "</p>" +
+      '<div id="adm-users">' + U.emptyState("Fetching the register…", "", "⏱") + "</div>",
+      admin ? "L9 manage" : "L5 view");
+  }
+
+  function blockFlavour(c) {
+    var fl = c.flavour || {};
+    var current = Object.keys(fl).map(function (id) {
+      var p = U.playerById(id);
+      return '<div class="admin-row"><span class="admin-row-main"><strong>' + U.esc(p ? p.name : id) + "</strong> — " + U.esc(fl[id]) + '</span>' +
+        '<button class="btn btn-ghost btn-small adm-flavour-clear" data-id="' + U.esc(id) + '">✕</button></div>';
+    }).join("");
+    return block("Player flavour overrides",
+      '<div class="field-row">' +
+        field("Player", '<select id="adm-flavour-id">' + playerOptions("") + "</select>") +
+        field("New flavour line", '<input type="text" id="adm-flavour-text" maxlength="140" placeholder="Leave empty to clear">') +
+      "</div>" +
+      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-flavour-save">Set flavour</button></div>' +
+      (current ? '<div class="admin-sublist">' + current + "</div>" : ""),
+      "L9");
+  }
+
+  function blockMilestones(c) {
+    var ms = (c.milestones || []).slice().sort(function (a, b) { return new Date(a.dateISO) - new Date(b.dateISO); });
+    var list = ms.map(function (m) {
+      return '<div class="admin-row"><span class="admin-row-main"><strong>' + U.esc(U.fmtDate(m.dateISO)) + "</strong> — " + U.esc(m.text) + "</span>" +
+        '<button class="btn btn-ghost btn-small adm-ms-del" data-id="' + U.esc(m.id) + '">✕</button></div>';
+    }).join("");
+    return block("Honours timeline · milestones",
+      '<div class="field-row">' +
+        field("Date", '<input type="date" id="adm-ms-date">') +
+        field("Milestone", '<input type="text" id="adm-ms-text" maxlength="120" placeholder="e.g. Promoted to Division 5">') +
+      "</div>" +
+      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-ms-add">Add milestone</button></div>' +
+      (list ? '<div class="admin-sublist">' + list + "</div>" : '<p class="admin-inline-note">No milestones yet. Make some history first.</p>'),
+      "L9");
+  }
+
+  function blockChatNote() {
+    return block("Chat moderation",
+      '<p class="admin-note">Stewards see a ✕ on every message in <a href="#chat">the chat</a>. The server filters the worst words on its own.</p>',
+      "L5+");
+  }
+
+  /* ========================================================
+     WIRING
+     ======================================================== */
+  function bind(matches, career, record, baselineSeq, admin) {
     var b;
+
+    /* match manager */
+    b = U.$("#adm-match-new", root);
+    if (b) b.addEventListener("click", function () { openEditor(null, matches); });
+    bindMatchRows(matches);
+
+    /* club record */
+    b = U.$("#rec-save", root);
+    if (b) b.addEventListener("click", function () {
+      b.disabled = true;
+      NET.recordSave({
+        wins: U.$("#rec-w", root).value, draws: U.$("#rec-d", root).value, losses: U.$("#rec-l", root).value,
+        played: U.$("#rec-p", root).value, goalsFor: U.$("#rec-gf", root).value, goalsAgainst: U.$("#rec-ga", root).value,
+        leagueApps: U.$("#rec-la", root).value, playoffApps: U.$("#rec-pa", root).value,
+        badge: U.$("#rec-badge", root).value
+      }).then(function (r) {
+        b.disabled = false;
+        U.toast(r && r.ok ? "Baseline saved. History corrected." : "Couldn't save the record.");
+        if (r && r.ok) DATA.bust();
+      });
+    });
+
+    /* careers */
+    b = U.$("#cr-save", root);
+    if (b) b.addEventListener("click", function () {
+      b.disabled = true;
+      var rows = U.$$(".admin-career-row", root).map(function (row) {
+        function v(cls) { return row.querySelector("." + cls).value; }
+        return {
+          id: row.getAttribute("data-id"),
+          persona: v("cr-persona"), ovr: v("cr-ovr"),
+          games: v("cr-games"), goals: v("cr-goals"), assists: v("cr-assists"),
+          passesMade: v("cr-passes"), passPct: v("cr-passpct"),
+          tackles: v("cr-tackles"), tacklePct: v("cr-tklpct"), winPct: v("cr-winpct")
+        };
+      });
+      NET.careerSave(rows, U.$("#cr-baseline", root).value).then(function (r) {
+        b.disabled = false;
+        U.toast(r && r.ok ? "Careers saved." : "Couldn't save careers.");
+        if (r && r.ok) DATA.bust();
+      });
+    });
 
     /* banner */
     b = U.$("#adm-banner-save", root);
     if (b) b.addEventListener("click", function () {
       b.disabled = true;
-      NET.adminBanner(U.$("#adm-banner-text", root).value.trim(), U.$("#adm-banner-active", root).checked)
-        .then(function (r) {
-          b.disabled = false;
-          if (r && r.ok) { U.toast("Banner saved."); refreshConfig(); }
-          else U.toast("Couldn't save the banner.");
-        });
+      NET.adminBanner(U.$("#adm-banner-text", root).value, U.$("#adm-banner-active", root).checked).then(function (r) {
+        b.disabled = false;
+        U.toast(r && r.ok ? "Banner saved." : "Couldn't save the banner.");
+        if (r && r.ok) refreshConfig();
+      });
     });
 
     /* lore */
@@ -321,143 +493,35 @@
       b.disabled = true;
       NET.adminLore(U.$("#adm-lore", root).value).then(function (r) {
         b.disabled = false;
-        if (r && r.ok) { U.toast("Lore published. The About page just got heavier."); refreshConfig(); }
-        else U.toast("Couldn't publish.");
+        U.toast(r && r.ok ? "The lore is live." : "Couldn't publish.");
+        if (r && r.ok) refreshConfig();
       });
     });
     b = U.$("#adm-lore-clear", root);
     if (b) b.addEventListener("click", function () {
-      U.$("#adm-lore", root).value = "";
       NET.adminLore("").then(function (r) {
-        if (r && r.ok) { U.toast("Lore cleared."); refreshConfig(); }
+        U.toast(r && r.ok ? "Vault re-sealed." : "Couldn't clear.");
+        if (r && r.ok) { U.$("#adm-lore", root).value = ""; refreshConfig(); }
       });
     });
-
-    /* manual results */
-    b = U.$("#adm-r-save", root);
-    if (b) {
-      renderManualList();
-      b.addEventListener("click", function () {
-        var scorersRaw = U.$("#adm-r-scorers", root).value.trim();
-        var scorers = scorersRaw
-          ? scorersRaw.split(",").map(function (s) {
-              var m = s.trim().match(/^(.*?)\s*[x×]\s*(\d+)$/i);
-              return m ? { name: m[1].trim(), goals: Number(m[2]) } : { name: s.trim(), goals: 1 };
-            }).filter(function (s) { return s.name; })
-          : [];
-        var payload = {
-          season: Number(U.$("#adm-r-season", root).value) || 1,
-          matchday: Number(U.$("#adm-r-md", root).value) || 1,
-          dateISO: U.$("#adm-r-date", root).value || new Date().toISOString().slice(0, 10),
-          opponent: U.$("#adm-r-opp", root).value.trim(),
-          ourScore: Number(U.$("#adm-r-our", root).value) || 0,
-          theirScore: Number(U.$("#adm-r-their", root).value) || 0,
-          scorers: scorers,
-          note: U.$("#adm-r-note", root).value.trim()
-        };
-        if (!payload.opponent) { U.toast("Who did we play? Opponent is required."); return; }
-        b.disabled = true;
-        NET.adminAddResult(payload).then(function (r) {
-          b.disabled = false;
-          if (r && r.ok) {
-            U.toast("Result saved to the archive.");
-            DATA.bust();
-            renderManualList();
-          } else U.toast("Couldn't save that result.");
-        });
-      });
-    }
-
-    /* EA pull */
-    b = U.$("#adm-pull", root);
-    if (b) {
-      renderRawSnapshot();
-      b.addEventListener("click", function () {
-        b.disabled = true;
-        b.textContent = "Pulling…";
-        var out = U.$("#adm-pull-out", root);
-        out.innerHTML = '<p class="admin-note">Knocking on EA\u2019s door…</p>';
-        NET.adminPullNow().then(function (r) {
-          b.disabled = false;
-          b.textContent = "Pull from EA now";
-          if (r && r.ok) {
-            var bits = [];
-            bits.push(r.club ? "club snapshot saved" : "club unchanged");
-            bits.push((r.members || 0) + " member rows added");
-            bits.push((r.matchesNew || 0) + " new matches, " + (r.matchesUpdated || 0) + " updated");
-            if (r.errors && r.errors.length) bits.push("⚠ " + r.errors.join(" · "));
-            out.innerHTML = '<p class="admin-note admin-pull-ok">✓ ' + U.esc(bits.join(" · ")) + "</p>";
-            U.$("#adm-lastpull", root).textContent = U.fmtDateTime(new Date().toISOString());
-            DATA.bust();
-            renderRawSnapshot();
-            renderManualList();
-          } else {
-            out.innerHTML = '<p class="admin-note">✗ Pull failed' + (r && r.error ? " — " + U.esc(r.error) : "") + ". EA might be sulking; try again shortly.</p>";
-          }
-        });
-      });
-    }
-
-    /* EA browser-side test — bypasses the backend entirely */
-    b = U.$("#adm-ea-clienttest", root);
-    if (b) {
-      b.addEventListener("click", function () {
-        b.disabled = true;
-        b.textContent = "Testing…";
-        var out = U.$("#adm-ea-clientout", root);
-        out.innerHTML = '<p class="admin-note">Asking EA, from your browser…</p>';
-        var url = "https://proclubs.ea.com/api/fc/clubs/info?platform=common-gen5&clubIds=1944238";
-
-        fetch(url, { headers: { "Accept": "application/json" } })
-          .then(function (res) {
-            return res.text().then(function (txt) {
-              return { status: res.status, ok: res.ok, txt: txt };
-            });
-          })
-          .then(function (r) {
-            var preview = r.txt.length > 600 ? r.txt.slice(0, 600) + "\n…(truncated)" : r.txt;
-            var statusLine = "HTTP " + r.status + (r.ok ? " — got a response ✓" : " — error ✗");
-            out.innerHTML =
-              '<p class="admin-note' + (r.ok ? " admin-pull-ok" : "") + '">' + U.esc(statusLine) + "</p>" +
-              "<pre class=\"admin-pre\">" + U.esc(preview || "(empty body)") + "</pre>";
-          })
-          .catch(function (err) {
-            out.innerHTML =
-              '<p class="admin-note">✗ Your browser blocked or could not complete this request.</p>' +
-              "<pre class=\"admin-pre\">" + U.esc(String(err && err.message || err)) + "</pre>" +
-              '<p class="admin-note">If this says "Failed to fetch" with no status code, that\u2019s usually CORS — EA\u2019s API is refusing cross-site browser requests from this domain, not just our server.</p>';
-          })
-          .finally(function () {
-            b.disabled = false;
-            b.textContent = "Test from this browser";
-          });
-      });
-    }
 
     /* users */
-    if (U.$("#adm-users", root)) renderUsers();
+    renderUsers(admin);
 
     /* flavour */
-    b = U.$("#adm-fl-save", root);
+    b = U.$("#adm-flavour-save", root);
     if (b) b.addEventListener("click", function () {
-      var id = U.$("#adm-fl-player", root).value;
-      var text = U.$("#adm-fl-text", root).value.trim();
       b.disabled = true;
-      NET.adminFlavour(id, text).then(function (r) {
+      NET.adminFlavour(U.$("#adm-flavour-id", root).value, U.$("#adm-flavour-text", root).value).then(function (r) {
         b.disabled = false;
-        if (r && r.ok) {
-          U.toast(text ? "Flavour set." : "Flavour cleared.");
-          refreshConfig().then(function () { enter(root, helpers); });
-        } else U.toast("Couldn't set that.");
+        U.toast(r && r.ok ? "Flavour set." : "Couldn't set flavour.");
+        if (r && r.ok) refreshConfig().then(function () { enter(root, helpers); });
       });
     });
-    U.$$(".adm-fl-clear", root).forEach(function (btn) {
+    U.$$(".adm-flavour-clear", root).forEach(function (btn) {
       btn.addEventListener("click", function () {
         NET.adminFlavour(btn.getAttribute("data-id"), "").then(function (r) {
-          if (r && r.ok) {
-            U.toast("Override cleared.");
-            refreshConfig().then(function () { enter(root, helpers); });
-          }
+          if (r && r.ok) { U.toast("Flavour cleared."); refreshConfig().then(function () { enter(root, helpers); }); }
         });
       });
     });
@@ -465,25 +529,73 @@
     /* milestones */
     b = U.$("#adm-ms-add", root);
     if (b) b.addEventListener("click", function () {
-      var dateISO = U.$("#adm-ms-date", root).value;
-      var text = U.$("#adm-ms-text", root).value.trim();
-      if (!dateISO || !text) { U.toast("A milestone needs a date and a line."); return; }
+      var d = U.$("#adm-ms-date", root).value;
+      var t = U.$("#adm-ms-text", root).value.trim();
+      if (!d || !t) { U.toast("Date and text, both."); return; }
       b.disabled = true;
-      NET.adminMilestone({ action: "add", dateISO: dateISO, text: text }).then(function (r) {
+      NET.adminMilestone({ action: "add", dateISO: d, text: t }).then(function (r) {
         b.disabled = false;
-        if (r && r.ok) {
-          U.toast("Milestone carved in.");
-          refreshConfig().then(function () { enter(root, helpers); });
-        } else U.toast("Couldn't add that.");
+        U.toast(r && r.ok ? "Milestone carved in." : "Couldn't add it.");
+        if (r && r.ok) refreshConfig().then(function () { enter(root, helpers); });
       });
     });
     U.$$(".adm-ms-del", root).forEach(function (btn) {
       btn.addEventListener("click", function () {
         NET.adminMilestone({ action: "del", id: btn.getAttribute("data-id") }).then(function (r) {
-          if (r && r.ok) {
-            U.toast("Milestone removed.");
-            refreshConfig().then(function () { enter(root, helpers); });
-          }
+          if (r && r.ok) { U.toast("Milestone removed."); refreshConfig().then(function () { enter(root, helpers); }); }
+        });
+      });
+    });
+  }
+
+  function renderUsers(admin) {
+    var mount = U.$("#adm-users", root);
+    if (!mount) return;
+    NET.adminUsers().then(function (res) {
+      if (!mount.isConnected) return;
+      if (!res || !res.ok) { mount.innerHTML = '<p class="admin-inline-note">Couldn\u2019t fetch the register.</p>'; return; }
+      var users = res.users || [];
+      mount.innerHTML =
+        '<table class="opp-table admin-users-table"><thead><tr><th>Name</th><th>Level</th><th>Status</th>' + (admin ? "<th></th>" : "") + "</tr></thead><tbody>" +
+        users.map(function (u) {
+          var isMe = NET.me && u.name.toLowerCase() === NET.me.name.toLowerCase();
+          var levelCell = admin && !isMe
+            ? '<select class="adm-user-level" data-user="' + U.esc(u.name) + '">' +
+                [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (l) {
+                  return '<option value="' + l + '"' + (l === u.level ? " selected" : "") + ">" + l + (l >= 9 ? " · admin" : l >= 5 ? " · mod" : "") + "</option>";
+                }).join("") + "</select>"
+            : String(u.level) + (u.level >= 9 ? " · admin" : u.level >= 5 ? " · mod" : "");
+          var status = u.banned ? '<span class="admin-banned">banned</span>' : "active";
+          var actions = admin && !isMe
+            ? (u.banned
+                ? '<button class="btn btn-ghost btn-small adm-user-unban" data-user="' + U.esc(u.name) + '">Unban</button>'
+                : '<button class="btn btn-ghost btn-small adm-user-ban" data-user="' + U.esc(u.name) + '">Ban</button>')
+            : (isMe ? '<span class="admin-inline-note">you</span>' : "");
+          return "<tr><td>" + U.esc(u.name) + "</td><td>" + levelCell + "</td><td>" + status + "</td>" + (admin ? "<td>" + actions + "</td>" : "") + "</tr>";
+        }).join("") + "</tbody></table>";
+
+      U.$$(".adm-user-level", mount).forEach(function (sel) {
+        sel.addEventListener("change", function () {
+          NET.adminSetLevel(sel.getAttribute("data-user"), Number(sel.value)).then(function (r) {
+            U.toast(r && r.ok ? "Level updated." : "Couldn't change that.");
+            if (!(r && r.ok)) renderUsers(admin);
+          });
+        });
+      });
+      U.$$(".adm-user-ban", mount).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          NET.adminBan(btn.getAttribute("data-user")).then(function (r) {
+            U.toast(r && r.ok ? "Banned. The door is shut." : "Couldn't ban.");
+            renderUsers(admin);
+          });
+        });
+      });
+      U.$$(".adm-user-unban", mount).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          NET.adminUnban(btn.getAttribute("data-user")).then(function (r) {
+            U.toast(r && r.ok ? "Unbanned. Welcome back." : "Couldn't unban.");
+            renderUsers(admin);
+          });
         });
       });
     });

@@ -213,8 +213,8 @@
       );
     }
     return emptyState(
-      "Waiting on the league",
-      "No " + (kind || "data") + " has been pulled from EA yet. Run \u201CPull now\u201D in Housekeeping or wait for the hourly sync.",
+      "The ledger is warming up",
+      "No " + (kind || "data") + " has loaded yet. The backend seeds the full archive on its first request — give it a few seconds and refresh.",
       "⏱"
     );
   }

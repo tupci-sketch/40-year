@@ -2,9 +2,9 @@
    The 40Yr Virgil — squad & formations (identity only)
    ------------------------------------------------------------
    HARD RULE: no stats, no scorelines, no tallies live in this
-   file. Numbers shown on the site come from the EA API via the
-   backend's saved archive. This file is who we are, not how
-   we're doing.
+   file. Numbers shown on the site come from the club's own
+   archive (the backend), kept match by match via Housekeeping.
+   This file is who we are, not how we're doing.
    ============================================================ */
 
 window.CLUB = {

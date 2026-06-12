@@ -117,12 +117,21 @@
       return this._auth("save", { prefs: JSON.stringify(prefs || {}) });
     },
 
-    /* ---------- public reads (the saved EA archive) ---------- */
-    club:    function ()      { return this._call("club"); },
-    members: function ()      { return this._call("members"); },
-    matches: function (limit) { return this._call("matches", limit ? { limit: limit } : {}); },
-    results: function (limit) { return this._call("results", limit ? { limit: limit } : {}); },
-    config:  function ()      { return this._call("config"); },
+    /* ---------- public reads (the club's own archive) ---------- */
+    matches: function () { return this._call("matches"); },
+    career:  function () { return this._call("career"); },
+    record:  function () { return this._call("record"); },
+    config:  function () { return this._call("config"); },
+
+    /* ---------- archive writes (server re-checks every level) ---------- */
+    matchSave:   function (match) { return this._auth("match_save", { match: match }); },   // L5+
+    matchDelete: function (seq)   { return this._auth("match_delete", { seq: seq }); },     // L9
+    careerSave:  function (career, baselineSeq) {
+      var p = { career: career };
+      if (baselineSeq !== undefined) p.baselineSeq = baselineSeq;
+      return this._auth("career_save", p);                                                  // L9
+    },
+    recordSave:  function (record) { return this._auth("record_save", { record: record }); }, // L9
 
     /* ---------- chat ---------- */
     chatFetch:  function ()      { return this._call("chat_fetch"); },
@@ -136,9 +145,6 @@
     adminUnban:     function (user)        { return this._auth("admin_unban", { user: user }); },
     adminBanner:    function (text, active){ return this._auth("admin_banner", { text: text, active: !!active }); },
     adminLore:      function (text)        { return this._auth("admin_lore", { text: text }); },
-    adminAddResult: function (r)           { return this._auth("admin_addresult", r); },
-    adminDelResult: function (id)          { return this._auth("admin_delresult", { id: id }); },
-    adminPullNow:   function ()            { return this._auth("admin_pullnow"); },
     adminFlavour:   function (id, text)    { return this._auth("admin_flavour", { id: id, text: text }); },
     adminMilestone: function (payload)     { return this._auth("admin_milestone", payload); }
   };

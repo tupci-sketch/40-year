@@ -15,7 +15,7 @@
   /* ========================================================
      DATA — memoised loaders over the backend
      ======================================================== */
-  var STATE = { config: null, club: null, members: null, matches: null, results: null };
+  var STATE = { config: null, matches: null, career: null, record: null };
   var INFLIGHT = {};
 
   function load(key, fn, force) {
@@ -31,21 +31,103 @@
 
   var DATA = {
     config:  function (f) { return load("config",  function () { return NET.config();  }, f); },
-    club:    function (f) { return load("club",    function () { return NET.club();    }, f); },
-    members: function (f) { return load("members", function () { return NET.members(); }, f); },
-    results: function (f) { return load("results", function () { return NET.results(); }, f); },
     matches: function (f) { return load("matches", function () { return NET.matches(); }, f); },
+    career:  function (f) { return load("career",  function () { return NET.career();  }, f); },
+    record:  function (f) { return load("record",  function () { return NET.record();  }, f); },
     bust: function () {
       Object.keys(STATE).forEach(function (k) { STATE[k] = null; });
     }
   };
-  window.DATA = DATA; // admin.js refreshes through this after pulls/edits
+  window.DATA = DATA; // admin.js refreshes through this after edits
 
   function liveBlock(res, kind) {
     /* Returns null when data is usable, else the right empty-state HTML. */
     if (res && res.ok) return null;
     if (res && res.error === "offline" && NET.hasBackend()) return U.offlineState();
     return U.waitingState(kind);
+  }
+
+  /* ========================================================
+     ARCHIVE MATHS — shared club/career calculators
+     ======================================================== */
+  function goalsByPlayer(matches) {
+    var map = {};
+    (matches || []).forEach(function (m) {
+      (m.scorers || []).forEach(function (s) {
+        map[s.id] = (map[s.id] || 0) + (Number(s.goals) || 0);
+      });
+    });
+    return map;
+  }
+
+  function hatTricks(matches) {
+    var out = [];
+    (matches || []).forEach(function (m) {
+      (m.scorers || []).forEach(function (s) {
+        if (Number(s.goals) >= 3) out.push({ id: s.id, goals: Number(s.goals), opponent: m.opponent, seq: m.seq, result: m.result });
+      });
+    });
+    return out;
+  }
+
+  /* Club totals = stored baseline + every match after the baseline seq. */
+  function computeRecord(record, matches, baselineSeq) {
+    var r = {
+      badge: record.badge || "",
+      wins: Number(record.wins) || 0,
+      draws: Number(record.draws) || 0,
+      losses: Number(record.losses) || 0,
+      played: Number(record.played) || 0,
+      goalsFor: Number(record.goalsFor) || 0,
+      goalsAgainst: Number(record.goalsAgainst) || 0
+    };
+    (matches || []).forEach(function (m) {
+      if (Number(m.seq) <= baselineSeq) return;
+      r.played++;
+      if (m.result === "W") r.wins++;
+      else if (m.result === "D") r.draws++;
+      else if (m.result === "L") r.losses++;
+      r.goalsFor += Number(m.ourScore) || 0;
+      r.goalsAgainst += Number(m.theirScore) || 0;
+    });
+    return r;
+  }
+
+  /* Career = baseline snapshot + honest deltas from post-baseline matches:
+     goals from scorer lists always; apps/assists only when a detailed
+     stat row exists for the player in that match. */
+  function computeCareer(careerRows, matches, baselineSeq) {
+    var byId = {};
+    (careerRows || []).forEach(function (c) {
+      byId[c.id] = {
+        id: c.id, persona: c.persona, position: c.position, ovr: c.ovr,
+        games: Number(c.games) || 0, goals: Number(c.goals) || 0,
+        assists: Number(c.assists) || 0, passesMade: Number(c.passesMade) || 0,
+        passPct: c.passPct, tackles: Number(c.tackles) || 0, tacklePct: c.tacklePct,
+        cleanSheets: Number(c.cleanSheets) || 0, winPct: c.winPct
+      };
+    });
+    (matches || []).forEach(function (m) {
+      if (Number(m.seq) <= baselineSeq) return;
+      var detailed = {};
+      (m.players || []).forEach(function (p) { detailed[p.id] = p; });
+      var counted = {};
+      (m.players || []).forEach(function (p) {
+        var c = byId[p.id];
+        if (!c) return;
+        c.games++; counted[p.id] = 1;
+        c.goals += Number(p.goals) || 0;
+        c.assists += Number(p.assists) || 0;
+        c.passesMade += Number(p.passesMade) || 0;
+        c.tackles += Number(p.tackles) || 0;
+      });
+      (m.scorers || []).forEach(function (s) {
+        if (detailed[s.id]) return; // already counted exactly
+        var c = byId[s.id];
+        if (c) c.goals += Number(s.goals) || 0;
+      });
+    });
+    return byId;
   }
 
   /* ========================================================
@@ -221,30 +303,39 @@
   PAGES.home = {
     enter: function () {
       var live = U.$("#home-live");
-      live.innerHTML = '<div class="tile-row">' + U.statTile("League position", null, { sub: "syncing…" }) + "</div>";
+      live.innerHTML = '<div class="tile-row">' + U.statTile("All-time record", null, { sub: "opening the books…" }) + "</div>";
 
-      DATA.club().then(function (res) {
-        var block = liveBlock(res, "league data");
+      Promise.all([DATA.record(), DATA.matches()]).then(function (rs) {
+        var recRes = rs[0], mRes = rs[1];
+        var block = liveBlock(recRes, "the club record") || liveBlock(mRes, "the match archive");
         if (block) { live.innerHTML = block; return; }
-        var latest = res.latest || {};
-        var s = latest.seasonal || {};
-        var o = latest.overall || {};
-        var division = U.pick(s, "currentDivision", "division", "bestDivision");
-        var points = U.num(U.pick(s, "points", "seasonPoints"));
-        var rec = [U.pick(s, "wins") != null ? s : o].map(function (src) {
-          var w = U.num(U.pick(src, "wins")), d = U.num(U.pick(src, "ties", "draws")), l = U.num(U.pick(src, "losses"));
-          return (w == null) ? null : (w + " – " + (d == null ? 0 : d) + " – " + (l == null ? 0 : l));
-        })[0];
-        var played = U.num(U.pick(s, "gamesPlayed")) != null ? U.num(s.gamesPlayed) : U.num(U.pick(o, "gamesPlayed"));
+
+        var rec = computeRecord(recRes.record || {}, mRes.matches, mRes.baselineSeq || 0);
+        var winPct = rec.played ? Math.round((rec.wins / rec.played) * 100) : null;
+        var gd = rec.goalsFor - rec.goalsAgainst;
+
+        var last5 = (mRes.matches || []).slice(0, 5);
+        var form = last5.length
+          ? '<div class="form-strip"><span class="form-label">Form</span>' +
+              last5.map(function (m) {
+                return '<span class="pill pill-' + (m.result === "W" ? "win" : m.result === "D" ? "draw" : "loss") +
+                  ' pill-small" title="' + U.esc(m.opponent) + " " + m.ourScore + "–" + m.theirScore + '">' + m.result + "</span>";
+              }).join("") +
+              '<span class="form-hint">latest first</span></div>'
+          : "";
 
         live.innerHTML =
           '<div class="tile-row">' +
-            U.statTile("Division", division != null ? String(division) : null, { accent: "gold" }) +
-            U.statTile("Points", points, { accent: "electric" }) +
-            U.statTile("Played", played) +
-            U.statTile("Record W–D–L", rec) +
+            U.statTile("Played", rec.played, { accent: "electric" }) +
+            U.statTile("Won", rec.wins, { accent: "win" }) +
+            U.statTile("Drawn", rec.draws, { accent: "draw" }) +
+            U.statTile("Lost", rec.losses, { accent: "loss" }) +
+            U.statTile("Goals for", rec.goalsFor, { accent: "gold" }) +
+            U.statTile("Goal diff", (gd > 0 ? "+" : "") + gd) +
+            U.statTile("Win %", winPct != null ? winPct + "%" : null) +
           "</div>" +
-          '<p class="sync-note">Live from the archive · synced ' + U.fmtDateTime(latest.pulledISO) + "</p>";
+          form +
+          '<p class="sync-note">The club\u2019s own books — every game on record, kept by the club.</p>';
         U.runCountUps(live);
       });
     }
@@ -350,48 +441,85 @@
             (p.isCaptain ? '<p class="profile-line profile-captain-line">Wears the armband. Picks the formation. Plays CAM in all of them.</p>' : "") +
             benchGag +
             rolesBlock(p) +
-            '<div class="section-label">Season record <span class="live-dot" title="Live from the EA archive"></span></div>' +
+            '<div class="section-label">The record <span class="live-dot" title="From the club archive"></span></div>' +
             '<div id="player-stats">' + '<div class="tile-row">' + U.statTile("Apps", null) + U.statTile("Goals", null) + U.statTile("Assists", null) + "</div>" + "</div>" +
             '<a class="btn btn-ghost btn-small" href="#squad">← Back to squad</a>' +
           "</div>" +
         "</div>";
 
-      DATA.members().then(function (res) {
+      Promise.all([DATA.career(), DATA.matches()]).then(function (rs) {
+        var cRes = rs[0], mRes = rs[1];
         var mount = U.$("#player-stats");
-        var block = liveBlock(res, "player stats");
+        if (!mount) return;
+        var block = liveBlock(cRes, "player records") || liveBlock(mRes, "the match archive");
         if (block) { mount.innerHTML = block; return; }
-        var m = U.findMemberFor(p, res.members || []);
-        if (!m) {
-          mount.innerHTML = U.emptyState(
-            p.controlledBy === "human" ? "No EA record matched yet" : "Club AI — no member record",
-            p.controlledBy === "human"
-              ? "Set this player's eaPersona in js/data.js after the first pull, or check Housekeeping."
-              : "EA only tracks club-member personas. The slot-fillers play in silence.",
+
+        var matches = mRes.matches || [];
+        var careers = computeCareer(cRes.career || [], matches, mRes.baselineSeq || 0);
+        var c = careers[p.id] || null;
+
+        /* recorded-game numbers from the match log, for everyone */
+        var logGoals = goalsByPlayer(matches)[p.id] || 0;
+        var logApps = 0, logAssists = 0, ratings = [];
+        matches.forEach(function (m) {
+          (m.players || []).forEach(function (pl) {
+            if (pl.id !== p.id) return;
+            logApps++;
+            logAssists += Number(pl.assists) || 0;
+            if (pl.rating !== "" && pl.rating != null) ratings.push(Number(pl.rating));
+          });
+        });
+        var avgRating = ratings.length
+          ? (ratings.reduce(function (a, b) { return a + b; }, 0) / ratings.length).toFixed(2)
+          : null;
+        var tricks = hatTricks(matches).filter(function (h) { return h.id === p.id; });
+
+        var html = "";
+        if (c) {
+          html +=
+            '<div class="tile-row">' +
+              U.statTile("OVR", c.ovr, { accent: "gold" }) +
+              U.statTile("Games", c.games) +
+              U.statTile("Goals", c.goals, { accent: p.goldenBoot ? "gold" : "" }) +
+              U.statTile("Assists", c.assists) +
+              U.statTile("Win %", c.winPct, { suffix: "%" }) +
+              U.statTile("Tackles", c.tackles) +
+            "</div>" +
+            '<p class="sync-note">Career record · EA persona: ' + U.esc(c.persona) + "</p>";
+        } else if (logGoals || logApps) {
+          html +=
+            '<div class="tile-row">' +
+              U.statTile("Goals (recorded)", logGoals, { accent: "gold" }) +
+              (logApps ? U.statTile("Detailed apps", logApps) : "") +
+            "</div>" +
+            '<p class="sync-note">From the club\u2019s match log. The algorithm scores; the archive remembers.</p>';
+        } else {
+          html += U.emptyState(
+            "No recorded involvements yet",
+            p.controlledBy === "human" ? "Career numbers can be set in Housekeeping." : "Plays its part in silence. For now.",
             "—"
           );
-          return;
         }
-        var apps = U.num(m.games);
-        var winp = m.raw && m.raw.winRate != null ? U.num(m.raw.winRate) : U.winPct(m.wins, m.games);
-        var rating = m.ratingAve !== "" && m.ratingAve != null ? Number(m.ratingAve).toFixed(1) : null;
 
-        mount.innerHTML =
-          '<div class="tile-row">' +
-            U.statTile("Apps", apps) +
-            U.statTile("Goals", U.num(m.goals), { accent: p.goldenBoot ? "gold" : "" }) +
-            U.statTile("Assists", U.num(m.assists)) +
-            U.statTile("Avg rating", rating) +
-            U.statTile("MOTM", U.num(m.motm)) +
-            U.statTile("Win %", winp, { suffix: "%" }) +
-          "</div>" +
-          '<p class="sync-note">EA persona: ' + U.esc(m.persona) + "</p>";
+        if (avgRating || logAssists || tricks.length) {
+          html += '<div class="section-label">From the match log</div><div class="tile-row">' +
+            (avgRating ? U.statTile("Avg rating", avgRating, { accent: "electric", sub: ratings.length + " detailed games" }) : "") +
+            (logGoals ? U.statTile("Logged goals", logGoals) : "") +
+            (logAssists ? U.statTile("Logged assists", logAssists) : "") +
+            (tricks.length ? U.statTile("Hat-tricks", tricks.length, { accent: "gold", sub: tricks.map(function (t) { return "vs " + t.opponent; }).join(" · ") }) : "") +
+          "</div>";
+        }
+
+        mount.innerHTML = html;
         U.runCountUps(mount);
 
         if (p.permaBench) {
-          var most = 0;
-          (res.members || []).forEach(function (x) { most = Math.max(most, U.num(x.games) || 0); });
           var fill = U.$("#bench-meter-fill");
-          if (fill) fill.style.width = (most ? Math.min(100, ((apps || 0) / most) * 100) : 0) + "%";
+          if (fill) {
+            fill.style.width = (c && c.games ? Math.min(100, c.games) : 0) + "%";
+            var note = mount.parentElement ? mount.parentElement.querySelector(".bench-meter-note") : null;
+            if (note && !(c && c.games)) note.textContent = "Still zero. Still ready. The meter is patient.";
+          }
         }
       });
     }
@@ -401,60 +529,80 @@
   PAGES.results = {
     enter: function () {
       var mount = U.$("#results-list");
-      mount.innerHTML = U.emptyState("Pulling the record…", "", "⏱");
+      mount.innerHTML = U.emptyState("Opening the books…", "", "⏱");
 
-      DATA.results().then(function (res) {
-        var block = liveBlock(res, "results");
+      DATA.matches().then(function (res) {
+        var block = liveBlock(res, "the match archive");
         if (block) { mount.innerHTML = block; return; }
-        var list = res.results || [];
+        var list = res.matches || [];
         if (!list.length) { mount.innerHTML = U.waitingState("matches"); return; }
+        var canEdit = NET.isMod();
 
-        mount.innerHTML = list.map(function (r, i) {
-          var typeTag = r.source === "manual"
-            ? '<span class="result-tag result-tag-manual" title="Entered by the club — the API never caught this one">Manual</span>'
-            : '<span class="result-tag">' + (r.type === "playoffMatch" ? "Playoff" : "League") + "</span>";
-          var scorers = U.scorersLine(r.scorers);
-          var theirs = (r.theirPlayers || []).slice().sort(function (a, b) { return (Number(b.rating) || 0) - (Number(a.rating) || 0); });
+        mount.innerHTML = list.map(function (m, i) {
+          var stage = m.stage === "playoff" ? "Playoff" : m.stage === "friendly" ? "Friendly" : "League";
+          var scorers = U.scorersLine((m.scorers || []).map(function (s) {
+            var p = U.playerById(s.id);
+            return { name: p ? p.name : s.id, goals: s.goals };
+          }));
+          var detailed = (m.players || []).slice().sort(function (a, b) { return (Number(b.rating) || 0) - (Number(a.rating) || 0); });
 
-          var oppPanel =
-            '<details class="opp-panel">' +
-              "<summary>Opposition · " + U.esc(r.opponent || "Unknown") + "</summary>" +
-              (theirs.length
-                ? '<table class="opp-table"><thead><tr><th>Player</th><th>G</th><th>A</th><th>Rating</th></tr></thead><tbody>' +
-                  theirs.map(function (t) {
-                    return "<tr><td>" + U.esc(t.name) + "</td><td>" + (t.goals != null ? t.goals : "—") + "</td><td>" +
-                      (t.assists != null ? t.assists : "—") + "</td><td>" + (t.rating != null ? Number(t.rating).toFixed(1) : "—") + "</td></tr>";
-                  }).join("") + "</tbody></table>"
-                : '<p class="opp-empty">' + (r.source === "manual" ? "Manual entry — no opposition data was captured." : "No opponent player stats came back for this one.") + "</p>") +
-              (r.note ? '<p class="result-note">📝 ' + U.esc(r.note) + "</p>" : "") +
-            "</details>";
+          var statsPanel = detailed.length
+            ? '<details class="opp-panel">' +
+                "<summary>Player stats · " + detailed.length + " on record</summary>" +
+                '<table class="opp-table opp-table-wide"><thead><tr><th>Player</th><th>G</th><th>A</th><th>R</th><th>Sh</th><th>Tk</th><th>Pass</th></tr></thead><tbody>' +
+                detailed.map(function (t) {
+                  var p = U.playerById(t.id);
+                  var nm = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a>" : U.esc(t.id);
+                  return "<tr><td>" + nm + "</td><td>" + (t.goals !== "" ? t.goals : "—") + "</td><td>" +
+                    (t.assists !== "" ? t.assists : "—") + "</td><td>" + (t.rating !== "" ? Number(t.rating).toFixed(1) : "—") + "</td><td>" +
+                    (t.shots !== "" ? t.shots : "—") + "</td><td>" + (t.tackles !== "" ? t.tackles : "—") + "</td><td>" +
+                    (t.passesMade !== "" ? t.passesMade + "/" + t.passAttempts : "—") + "</td></tr>";
+                }).join("") + "</tbody></table>" +
+                (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "") +
+              "</details>"
+            : (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "");
+
+          var editBtn = canEdit
+            ? '<button class="result-edit" data-seq="' + m.seq + '" title="Edit this match in Housekeeping">✎</button>'
+            : "";
 
           return '<article class="result-row" style="animation-delay:' + Math.min(i * 40, 400) + 'ms">' +
             '<div class="result-main">' +
-              U.pill(r.result) +
+              U.pill(m.result) +
               '<div class="result-mid">' +
                 '<span class="result-line"><strong>The 40Yr Virgil</strong> <span class="result-score">' +
-                  (r.ourGoals != null ? r.ourGoals : "–") + " — " + (r.theirGoals != null ? r.theirGoals : "–") +
-                "</span> " + U.esc(r.opponent || "Unknown") + "</span>" +
+                  (m.ourScore !== "" ? m.ourScore : "–") + " — " + (m.theirScore !== "" ? m.theirScore : "–") +
+                "</span> " + U.esc(m.opponent || "Unknown") + "</span>" +
                 (scorers ? '<span class="result-scorers">⚽ ' + scorers + "</span>" : "") +
               "</div>" +
-              '<div class="result-side"><span class="result-date">' + U.fmtDate(r.ts) + "</span>" + typeTag + "</div>" +
-            "</div>" + oppPanel +
+              '<div class="result-side"><span class="result-date">Match ' + m.seq + (m.dateISO ? " · " + U.fmtDate(m.dateISO) : "") + "</span>" +
+                '<span class="result-tag">' + stage + "</span>" + editBtn +
+              "</div>" +
+            "</div>" + statsPanel +
           "</article>";
         }).join("");
+
+        if (canEdit) {
+          U.$$(".result-edit", mount).forEach(function (b) {
+            b.addEventListener("click", function () {
+              try { sessionStorage.setItem("v40.editseq", b.getAttribute("data-seq")); } catch (e) { /* fine */ }
+              location.hash = "#admin";
+            });
+          });
+        }
       });
     }
   };
 
   /* ------------------------------------------------ STATS */
   function lb(title, rows, fmt) {
-    if (!rows.length) return "";
+    if (!rows || !rows.length) return "";
     return '<div class="panel lb-panel"><div class="section-label">' + title + "</div><ol class='lb'>" +
       rows.map(function (r) {
-        var p = U.squadFor(r.persona);
+        var p = U.playerById(r.id);
         var who = p
           ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a> " + U.controlBadge(p)
-          : U.esc(r.persona);
+          : U.esc(r.id);
         return "<li><span class='lb-name'>" + who + "</span><span class='lb-val'>" + fmt(r) + "</span></li>";
       }).join("") + "</ol></div>";
   }
@@ -468,92 +616,120 @@
       lbMt.innerHTML = "";
       oppMt.innerHTML = "";
 
-      DATA.club().then(function (res) {
-        var block = liveBlock(res, "club stats");
+      Promise.all([DATA.record(), DATA.matches(), DATA.career()]).then(function (rs) {
+        var recRes = rs[0], mRes = rs[1], cRes = rs[2];
+        var block = liveBlock(recRes, "the club record") || liveBlock(mRes, "the match archive");
         if (block) { clubMt.innerHTML = block; return; }
-        var o = (res.latest && res.latest.overall) || {};
-        var s = (res.latest && res.latest.seasonal) || {};
-        var gf = U.num(U.pick(o, "goals")), ga = U.num(U.pick(o, "goalsAgainst"));
+
+        var matches = mRes.matches || [];
+        var baseline = mRes.baselineSeq || 0;
+        var rec = computeRecord(recRes.record || {}, matches, baseline);
+
+        /* ---- club tiles: all-time + the recorded slice ---- */
+        var logW = 0, logD = 0, logL = 0, logGF = 0, logGA = 0;
+        matches.forEach(function (m) {
+          if (m.result === "W") logW++; else if (m.result === "D") logD++; else if (m.result === "L") logL++;
+          logGF += Number(m.ourScore) || 0;
+          logGA += Number(m.theirScore) || 0;
+        });
+
         clubMt.innerHTML =
           '<div class="tile-row">' +
-            U.statTile("Division", U.pick(s, "currentDivision", "division") != null ? String(U.pick(s, "currentDivision", "division")) : null, { accent: "gold" }) +
-            U.statTile("Points", U.num(U.pick(s, "points"))) +
-            U.statTile("Played", U.num(U.pick(o, "gamesPlayed"))) +
-            U.statTile("Wins", U.num(U.pick(o, "wins")), { accent: "win" }) +
-            U.statTile("Draws", U.num(U.pick(o, "ties", "draws")), { accent: "draw" }) +
-            U.statTile("Losses", U.num(U.pick(o, "losses")), { accent: "loss" }) +
-            U.statTile("Goals for", gf) +
-            U.statTile("Goals against", ga) +
-            U.statTile("Win %", U.winPct(U.pick(o, "wins"), U.pick(o, "gamesPlayed")), { suffix: "%" }) +
+            U.statTile("Played", rec.played, { accent: "electric" }) +
+            U.statTile("Wins", rec.wins, { accent: "win" }) +
+            U.statTile("Draws", rec.draws, { accent: "draw" }) +
+            U.statTile("Losses", rec.losses, { accent: "loss" }) +
+            U.statTile("Goals for", rec.goalsFor, { accent: "gold" }) +
+            U.statTile("Goals against", rec.goalsAgainst) +
+            U.statTile("Win %", U.winPct(rec.wins, rec.played), { suffix: "%" }) +
+            (rec.badge ? U.statTile("Badge", rec.badge, { accent: "gold" }) : "") +
           "</div>" +
-          '<p class="sync-note">Synced ' + U.fmtDateTime(res.latest && res.latest.pulledISO) + "</p>";
+          '<div class="section-label">The recorded games · ' + matches.length + " on file</div>" +
+          '<div class="tile-row">' +
+            U.statTile("Record", logW + " – " + logD + " – " + logL) +
+            U.statTile("Scored", logGF, { accent: "gold" }) +
+            U.statTile("Conceded", logGA) +
+          "</div>" +
+          '<p class="sync-note">All-time totals = the EA-era baseline plus every match logged since. The recorded games are the slice with full match-by-match detail.</p>';
         U.runCountUps(clubMt);
-      });
 
-      DATA.members().then(function (res) {
-        var block = liveBlock(res, "leaderboards");
-        if (block) { lbMt.innerHTML = block; return; }
-        var ms = (res.members || []).slice();
-        if (!ms.length) { lbMt.innerHTML = U.waitingState("member stats"); return; }
-        function by(k) { return ms.slice().sort(function (a, b) { return (U.num(b[k]) || 0) - (U.num(a[k]) || 0); }).filter(function (m) { return (U.num(m[k]) || 0) > 0 || k === "games"; }); }
-        var rated = ms.filter(function (m) { return (U.num(m.games) || 0) > 0 && m.ratingAve !== "" && m.ratingAve != null; })
-          .sort(function (a, b) { return Number(b.ratingAve) - Number(a.ratingAve); });
+        /* ---- leaderboards ---- */
+        var careers = computeCareer((cRes && cRes.career) || [], matches, baseline);
+        var careerList = Object.keys(careers).map(function (k) { return careers[k]; });
+
+        var logGoals = goalsByPlayer(matches);
+        var bootRows = Object.keys(logGoals).map(function (id) { return { id: id, val: logGoals[id] }; })
+          .sort(function (a, b) { return b.val - a.val; });
+
+        var logA = {}, ratingsBy = {};
+        matches.forEach(function (m) {
+          (m.players || []).forEach(function (p) {
+            logA[p.id] = (logA[p.id] || 0) + (Number(p.assists) || 0);
+            if (p.rating !== "" && p.rating != null) (ratingsBy[p.id] = ratingsBy[p.id] || []).push(Number(p.rating));
+          });
+        });
+        var assistRows = Object.keys(logA).filter(function (id) { return logA[id] > 0; })
+          .map(function (id) { return { id: id, val: logA[id] }; })
+          .sort(function (a, b) { return b.val - a.val; });
+        var ratingRows = Object.keys(ratingsBy).map(function (id) {
+          var arr = ratingsBy[id];
+          return { id: id, val: arr.reduce(function (a, b) { return a + b; }, 0) / arr.length, n: arr.length };
+        }).sort(function (a, b) { return b.val - a.val; });
+        var trickMap = {};
+        hatTricks(matches).forEach(function (h) { trickMap[h.id] = (trickMap[h.id] || 0) + 1; });
+        var trickRows = Object.keys(trickMap).map(function (id) { return { id: id, val: trickMap[id] }; })
+          .sort(function (a, b) { return b.val - a.val; });
 
         lbMt.innerHTML =
           '<div class="lb-grid">' +
-            lb("Golden Boot race", by("goals"), function (m) { return m.goals; }) +
-            lb("Assists", by("assists"), function (m) { return m.assists; }) +
-            lb("Appearances", by("games"), function (m) { return m.games; }) +
-            lb("Average rating", rated, function (m) { return Number(m.ratingAve).toFixed(1); }) +
-            lb("Man of the Match", by("motm"), function (m) { return m.motm; }) +
+            lb("Golden Boot · recorded games", bootRows, function (r) { return r.val; }) +
+            lb("Career goals · all-time", careerList.filter(function (c) { return c.goals > 0; }).sort(function (a, b) { return b.goals - a.goals; }).map(function (c) { return { id: c.id, val: c.goals }; }), function (r) { return r.val; }) +
+            lb("Assists · detailed games", assistRows, function (r) { return r.val; }) +
+            lb("Career assists · all-time", careerList.filter(function (c) { return c.assists > 0; }).sort(function (a, b) { return b.assists - a.assists; }).map(function (c) { return { id: c.id, val: c.assists }; }), function (r) { return r.val; }) +
+            lb("Average rating · detailed games", ratingRows, function (r) { return r.val.toFixed(2); }) +
+            lb("Hat-tricks", trickRows, function (r) { return r.val; }) +
           "</div>" +
-          '<p class="sync-note">Humans and member-bots both count. The badge doesn\u2019t discriminate.</p>';
-      });
+          '<p class="sync-note">Recorded-game boards count everyone — including the algorithms. Donovan and Pereira are on the scoresheet and the archive will never let them forget it.</p>';
 
-      DATA.results().then(function (res) {
-        if (!res || !res.ok) { oppMt.innerHTML = ""; return; }
-        var list = res.results || [];
-        if (!list.length) { oppMt.innerHTML = ""; return; }
+        /* ---- career table for the humans ---- */
+        var humans = careerList.filter(function (c) { return c.persona; })
+          .sort(function (a, b) { return b.goals - a.goals; });
+        var careerHtml = humans.length
+          ? '<div class="section-label">Career records · the humans</div>' +
+            '<div class="panel">' +
+              '<table class="opp-table opp-table-wide career-table"><thead><tr><th>Player</th><th>OVR</th><th>Games</th><th>G</th><th>A</th><th>Pass %</th><th>Tkl</th><th>Win %</th></tr></thead><tbody>' +
+              humans.map(function (c) {
+                var p = U.playerById(c.id);
+                var nm = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a>" : U.esc(c.id);
+                return "<tr><td>" + nm + ' <span class="lb-club">' + U.esc(c.persona) + "</span></td><td>" + (c.ovr || "—") + "</td><td>" + c.games + "</td><td>" + c.goals + "</td><td>" + c.assists + "</td><td>" + (c.passPct || "—") + "</td><td>" + c.tackles + "</td><td>" + (c.winPct || "—") + "</td></tr>";
+              }).join("") + "</tbody></table>" +
+            "</div>"
+          : "";
 
+        /* ---- opposition table from the match log ---- */
         var byOpp = {};
-        var oppScorers = {};
-        list.forEach(function (r) {
-          var k = (r.opponent || "Unknown").trim();
+        matches.forEach(function (m) {
+          var k = (m.opponent || "Unknown").trim();
           byOpp[k] = byOpp[k] || { name: k, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 };
-          var rec = byOpp[k];
-          rec.p++;
-          if (r.result === "W") rec.w++; else if (r.result === "D") rec.d++; else if (r.result === "L") rec.l++;
-          rec.gf += U.num(r.ourGoals) || 0;
-          rec.ga += U.num(r.theirGoals) || 0;
-          (r.theirPlayers || []).forEach(function (t) {
-            var g = U.num(t.goals) || 0;
-            if (!g) return;
-            var key = t.name + "|" + k;
-            oppScorers[key] = oppScorers[key] || { name: t.name, club: k, goals: 0 };
-            oppScorers[key].goals += g;
-          });
+          var o = byOpp[k];
+          o.p++;
+          if (m.result === "W") o.w++; else if (m.result === "D") o.d++; else if (m.result === "L") o.l++;
+          o.gf += Number(m.ourScore) || 0;
+          o.ga += Number(m.theirScore) || 0;
         });
-
         var opps = Object.keys(byOpp).map(function (k) { return byOpp[k]; })
           .sort(function (a, b) { return b.p - a.p || a.name.localeCompare(b.name); });
-        var villains = Object.keys(oppScorers).map(function (k) { return oppScorers[k]; })
-          .sort(function (a, b) { return b.goals - a.goals; }).slice(0, 6);
 
         oppMt.innerHTML =
-          '<div class="section-label">Opposition</div>' +
+          careerHtml +
+          '<div class="section-label">Opposition · head to head</div>' +
           '<div class="panel">' +
             '<table class="opp-table opp-table-wide"><thead><tr><th>Opponent</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th></tr></thead><tbody>' +
             opps.map(function (o) {
               return "<tr><td>" + U.esc(o.name) + "</td><td>" + o.p + "</td><td>" + o.w + "</td><td>" + o.d + "</td><td>" + o.l + "</td><td>" + o.gf + "</td><td>" + o.ga + "</td></tr>";
             }).join("") +
             "</tbody></table>" +
-          "</div>" +
-          (villains.length
-            ? '<div class="panel"><div class="section-label">Scored against us</div><ol class="lb">' +
-              villains.map(function (v) {
-                return "<li><span class='lb-name'>" + U.esc(v.name) + ' <span class="lb-club">' + U.esc(v.club) + "</span></span><span class='lb-val'>" + v.goals + "</span></li>";
-              }).join("") + "</ol></div>"
-            : "");
+          "</div>";
       });
     }
   };
@@ -566,8 +742,8 @@
       cab.innerHTML = U.emptyState("Opening the cabinet…", "", "⏱");
       tl.innerHTML = "";
 
-      Promise.all([DATA.club(), DATA.config()]).then(function (out) {
-        var club = out[0];
+      Promise.all([DATA.matches(), DATA.config()]).then(function (out) {
+        var mRes = out[0];
         var items = [{
           ts: "2024-01-01T00:00:00Z",
           dateLabel: "2024",
@@ -575,41 +751,40 @@
           sub: "Fifteen names on a sheet, one badge, zero doubts. Est. 2024."
         }];
 
-        if (club && club.ok) {
-          var o = (club.latest && club.latest.overall) || {};
-          var tiles = [];
-          var best = U.pick(o, "bestDivision");
-          var promos = U.num(U.pick(o, "promotions"));
-          var titles = U.num(U.pick(o, "titlesWon", "leagueWins", "titles"));
-          if (best != null)  tiles.push(U.statTile("Best division", String(best), { accent: "gold" }));
-          if (titles != null) tiles.push(U.statTile("Titles", titles, { accent: "electric" }));
-          if (promos != null) tiles.push(U.statTile("Promotions", promos, { accent: "win" }));
-          var releg = U.num(U.pick(o, "relegations"));
-          if (releg != null) tiles.push(U.statTile("Relegations", releg, { accent: "loss", sub: "character building" }));
-          cab.innerHTML = tiles.length
-            ? '<div class="tile-row">' + tiles.join("") + "</div>"
-            : U.waitingState("honours");
-          U.runCountUps(cab);
-
-          // Division movements from the saved time series
-          var hist = club.history || [];
-          var prev = null;
-          hist.forEach(function (h) {
-            var d = U.num(h.division);
-            if (d == null) return;
-            if (prev != null && d !== prev) {
-              items.push({
-                ts: h.t,
-                dateLabel: U.fmtDate(h.t),
-                title: d < prev ? "Promoted to Division " + d : "Relegated to Division " + d,
-                sub: d < prev ? "The climb is real. The archive saw it happen." : "A tactical regroup. Officially.",
-                tone: d < prev ? "up" : "down"
-              });
-            }
-            prev = d;
-          });
+        var block = liveBlock(mRes, "the match archive");
+        if (block) {
+          cab.innerHTML = block;
         } else {
-          cab.innerHTML = liveBlock(club, "honours");
+          var matches = mRes.matches || [];
+          var bestWin = null, worstLoss = null, cleanSheets = 0, goalFests = 0;
+          matches.forEach(function (m) {
+            var our = Number(m.ourScore) || 0, their = Number(m.theirScore) || 0;
+            if (m.result === "W") {
+              var margin = our - their;
+              if (!bestWin || margin > bestWin.margin || (margin === bestWin.margin && our > bestWin.our)) {
+                bestWin = { margin: margin, our: our, their: their, opp: m.opponent };
+              }
+            }
+            if (m.result === "L") {
+              var def = their - our;
+              if (!worstLoss || def > worstLoss.margin || (def === worstLoss.margin && their > worstLoss.their)) {
+                worstLoss = { margin: def, our: our, their: their, opp: m.opponent };
+              }
+            }
+            if (their === 0 && m.ourScore !== "") cleanSheets++;
+            if (our + their >= 9) goalFests++;
+          });
+          var tricks = hatTricks(matches);
+
+          cab.innerHTML =
+            '<div class="tile-row">' +
+              (bestWin ? U.statTile("Biggest win", bestWin.our + "–" + bestWin.their, { accent: "win", sub: "vs " + bestWin.opp }) : "") +
+              (worstLoss ? U.statTile("Heaviest defeat", worstLoss.our + "–" + worstLoss.their, { accent: "loss", sub: "vs " + worstLoss.opp + " · character building" }) : "") +
+              U.statTile("Clean sheets", cleanSheets, { accent: "electric", sub: "recorded games" }) +
+              U.statTile("Hat-tricks", tricks.length, { accent: "gold", sub: "and counting" }) +
+              (goalFests ? U.statTile("9+ goal thrillers", goalFests, { sub: "defending optional" }) : "") +
+            "</div>";
+          U.runCountUps(cab);
         }
 
         var ms = (cfg().milestones || []);
@@ -632,7 +807,7 @@
             }).join("") +
           "</div>" +
           (items.length <= 1
-            ? '<p class="sync-note">Division movements appear here automatically as the archive grows. Milestones can be added from Housekeeping.</p>'
+            ? '<p class="sync-note">Milestones can be added from Housekeeping.</p>'
             : "");
       });
     }
