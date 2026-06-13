@@ -1874,7 +1874,7 @@ textarea { resize: vertical; font-family: var(--font-body); }
 .hint-warn { color: var(--draw); }
 
 /* ---- footer sponsor ---- */
-.foot-sponsor { font-size: 0.72rem; color: var(--gold); opacity: 0.85; text-align: center; }
+.foot-sponsor { font-size: 0.72rem; color: var(--gold); opacity: 0.85; text-align: center; align-self: stretch; }
 .foot-backed { white-space: nowrap; }
 
 /* ---- konami flourish ---- */
