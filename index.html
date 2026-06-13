@@ -7,6 +7,17 @@
   <meta name="description" content="The official home of The 40Yr Virgil — EA Sports FC Pro Clubs. Est. 2024. Live results, the squad, the tactics board, and the legend in progress.">
   <meta name="theme-color" content="#07030B">
 
+  <!-- Security: lock down what the page may load. Scripts only from us,
+       Cloudflare Turnstile and TikTok's embed; data only to/from the
+       Apps Script backend, Turnstile and TikTok. Inline scripts are
+       forbidden. (frame-ancestors / X-Frame-Options / HSTS are set at
+       the Cloudflare edge — they're ignored in a <meta> tag.) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://*.tiktok.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://challenges.cloudflare.com https://*.tiktok.com; frame-src https://challenges.cloudflare.com https://*.tiktok.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+
+  <link rel="preload" as="image" href="assets/img/crest.webp">
+  <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+
   <!-- Open Graph · after deploying, swap these two for your full
        GitHub Pages URLs (e.g. https://YOURNAME.github.io/40yr-virgil/assets/img/crest.png) -->
   <meta property="og:title" content="The 40Yr Virgil">
@@ -29,7 +40,7 @@
   <header class="site-head">
     <div class="nav-inner">
       <a class="crest-link" href="#home" aria-label="The 40Yr Virgil — home">
-        <img class="nav-crest" src="assets/img/crest.png" alt="The 40Yr Virgil crest">
+        <img class="nav-crest" src="assets/img/crest.webp" alt="The 40Yr Virgil crest">
         <span class="wordmark">THE <span>40YR</span> VIRGIL</span>
       </a>
       <button id="nav-toggle" aria-label="Open menu">☰</button>
@@ -42,7 +53,10 @@
         <a class="nav-link" data-route="honours" href="#honours">Honours</a>
         <a class="nav-link" data-route="gaffer" href="#gaffer">Gaffer</a>
         <a class="nav-link" data-route="about" href="#about">About</a>
-        <a class="nav-link" data-route="chat" href="#chat">Chat</a>
+        <a class="nav-link" data-route="news" href="#news">News</a>
+        <a class="nav-link" data-route="social" href="#social">Social</a>
+        <a class="nav-link" data-route="chat" href="#chat" id="nav-chat" hidden>Chat</a>
+        <a class="nav-link" data-route="forum" href="#forum" id="nav-forum" hidden>Forum</a>
         <a class="nav-link" data-route="admin" href="#admin" id="nav-admin" hidden>Housekeeping</a>
         <div id="account-bar"></div>
       </nav>
@@ -58,7 +72,7 @@
       <div class="hero">
         <div class="hero-crest-wrap">
           <div class="hero-glow"></div>
-          <img class="hero-crest" src="assets/img/crest.png" alt="The 40Yr Virgil crest" decoding="async">
+          <img class="hero-crest" src="assets/img/crest.webp" alt="The 40Yr Virgil crest" decoding="async">
         </div>
         <h1 class="hero-name">THE <span class="accent">40YR</span> VIRGIL</h1>
         <span class="hero-est">EST. 2024</span>
@@ -190,12 +204,15 @@
       </div>
 
       <div id="about-lore" hidden></div>
+      <div id="about-personal"></div>
 
       <div class="section-label">Club facts</div>
       <div class="panel about-block">
         <ul class="about-facts">
           <li><strong>Founded</strong> 2024 — and never looked back, mostly because the rear-view mirror is unlicensed DLC.</li>
           <li><strong>Competition</strong> EA Sports FC 26 · Pro Clubs · Season 2.</li>
+          <li><strong>Stadium</strong> The Betfred Arena. Capacity: whatever the lobby allows.</li>
+          <li><strong>Principal sponsor</strong> Betfred — the shirt practically wears itself.</li>
           <li><strong>Personnel</strong> Three humans. Twelve algorithms. One badge.</li>
           <li><strong>Captain</strong> Tupci. Always CAM. Non-negotiable.</li>
           <li><strong>Super-sub</strong> Rizzy Dave. Not starting. Still dangerous.</li>
@@ -226,6 +243,43 @@
       </form>
     </section>
 
+    <!-- ======================= NEWS ======================= -->
+    <section class="screen" id="screen-news">
+      <div class="screen-head">
+        <h1 class="screen-title">The Gazette</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-intro">Club news, official communiqués and unverified dressing-room rumour. Mostly the last one.</p>
+      <div id="news-view"></div>
+    </section>
+
+    <!-- ======================= SOCIAL ======================= -->
+    <section class="screen" id="screen-social">
+      <div class="screen-head">
+        <h1 class="screen-title">Socials</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <div id="social-view"></div>
+    </section>
+
+    <!-- ======================= FORUM (members) ======================= -->
+    <section class="screen" id="screen-forum">
+      <div class="screen-head">
+        <h1 class="screen-title">The Dressing Room</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <div id="forum-view"></div>
+    </section>
+
+    <!-- ======================= TICKETS ======================= -->
+    <section class="screen" id="screen-tickets">
+      <div class="screen-head">
+        <h1 class="screen-title">Tickets</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <div id="tickets-view"></div>
+    </section>
+
     <!-- ======================= ADMIN ======================= -->
     <section class="screen" id="screen-admin">
       <div class="screen-head">
@@ -239,10 +293,11 @@
 
   <!-- ======================= FOOTER ======================= -->
   <footer class="site-foot">
-    <img class="foot-crest" src="assets/img/crest.png" alt="" loading="lazy">
+    <img class="foot-crest" src="assets/img/crest.webp" alt="" loading="lazy">
     <span class="foot-values">Loyalty · Heart · Glory</span>
     <span class="foot-tagline">One Club. One Squad. One Dream.</span>
-    <span class="foot-est">Est. 2024 · EA Sports FC Pro Clubs</span>
+    <span class="foot-sponsor">Played at the Betfred Arena · Shirt sponsor: Betfred</span>
+    <span class="foot-est">Est. 2024 · EA Sports FC Pro Clubs · <a href="#tickets">Tickets</a></span>
   </footer>
 
   <!-- ======================= AUTH MODAL ======================= -->
@@ -267,23 +322,26 @@
         <label class="field" id="auth-confirm-row" hidden>
           <span class="field-label">Confirm password</span>
           <input type="password" id="auth-confirm" autocomplete="new-password">
+          <span class="field-hint" id="auth-match-hint"></span>
         </label>
+        <div class="cf-turnstile" id="cf-turnstile"></div>
         <p class="auth-error" id="auth-error" role="alert"></p>
         <button type="submit" class="btn btn-primary" id="auth-submit">Sign in</button>
       </form>
-      <p class="auth-note">First account registered becomes the club admin. Choose wisely.</p>
+      <p class="auth-note">The stewards keep the door. Be good.</p>
     </div>
   </div>
 
   <div id="toast" role="status" aria-live="polite"></div>
 
   <!-- script order matters: config → data → net → ui → tactics → admin → app -->
-  <script src="js/config.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/net.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/tactics.js"></script>
-  <script src="js/admin.js"></script>
-  <script src="js/app.js"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit" async defer></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/data.js"></script>
+  <script defer src="js/net.js"></script>
+  <script defer src="js/ui.js"></script>
+  <script defer src="js/tactics.js"></script>
+  <script defer src="js/admin.js"></script>
+  <script defer src="js/app.js"></script>
 </body>
 </html>

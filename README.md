@@ -66,3 +66,34 @@ action — the client only decides what to draw.
 - **"The ledger is warming up"** — first request after deploy is
   still seeding; give it a few seconds and refresh.
 - **"Can't reach the clubhouse"** — Apps Script hiccup; try again.
+
+## v3 update — what's new
+
+- **Faster:** player cards cropped + converted to WebP (18.45 MB → 1.19 MB), scripts deferred, crest preloaded.
+- **Stats:** Goals Against on the home record; a "biggest contributors" board (goals + assists per game); the wide career/opposition tables now scroll on mobile instead of overflowing.
+- **Squad voice:** Donovan is she/her throughout; Tupci carries a "THE SYSTEM" badge.
+- **Match types:** League / Playoff / Cup / Friendly / International / Other, each with an optional competition name (e.g. "England v Germany").
+- **Upcoming fixtures:** managed in Housekeeping, shown atop Results.
+- **New pages:** News (The Gazette), Socials (a self-updating TikTok creator embed), the members-only Forum (The Dressing Room), and a gag Tickets page.
+- **Security:** Content-Security-Policy + referrer policy; Cloudflare Turnstile on register/login.
+- **Squad management (admin):** add, edit, or hide players from Housekeeping → "Squad · players" — identity only; stats and match history are never touched. Hidden players drop off the squad and team-sheet pickers but stay attached to past results.
+- **Easter eggs:** Konami code, five taps on the crest, and a few club in-jokes.
+
+### Cloudflare Turnstile (bot check)
+
+The public **site key** is already in `js/config.js`. Add the **secret key** to the Apps Script project so it stays private:
+
+> Apps Script → ⚙ **Project Settings** → **Script Properties** → **Add script property** → name `TURNSTILE_SECRET`, value = your secret → **Save**.
+
+If the secret is not set, the check is skipped and the site still works. To hide the widget entirely, blank out `window.TURNSTILE_SITEKEY` in `js/config.js`.
+
+Other edge headers (`frame-ancestors` / `X-Frame-Options` / HSTS) can't be set from a `<meta>` tag — add them at the Cloudflare edge if you want them.
+
+### ⚠ Keep `backend.gs` private
+
+`backend.gs` now seeds personal data (names, birthdays, partners) that is **off by default** and only sent to browsers when a level-9 toggle is switched on. That privacy only holds if the file itself stays private:
+
+- Paste `backend.gs` **only** into the Apps Script editor.
+- **Do not** commit `backend.gs` to the public GitHub Pages repo. If it's already there from before, delete it from the repo.
+
+The personal toggles live in Housekeeping → "Personal · birthdays & better halves" (admin only). Birthdays and partner cameos each have their own switch; both start off.
