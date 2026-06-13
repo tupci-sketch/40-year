@@ -1713,9 +1713,11 @@ textarea { resize: vertical; font-family: var(--font-body); }
 }
 
 /* ---- Tupci "the system" ---- */
-.profile-system-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.profile-system-line { display: block; line-height: 1.6; }
 .system-badge {
   display: inline-block;
+  margin-right: 8px;
+  vertical-align: middle;
   font-family: "Anton", sans-serif;
   letter-spacing: 0.08em;
   font-size: 0.62rem;
@@ -1907,3 +1909,13 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 }
 .sponsor-line { color: var(--silver); font-size: 0.92rem; max-width: 46ch; line-height: 1.55; margin: 0; }
 .foot-betfred { font-family: "Anton", sans-serif; color: #4f9bff; letter-spacing: 0.03em; font-weight: 400; }
+
+/* ---- Betfred logo image ---- */
+.sponsor-logo { display: block; width: 100%; max-width: 260px; height: auto; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+.foot-betfred-logo { height: 15px; width: auto; vertical-align: middle; border-radius: 2px; margin-left: 3px; position: relative; top: -1px; }
+
+/* ---- TikTok profile fallback card ---- */
+.tiktok-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 30px 22px; background: var(--panel-grad); border: 1px solid var(--panel-border); border-radius: var(--radius-sm); text-align: center; }
+.tiktok-card-avatar { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: "Anton", sans-serif; font-size: 1.8rem; color: #fff; background: linear-gradient(135deg, var(--purple-electric), var(--purple-deep)); }
+.tiktok-card-handle { font-family: "Oswald", sans-serif; font-size: 1.25rem; color: var(--white); letter-spacing: 0.04em; }
+.tiktok-card-sub { color: var(--silver); font-size: 0.85rem; margin-bottom: 4px; }
