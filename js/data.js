@@ -130,6 +130,17 @@ window.SQUAD = [
     }
   },
   {
+    id: "sway", number: 10, name: "S Way", position: "CM",
+    card: "sway.png", controlledBy: "human", eaPersona: "",
+    isCaptain: false, permaBench: false,
+    flavour: "Dan\u2019s mate Sultan, in on a guest spot for Sunday. Ten on the back, swagger to match.",
+    roles: {
+      "4-2-1-3":   { start: false },
+      "4-4-1-1":   { start: false },
+      "4-1-2-1-2": { start: false }
+    }
+  },
+  {
     id: "danwhizzy", number: 17, name: "Danwhizzy", position: "ST",
     card: "danwhizzy.png", controlledBy: "human", eaPersona: "",
     isCaptain: false, permaBench: false, goldenBoot: true,

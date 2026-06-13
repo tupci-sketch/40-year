@@ -1256,10 +1256,15 @@
           '<p class="screen-intro">The golden boot moonlights as a content machine. Latest uploads, straight from the source \u2014 this updates itself every time he posts.</p>' +
           '<div class="social-embed">' +
             '<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@' + handle + '" data-unique-id="' + handle + '" data-embed-type="creator" style="max-width:780px;min-width:288px;">' +
-              '<section><a target="_blank" href="https://www.tiktok.com/@' + handle + '?refer=creator_embed">@' + handle + "</a></section>" +
+              '<section class="tiktok-card">' +
+                '<span class="tiktok-card-avatar">' + handle.charAt(0).toUpperCase() + "</span>" +
+                '<span class="tiktok-card-handle">@' + handle + "</span>" +
+                '<span class="tiktok-card-sub">The 40Yr Virgil on TikTok</span>' +
+                '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.tiktok.com/@' + handle + '?refer=creator_embed">Open profile \u2192</a>' +
+              "</section>" +
             "</blockquote>" +
           "</div>" +
-          '<p class="social-fallback">Widget shy? <a href="https://www.tiktok.com/@' + handle + '" target="_blank" rel="noopener">Open @' + handle + " on TikTok \u2192</a></p>";
+          '<p class="social-fallback">Feed not loading? TikTok\u2019s profile widget can be temperamental \u2014 <a href="https://www.tiktok.com/@' + handle + '" target="_blank" rel="noopener">open @' + handle + " on TikTok \u2192</a></p>";
         var old = document.getElementById("tiktok-embed-script");
         if (old) old.parentNode.removeChild(old);
         var s = document.createElement("script");
