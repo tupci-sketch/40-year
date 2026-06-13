@@ -32,7 +32,7 @@ window.CLUB = {
 window.SQUAD = [
   {
     id: "yeyu", number: 1, name: "Ye Yu II", position: "GK",
-    card: "gk_yeyu.webp", controlledBy: "bot", eaPersona: "",
+    card: "gk_yeyu.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "The last line. Calm as still water, gloves like tide walls.",
     roles: {
@@ -43,7 +43,7 @@ window.SQUAD = [
   },
   {
     id: "kubikova", number: 2, name: "Kubikova", position: "RB",
-    card: "kubikova.webp", controlledBy: "bot", eaPersona: "",
+    card: "kubikova.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "Right back. Right answers. Rarely consulted, always correct.",
     roles: {
@@ -54,7 +54,7 @@ window.SQUAD = [
   },
   {
     id: "alghamdi", number: 3, name: "Al Ghamdi", position: "LB",
-    card: "alghamdi.webp", controlledBy: "bot", eaPersona: "",
+    card: "alghamdi.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "Owns the left touchline and pays no rent on it.",
     roles: {
@@ -65,7 +65,7 @@ window.SQUAD = [
   },
   {
     id: "ferry", number: 4, name: "Ferry", position: "CB",
-    card: "ferry.webp", controlledBy: "bot", eaPersona: "",
+    card: "ferry.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "Carries the back line across, week after week. The name is the job.",
     roles: {
@@ -76,7 +76,7 @@ window.SQUAD = [
   },
   {
     id: "moulin", number: 5, name: "Moulin", position: "CM",
-    card: "moulin.webp", controlledBy: "bot", eaPersona: "",
+    card: "moulin.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "Keeps the midfield turning. Grinds everything that comes through.",
     roles: {
@@ -87,7 +87,7 @@ window.SQUAD = [
   },
   {
     id: "pereira", number: 6, name: "Pereira", position: "CB",
-    card: "pereira.webp", controlledBy: "bot", eaPersona: "",
+    card: "pereira.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "Reads the game like a bedtime story. Strikers fall asleep in his pocket.",
     roles: {
@@ -98,7 +98,7 @@ window.SQUAD = [
   },
   {
     id: "tupci", number: 7, name: "Tupci", position: "CAM",
-    card: "tupci.webp", controlledBy: "human", eaPersona: "",
+    card: "tupci.png", controlledBy: "human", eaPersona: "",
     isCaptain: true, permaBench: false, isSystem: true, pronouns: "he/him",
     flavour: "Captain. Always CAM. Non-negotiable. In footballing terms: the system. The whole side runs through him.",
     roles: {
@@ -109,7 +109,7 @@ window.SQUAD = [
   },
   {
     id: "donovan", number: 8, name: "Donovan", position: "CM",
-    card: "donovan.webp", controlledBy: "bot", eaPersona: "",
+    card: "donovan.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false, pronouns: "she/her",
     flavour: "The engine room. AI-cooled, never overheats, never asks for water breaks.",
     roles: {
@@ -120,7 +120,7 @@ window.SQUAD = [
   },
   {
     id: "walker", number: 9, name: "Flake Walker", position: "RM",
-    card: "walker.webp", controlledBy: "human", eaPersona: "",
+    card: "walker.png", controlledBy: "human", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "The other end of the human trio. Owns the right flank — and shifts up to striker when we go two up top.",
     roles: {
@@ -131,7 +131,7 @@ window.SQUAD = [
   },
   {
     id: "danwhizzy", number: 17, name: "Danwhizzy", position: "ST",
-    card: "danwhizzy.webp", controlledBy: "human", eaPersona: "",
+    card: "danwhizzy.png", controlledBy: "human", eaPersona: "",
     isCaptain: false, permaBench: false, goldenBoot: true,
     flavour: "The talisman. The tally below does the talking.",
     roles: {
@@ -142,7 +142,7 @@ window.SQUAD = [
   },
   {
     id: "lejeune", number: 18, name: "Dave Le Jeune", position: "RW",
-    card: "lejeune.webp", controlledBy: "bot", eaPersona: "",
+    card: "lejeune.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "Chalk on his boots, fire in the channels, patience on the bench.",
     roles: {
@@ -153,7 +153,7 @@ window.SQUAD = [
   },
   {
     id: "zilkov", number: 27, name: "Anton Zilkov Sandomierski", position: "LM",
-    card: "zilkov.webp", controlledBy: "bot", eaPersona: "",
+    card: "zilkov.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "Three names. One job. The entire left flank.",
     roles: {
@@ -164,7 +164,7 @@ window.SQUAD = [
   },
   {
     id: "tmidi", number: 32, name: "Timidi", position: "CDM",
-    card: "tmidi.webp", controlledBy: "bot", eaPersona: "",
+    card: "tmidi.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "Wins the ball first. Asks the questions later. Files no paperwork.",
     roles: {
@@ -175,7 +175,7 @@ window.SQUAD = [
   },
   {
     id: "moreira", number: 43, name: "Moreira", position: "CDM",
-    card: "moreira.webp", controlledBy: "bot", eaPersona: "",
+    card: "moreira.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: false,
     flavour: "The shield in front of the back four. Through traffic does not pass.",
     roles: {
@@ -186,7 +186,7 @@ window.SQUAD = [
   },
   {
     id: "rizzydave", number: 69, name: "Rizzy Dave", position: "Sub ST",
-    card: "rizzydave.webp", controlledBy: "bot", eaPersona: "",
+    card: "rizzydave.png", controlledBy: "bot", eaPersona: "",
     isCaptain: false, permaBench: true,
     flavour: "Not starting. Still dangerous.",
     roles: {

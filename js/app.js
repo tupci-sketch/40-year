@@ -374,7 +374,7 @@
         Object.keys(window.FORMATIONS || {}).forEach(function (f) { roles[f] = { start: false }; });
         merged.push({
           id: o.id, name: o.name || o.id, number: o.number || 0,
-          position: o.position || "SUB", card: o.card || "crest.webp",
+          position: o.position || "SUB", card: o.card || "crest.png",
           controlledBy: o.controlledBy === "human" ? "human" : "bot",
           isCaptain: !!o.isCaptain, permaBench: !!o.permaBench,
           pronouns: o.pronouns || "he/him", flavour: o.flavour || "",
@@ -1214,8 +1214,8 @@
 
   /* ------------------------------------------------ NEWS (club-side satire) */
   var NEWS = [
-    { tag: "COMMERCIAL", date: "2026-06-11", title: "Club secures naming rights: welcome to the Betfred Arena",
-      body: "In a landmark commercial deal worth an undisclosed sum (zero pounds), the home ground has been officially renamed the Betfred Arena. \u201CEvery elite club needs a stadium sponsor,\u201D said the board, gesturing at the in-game settings menu where the name now proudly sits. The shirt deal followed shortly after. The kit, sources confirm, practically wears itself." },
+    { tag: "COMMERCIAL", date: "2026-06-11", title: "Welcome to the Betfred Arena",
+      body: "We've done a deal \u2014 a big one. Our ground is now officially the Betfred Arena, and the shirt carries the name to match. Every elite club needs a stadium sponsor, and ours was sitting right there in the settings menu, so we took it. The kit, honestly, wears itself." },
     { tag: "OFFICIAL", date: "2026-06-12", title: "Club opens its own books as EA API goes dark",
       body: "Following the sudden silence of the EA data feed, The 40Yr Virgil has taken the historic step of becoming its own record keeper. \u201CThe numbers were ours all along,\u201D said a spokesperson who is also the captain, the manager, and the person who built this website. Every game now lives in the club archive. All 392 of them." },
     { tag: "TACTICS", date: "2026-06-10", title: "Captain to remain at CAM, sources confirm, again",
