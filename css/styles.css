@@ -7,6 +7,11 @@
    Mobile-first; breakpoints at 640 and 960.
    ============================================================ */
 
+/* The hidden attribute must always win, even over class display rules
+   (e.g. .field / .nav-link). Without this, gated nav links and the
+   register-only confirm-password field leak onto the page. */
+[hidden] { display: none !important; }
+
 :root {
   --bg-black: #07030B;
   --navy: #16191E;
@@ -1888,3 +1893,17 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 .sq-flags { padding: 10px 12px 12px; }
 .sq-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--silver); cursor: pointer; }
 .sq-check input { width: auto; }
+
+/* ---- Betfred sponsor badge ---- */
+.sponsor-strip { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 2px 0 10px; }
+.sponsor-badge { display: inline-flex; flex-direction: column; align-items: center; gap: 5px; }
+.sponsor-badge-tag { font-family: "Oswald", sans-serif; text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.6rem; color: var(--silver); }
+.sponsor-wordmark {
+  font-family: "Anton", sans-serif; font-size: 2.1rem; line-height: 1; letter-spacing: 0.03em;
+  color: #fff; background: linear-gradient(135deg, #1c6ef2, #0a3f9e);
+  padding: 10px 24px; border-radius: 9px;
+  box-shadow: 0 8px 24px rgba(28, 110, 242, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+.sponsor-line { color: var(--silver); font-size: 0.92rem; max-width: 46ch; line-height: 1.55; margin: 0; }
+.foot-betfred { font-family: "Anton", sans-serif; color: #4f9bff; letter-spacing: 0.03em; font-weight: 400; }
