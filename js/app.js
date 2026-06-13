@@ -10,6 +10,7 @@
 
   var U = null, NET = null;
   var currentPage = null;
+  var currentArg = null;
   var sessionChecked = false; // true once the initial session check has resolved
 
   /* ========================================================
@@ -133,7 +134,7 @@
   /* ========================================================
      ROUTER
      ======================================================== */
-  var ROUTES = ["home", "squad", "tactics", "player", "results", "stats", "honours", "gaffer", "about", "chat", "admin"];
+  var ROUTES = ["home", "squad", "tactics", "player", "results", "stats", "honours", "gaffer", "about", "news", "social", "forum", "tickets", "chat", "admin"];
 
   function parseHash() {
     var h = (location.hash || "#home").replace(/^#/, "");
@@ -156,6 +157,7 @@
 
     if (currentPage && PAGES[currentPage] && PAGES[currentPage].leave) PAGES[currentPage].leave();
     currentPage = r.name;
+    currentArg = r.arg;
 
     U.$$(".screen").forEach(function (s) { s.classList.remove("active"); });
     var scr = U.$("#screen-" + r.name);
@@ -200,6 +202,8 @@
       U.$("#btn-open-auth").addEventListener("click", function () { openAuth("login"); });
     }
     U.$("#nav-admin").hidden = !NET.isMod();
+    U.$("#nav-chat").hidden = !NET.me;
+    U.$("#nav-forum").hidden = !NET.me;
   }
 
   var AUTH_ERR = {
@@ -210,13 +214,35 @@
     pass: "Password needs at least 6 characters.",
     language: "That name won't get past the stewards.",
     banned: "This account is banned.",
-    session: "Session expired — sign in again."
+    session: "Session expired — sign in again.",
+    turnstile: "Couldn't confirm you're human — give it another go."
   };
+
+  /* ---- Cloudflare Turnstile (bot check on the clubhouse door) ---- */
+  var TS = { id: null };
+  window.onTurnstileReady = function () { renderTurnstile(); };
+  function turnstileOn() { return !!(window.turnstile && window.TURNSTILE_SITEKEY); }
+  function renderTurnstile() {
+    if (!turnstileOn()) return;
+    var el = U.$("#cf-turnstile");
+    if (!el) return;
+    if (TS.id == null) {
+      try { TS.id = window.turnstile.render(el, { sitekey: window.TURNSTILE_SITEKEY, theme: "dark", size: "flexible" }); }
+      catch (e) { /* not ready yet */ }
+    } else {
+      try { window.turnstile.reset(TS.id); } catch (e) { /* fine */ }
+    }
+  }
+  function turnstileToken() {
+    if (turnstileOn() && TS.id != null) { try { return window.turnstile.getResponse(TS.id) || ""; } catch (e) {} }
+    return "";
+  }
 
   function openAuth(tab) {
     var m = U.$("#auth-modal");
     m.hidden = false;
     setAuthTab(tab || "login");
+    renderTurnstile();
     setTimeout(function () { var f = U.$("#auth-name"); if (f) f.focus(); }, 50);
   }
   function closeAuth() {
@@ -230,6 +256,18 @@
     U.$("#auth-confirm-row").hidden = tab !== "register";
     U.$("#auth-submit").textContent = tab === "register" ? "Register" : "Sign in";
     U.$("#auth-error").textContent = "";
+    var hint = U.$("#auth-match-hint");
+    if (hint) hint.textContent = "";
+  }
+
+  function updateMatchHint() {
+    var hint = U.$("#auth-match-hint");
+    if (!hint) return;
+    var pass = U.$("#auth-pass").value;
+    var conf = U.$("#auth-confirm").value;
+    if (!conf) { hint.textContent = ""; hint.className = "field-hint"; return; }
+    if (pass === conf) { hint.textContent = "✓ Passwords match"; hint.className = "field-hint hint-ok"; }
+    else { hint.textContent = "Passwords don't match yet"; hint.className = "field-hint hint-warn"; }
   }
 
   function bindAuth() {
@@ -241,6 +279,8 @@
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && !U.$("#auth-modal").hidden) closeAuth();
     });
+    U.$("#auth-pass").addEventListener("input", updateMatchHint);
+    U.$("#auth-confirm").addEventListener("input", updateMatchHint);
 
     U.$("#auth-form").addEventListener("submit", function (e) {
       e.preventDefault();
@@ -256,9 +296,11 @@
       }
       var btn = U.$("#auth-submit");
       btn.disabled = true;
-      var p = mode === "register" ? NET.register(name, pass) : NET.login(name, pass);
+      var tok = turnstileToken();
+      var p = mode === "register" ? NET.register(name, pass, tok) : NET.login(name, pass, tok);
       p.then(function (r) {
         btn.disabled = false;
+        renderTurnstile(); // tokens are single-use — get a fresh one
         if (r && r.ok) {
           closeAuth();
           renderAccount();
@@ -285,9 +327,71 @@
     } else {
       bn.hidden = true;
     }
+    refreshSquadViews();
   }
 
   function cfg() { return (STATE.config && STATE.config.config) || {}; }
+
+  /* ---- squad overrides (level-9 edits live in backend config) ----
+     Identity ships in data.js; the admin can edit/add/disable players
+     from Housekeeping. We rebuild window.SQUAD = base + overrides each
+     time config is available, so the tactics board (which reads base
+     roles) is never broken — disabled players are simply benched. */
+  var SQUAD_BASE = null;
+  function applySquadOverrides() {
+    if (!window.SQUAD) return;
+    if (!SQUAD_BASE) SQUAD_BASE = JSON.parse(JSON.stringify(window.SQUAD));
+    var overrides = cfg().squad || [];
+    var byId = {};
+    overrides.forEach(function (o) { if (o && o.id) byId[o.id] = o; });
+
+    var merged = SQUAD_BASE.map(function (base) {
+      var p = JSON.parse(JSON.stringify(base));
+      var o = byId[p.id];
+      if (o) {
+        if (o.name) p.name = o.name;
+        if (o.number != null && o.number !== "") p.number = o.number;
+        if (o.position) p.position = o.position;
+        if (o.controlledBy) p.controlledBy = o.controlledBy;
+        p.isCaptain = !!o.isCaptain;
+        p.permaBench = !!o.permaBench;
+        if (o.pronouns) p.pronouns = o.pronouns;
+        if (o.flavour) p.flavour = o.flavour;
+        if (o.card) p.card = o.card;
+        p.disabled = !!o.disabled;
+        if (p.disabled && p.roles) {
+          Object.keys(p.roles).forEach(function (f) { p.roles[f] = { start: false }; });
+        }
+      }
+      return p;
+    });
+
+    var have = {};
+    merged.forEach(function (p) { have[p.id] = true; });
+    overrides.forEach(function (o) {
+      if (o && o.isNew && o.id && !have[o.id]) {
+        var roles = {};
+        Object.keys(window.FORMATIONS || {}).forEach(function (f) { roles[f] = { start: false }; });
+        merged.push({
+          id: o.id, name: o.name || o.id, number: o.number || 0,
+          position: o.position || "SUB", card: o.card || "crest.webp",
+          controlledBy: o.controlledBy === "human" ? "human" : "bot",
+          isCaptain: !!o.isCaptain, permaBench: !!o.permaBench,
+          pronouns: o.pronouns || "he/him", flavour: o.flavour || "",
+          roles: roles, disabled: !!o.disabled, isNew: true
+        });
+      }
+    });
+
+    window.SQUAD = merged;
+  }
+
+  function refreshSquadViews() {
+    applySquadOverrides();
+    if (["squad", "player", "tactics"].indexOf(currentPage) !== -1 && PAGES[currentPage]) {
+      PAGES[currentPage].enter(currentArg);
+    }
+  }
 
   function flavourOf(p) {
     var fl = cfg().flavour || {};
@@ -331,6 +435,7 @@
             U.statTile("Drawn", rec.draws, { accent: "draw" }) +
             U.statTile("Lost", rec.losses, { accent: "loss" }) +
             U.statTile("Goals for", rec.goalsFor, { accent: "gold" }) +
+            U.statTile("Goals against", rec.goalsAgainst, { accent: "loss" }) +
             U.statTile("Goal diff", (gd > 0 ? "+" : "") + gd) +
             U.statTile("Win %", winPct != null ? winPct + "%" : null) +
           "</div>" +
@@ -346,6 +451,7 @@
 
   PAGES.squad = {
     enter: function () {
+      applySquadOverrides();
       var bar = U.$("#squad-filters");
       bar.innerHTML =
         '<div class="filter-group" role="group" aria-label="Filter by position">' +
@@ -369,6 +475,7 @@
 
       var list = window.SQUAD.slice().sort(function (a, b) { return a.number - b.number; })
         .filter(function (p) {
+          if (p.disabled) return false;
           if (squadFilter.group !== "ALL" && U.posGroup(p) !== squadFilter.group) return false;
           if (squadFilter.control === "HUMAN" && p.controlledBy !== "human") return false;
           if (squadFilter.control === "AI" && p.controlledBy !== "bot") return false;
@@ -390,7 +497,21 @@
     ST: "Striker", LST: "Striker (L)", RST: "Striker (R)"
   };
 
+  function pron(p) {
+    var raw = ((p && p.pronouns) || "he/him").toLowerCase();
+    var parts = raw.split("/");
+    var subj = parts[0] || "he";
+    var obj = parts[1] || "him";
+    return {
+      subj: subj, obj: obj,
+      verb: subj === "they" ? "play" : "plays",
+      ownsVerb: subj === "they" ? "own" : "owns",
+      Subj: subj.charAt(0).toUpperCase() + subj.slice(1)
+    };
+  }
+
   function rolesBlock(p) {
+    var pr = pron(p);
     var rows = Object.keys(window.FORMATIONS).map(function (fkey) {
       var role = (p.roles && p.roles[fkey]) || {};
       var cell;
@@ -406,16 +527,17 @@
       "</div>";
     }).join("");
 
-    var foot = p.permaBench ? "Every formation. Same seat. He's made it his."
+    var foot = p.permaBench ? ("Every formation. Same seat. " + pr.Subj + " " + pr.ownsVerb + " it.")
       : p.isCaptain ? "Three shapes, one position. That's the deal."
-      : "How the gaffer lines him up, shape by shape.";
+      : ("How the gaffer lines " + pr.obj + " up, shape by shape.");
 
-    return '<div class="section-label">Where he plays</div>' +
+    return '<div class="section-label">Where ' + pr.subj + " " + pr.verb + "</div>" +
       '<div class="roles-block">' + rows + '<p class="roles-foot">' + foot + "</p></div>";
   }
 
   PAGES.player = {
     enter: function (id) {
+      applySquadOverrides();
       var p = U.playerById(id);
       if (!p) { location.replace("#squad"); return; }
       var box = U.$("#player-view");
@@ -439,6 +561,7 @@
             '<div class="profile-meta"><span class="profile-pos">' + U.esc(p.position) + "</span>" + U.chips(p) + "</div>" +
             '<p class="profile-flavour">' + U.esc(flavourOf(p)) + "</p>" +
             (p.isCaptain ? '<p class="profile-line profile-captain-line">Wears the armband. Picks the formation. Plays CAM in all of them.</p>' : "") +
+            (p.isSystem ? '<p class="profile-line profile-system-line"><span class="system-badge">THE SYSTEM</span> Everything we do runs through ' + pron(p).obj + '. In footballing terms, the whole side <em>is</em> the player.</p>' : "") +
             benchGag +
             rolesBlock(p) +
             '<div class="section-label">The record <span class="live-dot" title="From the club archive"></span></div>' +
@@ -526,20 +649,47 @@
   };
 
   /* ------------------------------------------------ RESULTS */
+  var STAGE_LABEL = { league: "League", playoff: "Playoff", cup: "Cup", friendly: "Friendly", international: "International", other: "Match" };
+
+  function fixturesHtml() {
+    var fx = (cfg().fixtures || []).filter(function (f) {
+      if (!f.dateISO) return true;
+      var d = new Date(f.dateISO + "T23:59:59");
+      return d >= new Date(new Date().toDateString());
+    });
+    if (!fx.length) return "";
+    return '<div class="section-label">Upcoming <span class="live-dot" title="Next on the calendar"></span></div>' +
+      '<div class="fixtures-list">' +
+      fx.map(function (f) {
+        var stage = STAGE_LABEL[f.stage] || "Match";
+        var tag = U.esc(stage) + (f.compName ? " · " + U.esc(f.compName) : "");
+        var when = f.dateISO ? U.fmtDate(f.dateISO) : "Date TBC";
+        return '<article class="fixture-row fixture-' + U.esc(f.stage || "friendly") + '">' +
+          '<span class="fixture-badge">' + U.esc(stage) + "</span>" +
+          '<div class="fixture-mid"><span class="fixture-line"><strong>The 40Yr Virgil</strong> <span class="fixture-vs">vs</span> ' + U.esc(f.opponent || "TBC") + "</span>" +
+            (f.note ? '<span class="fixture-note">' + U.esc(f.note) + "</span>" : "") + "</div>" +
+          '<div class="fixture-side"><span class="fixture-date">' + when + "</span><span class=\"fixture-tag\">" + tag + "</span></div>" +
+        "</article>";
+      }).join("") + "</div>" +
+      '<div class="section-label">Results</div>';
+  }
+
   PAGES.results = {
     enter: function () {
       var mount = U.$("#results-list");
       mount.innerHTML = U.emptyState("Opening the books…", "", "⏱");
 
-      DATA.matches().then(function (res) {
+      Promise.all([DATA.matches(), DATA.config()]).then(function (rs) {
+        var res = rs[0];
         var block = liveBlock(res, "the match archive");
         if (block) { mount.innerHTML = block; return; }
         var list = res.matches || [];
         if (!list.length) { mount.innerHTML = U.waitingState("matches"); return; }
         var canEdit = NET.isMod();
 
-        mount.innerHTML = list.map(function (m, i) {
-          var stage = m.stage === "playoff" ? "Playoff" : m.stage === "friendly" ? "Friendly" : "League";
+        mount.innerHTML = fixturesHtml() + list.map(function (m, i) {
+          var stage = STAGE_LABEL[m.stage] || "League";
+          var stageTag = U.esc(stage) + (m.compName ? " · " + U.esc(m.compName) : "");
           var scorers = U.scorersLine((m.scorers || []).map(function (s) {
             var p = U.playerById(s.id);
             return { name: p ? p.name : s.id, goals: s.goals };
@@ -549,7 +699,7 @@
           var statsPanel = detailed.length
             ? '<details class="opp-panel">' +
                 "<summary>Player stats · " + detailed.length + " on record</summary>" +
-                '<table class="opp-table opp-table-wide"><thead><tr><th>Player</th><th>G</th><th>A</th><th>R</th><th>Sh</th><th>Tk</th><th>Pass</th></tr></thead><tbody>' +
+                '<div class="table-scroll"><table class="opp-table opp-table-wide"><thead><tr><th>Player</th><th>G</th><th>A</th><th>R</th><th>Sh</th><th>Tk</th><th>Pass</th></tr></thead><tbody>' +
                 detailed.map(function (t) {
                   var p = U.playerById(t.id);
                   var nm = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a>" : U.esc(t.id);
@@ -557,7 +707,7 @@
                     (t.assists !== "" ? t.assists : "—") + "</td><td>" + (t.rating !== "" ? Number(t.rating).toFixed(1) : "—") + "</td><td>" +
                     (t.shots !== "" ? t.shots : "—") + "</td><td>" + (t.tackles !== "" ? t.tackles : "—") + "</td><td>" +
                     (t.passesMade !== "" ? t.passesMade + "/" + t.passAttempts : "—") + "</td></tr>";
-                }).join("") + "</tbody></table>" +
+                }).join("") + "</tbody></table></div>" +
                 (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "") +
               "</details>"
             : (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "");
@@ -576,7 +726,7 @@
                 (scorers ? '<span class="result-scorers">⚽ ' + scorers + "</span>" : "") +
               "</div>" +
               '<div class="result-side"><span class="result-date">Match ' + m.seq + (m.dateISO ? " · " + U.fmtDate(m.dateISO) : "") + "</span>" +
-                '<span class="result-tag">' + stage + "</span>" + editBtn +
+                '<span class="result-tag">' + stageTag + "</span>" + editBtn +
               "</div>" +
             "</div>" + statsPanel +
           "</article>";
@@ -680,7 +830,29 @@
         var trickRows = Object.keys(trickMap).map(function (id) { return { id: id, val: trickMap[id] }; })
           .sort(function (a, b) { return b.val - a.val; });
 
+        /* ---- biggest contributor: goals + assists per game (career, decent sample) ---- */
+        var contribRows = careerList.filter(function (c) { return Number(c.games) >= 20; })
+          .map(function (c) {
+            var g = Number(c.goals) || 0, a = Number(c.assists) || 0, n = Number(c.games) || 1;
+            return { id: c.id, g: g, a: a, games: n, ga: g + a, per: (g + a) / n };
+          })
+          .sort(function (x, y) { return y.per - x.per; });
+        var contribHtml = contribRows.length
+          ? '<div class="section-label">Biggest contributors · goals + assists per game</div>' +
+            '<div class="panel lb-panel"><ol class="lb lb-contrib">' +
+            contribRows.map(function (r) {
+              var p = U.playerById(r.id);
+              var who = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a> " + U.controlBadge(p) : U.esc(r.id);
+              return "<li><span class='lb-name'>" + who +
+                "<span class='lb-sub'>" + r.g + "G + " + r.a + "A across " + r.games + " games</span></span>" +
+                "<span class='lb-val'>" + r.per.toFixed(2) + "<span class='lb-unit'>/game</span></span></li>";
+            }).join("") + "</ol>" +
+            '<p class="sync-note">Career involvement per game. The whole side runs through the captain — Danwhizzy finishes what Tupci\u2019s assists start.</p>' +
+            "</div>"
+          : "";
+
         lbMt.innerHTML =
+          contribHtml +
           '<div class="lb-grid">' +
             lb("Golden Boot · recorded games", bootRows, function (r) { return r.val; }) +
             lb("Career goals · all-time", careerList.filter(function (c) { return c.goals > 0; }).sort(function (a, b) { return b.goals - a.goals; }).map(function (c) { return { id: c.id, val: c.goals }; }), function (r) { return r.val; }) +
@@ -697,12 +869,12 @@
         var careerHtml = humans.length
           ? '<div class="section-label">Career records · the humans</div>' +
             '<div class="panel">' +
-              '<table class="opp-table opp-table-wide career-table"><thead><tr><th>Player</th><th>OVR</th><th>Games</th><th>G</th><th>A</th><th>Pass %</th><th>Tkl</th><th>Win %</th></tr></thead><tbody>' +
+              '<div class="table-scroll"><table class="opp-table opp-table-wide career-table"><thead><tr><th>Player</th><th>OVR</th><th>Games</th><th>G</th><th>A</th><th>Pass %</th><th>Tkl</th><th>Win %</th></tr></thead><tbody>' +
               humans.map(function (c) {
                 var p = U.playerById(c.id);
                 var nm = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a>" : U.esc(c.id);
                 return "<tr><td>" + nm + ' <span class="lb-club">' + U.esc(c.persona) + "</span></td><td>" + (c.ovr || "—") + "</td><td>" + c.games + "</td><td>" + c.goals + "</td><td>" + c.assists + "</td><td>" + (c.passPct || "—") + "</td><td>" + c.tackles + "</td><td>" + (c.winPct || "—") + "</td></tr>";
-              }).join("") + "</tbody></table>" +
+              }).join("") + "</tbody></table></div>" +
             "</div>"
           : "";
 
@@ -724,11 +896,11 @@
           careerHtml +
           '<div class="section-label">Opposition · head to head</div>' +
           '<div class="panel">' +
-            '<table class="opp-table opp-table-wide"><thead><tr><th>Opponent</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th></tr></thead><tbody>' +
+            '<div class="table-scroll"><table class="opp-table opp-table-wide"><thead><tr><th>Opponent</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th></tr></thead><tbody>' +
             opps.map(function (o) {
               return "<tr><td>" + U.esc(o.name) + "</td><td>" + o.p + "</td><td>" + o.w + "</td><td>" + o.d + "</td><td>" + o.l + "</td><td>" + o.gf + "</td><td>" + o.ga + "</td></tr>";
             }).join("") +
-            "</tbody></table>" +
+            "</tbody></table></div>" +
           "</div>";
       });
     }
@@ -876,6 +1048,54 @@
   };
 
   /* ------------------------------------------------ ABOUT */
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function bdayLabel(mmdd) {
+    var parts = String(mmdd || "").split("-");
+    if (parts.length !== 2) return "";
+    var mi = Number(parts[0]) - 1, d = Number(parts[1]);
+    if (mi < 0 || mi > 11 || !d) return "";
+    var suf = (d % 10 === 1 && d !== 11) ? "st" : (d % 10 === 2 && d !== 12) ? "nd" : (d % 10 === 3 && d !== 13) ? "rd" : "th";
+    return MONTHS[mi] + " " + d + suf;
+  }
+
+  function personalHtml() {
+    var people = cfg().people || [];
+    if (!people.length) return "";
+    var out = "";
+
+    if (cfg().showBirthdays) {
+      var withB = people.filter(function (p) { return p.bday; });
+      if (withB.length) {
+        out += '<div class="section-label">Club birthdays</div>' +
+          '<div class="panel about-block"><ul class="about-facts">' +
+          withB.map(function (p) {
+            var who = U.playerById(p.id);
+            var nm = who ? who.name : (p.real || p.id);
+            return "<li><strong>" + U.esc(nm) + (p.real && who ? " (" + U.esc(p.real) + ")" : "") + "</strong> — " + U.esc(bdayLabel(p.bday)) + "</li>";
+          }).join("") + "</ul>" +
+          '<p class="sync-note">Tupci and Danwhizzy share a birthday week — Dan never lets the captain forget he\u2019s the elder by three days.</p>' +
+          "</div>";
+      }
+    }
+
+    if (cfg().showPartners) {
+      var withP = people.filter(function (p) { return p.partner && p.partner.name; });
+      if (withP.length) {
+        out += '<div class="section-label">The better halves</div>' +
+          '<div class="panel about-block"><ul class="about-facts">' +
+          withP.map(function (p) {
+            var who = U.playerById(p.id);
+            var nm = who ? who.name : (p.real || p.id);
+            var club = p.partner.club ? " — a " + U.esc(p.partner.club) + " fan, which the group chat tolerates" : "";
+            return "<li><strong>" + U.esc(nm) + "</strong> · " + U.esc(p.partner.name) + club + "</li>";
+          }).join("") + "</ul>" +
+          '<p class="sync-note">Not on the team sheet, but they keep the squad fed, watered and humble.</p>' +
+          "</div>";
+      }
+    }
+    return out;
+  }
+
   PAGES.about = {
     enter: function () {
       DATA.config().then(function () {
@@ -890,6 +1110,8 @@
           loreMt.hidden = true;
           loreMt.innerHTML = "";
         }
+        var pmt = U.$("#about-personal");
+        if (pmt) pmt.innerHTML = personalHtml();
       });
     }
   };
@@ -990,6 +1212,308 @@
     }
   };
 
+  /* ------------------------------------------------ NEWS (club-side satire) */
+  var NEWS = [
+    { tag: "COMMERCIAL", date: "2026-06-11", title: "Club secures naming rights: welcome to the Betfred Arena",
+      body: "In a landmark commercial deal worth an undisclosed sum (zero pounds), the home ground has been officially renamed the Betfred Arena. \u201CEvery elite club needs a stadium sponsor,\u201D said the board, gesturing at the in-game settings menu where the name now proudly sits. The shirt deal followed shortly after. The kit, sources confirm, practically wears itself." },
+    { tag: "OFFICIAL", date: "2026-06-12", title: "Club opens its own books as EA API goes dark",
+      body: "Following the sudden silence of the EA data feed, The 40Yr Virgil has taken the historic step of becoming its own record keeper. \u201CThe numbers were ours all along,\u201D said a spokesperson who is also the captain, the manager, and the person who built this website. Every game now lives in the club archive. All 392 of them." },
+    { tag: "TACTICS", date: "2026-06-10", title: "Captain to remain at CAM, sources confirm, again",
+      body: "In news that has shocked nobody, Tupci will continue at attacking midfield in all three formations. \u201CHe is the system,\u201D explained the gaffer. \u201CYou don\u2019t move the system. The whole side runs through him.\u201D A reporter asked what would happen if he were rotated. The room went quiet. We do not speak of it." },
+    { tag: "TRANSFERS", date: "2026-06-08", title: "Danwhizzy credits goal record to \u2018a lad who keeps passing it to me\u2019",
+      body: "The club\u2019s record scorer has once again acknowledged the supply line. \u201CHonestly, I just stand there and it arrives,\u201D he said of his 472 career goals. The assist in question declined to comment, mainly because he was already setting up the next one. The debate over who carries whom continues into its third year." },
+    { tag: "SQUAD", date: "2026-06-05", title: "Rizzy Dave enters fourth season of being \u2018not starting, still dangerous\u2019",
+      body: "Super-sub Rizzy Dave remains on the bench across every formation, a position he has made entirely his own. \u201CThe meter is patient,\u201D he reportedly said, gesturing at his appearances counter. Club officials confirmed the meter is, in fact, connected." },
+    { tag: "DRESSING ROOM", date: "2026-06-01", title: "Donovan scores, refuses to make it weird",
+      body: "Central midfielder Donovan got on the scoresheet again and, true to form, simply jogged back to the halfway line. \u201CThe bot delivers,\u201D was the only statement issued. The archive will never let the moment be forgotten." }
+  ];
+
+  PAGES.news = {
+    enter: function () {
+      var mt = U.$("#news-view");
+      mt.innerHTML = '<div class="news-grid">' +
+        NEWS.map(function (a) {
+          return '<article class="news-card">' +
+            '<div class="news-card-head"><span class="news-tag">' + U.esc(a.tag) + "</span>" +
+              '<span class="news-date">' + U.esc(U.fmtDate(a.date)) + "</span></div>" +
+            '<h2 class="news-title">' + U.esc(a.title) + "</h2>" +
+            '<p class="news-body">' + U.esc(a.body) + "</p>" +
+          "</article>";
+        }).join("") + "</div>" +
+        '<p class="sync-note">Satire. Mostly. The 392 is real.</p>';
+    }
+  };
+
+  /* ------------------------------------------------ SOCIAL (TikTok creator embed) */
+  PAGES.social = {
+    enter: function () {
+      DATA.config().then(function () {
+        var mt = U.$("#social-view");
+        if (!mt) return;
+        var handle = String(cfg().tiktok || "danwhizzy").replace(/^@/, "").replace(/[^a-zA-Z0-9_.]/g, "") || "danwhizzy";
+        mt.innerHTML =
+          '<div class="section-label">@' + handle + " on TikTok</div>" +
+          '<p class="screen-intro">The golden boot moonlights as a content machine. Latest uploads, straight from the source \u2014 this updates itself every time he posts.</p>' +
+          '<div class="social-embed">' +
+            '<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@' + handle + '" data-unique-id="' + handle + '" data-embed-type="creator" style="max-width:780px;min-width:288px;">' +
+              '<section><a target="_blank" href="https://www.tiktok.com/@' + handle + '?refer=creator_embed">@' + handle + "</a></section>" +
+            "</blockquote>" +
+          "</div>" +
+          '<p class="social-fallback">Widget shy? <a href="https://www.tiktok.com/@' + handle + '" target="_blank" rel="noopener">Open @' + handle + " on TikTok \u2192</a></p>";
+        var old = document.getElementById("tiktok-embed-script");
+        if (old) old.parentNode.removeChild(old);
+        var s = document.createElement("script");
+        s.id = "tiktok-embed-script";
+        s.async = true;
+        s.src = "https://www.tiktok.com/embed.js";
+        document.body.appendChild(s);
+      });
+    }
+  };
+
+  /* ------------------------------------------------ TICKETS (gag) */
+  var TICKETS = [
+    { name: "The Sofa", price: "Free", perk: "Premium seat. You already own it. BYO snacks.", cta: "Claim your spot" },
+    { name: "Away End", price: "\u00A30", perk: "Stand in your kitchen and shout at the router. Authentic atmosphere guaranteed.", cta: "Travel (to the kitchen)" },
+    { name: "Director's Box", price: "\u00A3\u221E", perk: "Sit next to the gaffer while he picks the formation. Spoiler: Tupci plays CAM.", cta: "Enquire" },
+    { name: "Season Ticket", price: "Your loyalty", perk: "Every match, every formation, every Rizzy Dave non-appearance. Non-transferable. The group chat would notice.", cta: "Renew automatically" }
+  ];
+
+  PAGES.tickets = {
+    enter: function () {
+      var mt = U.$("#tickets-view");
+      mt.innerHTML =
+        '<p class="screen-intro">Matchday at the Betfred Arena is calling. Choose your tier. All sales are final, imaginary, and a bit of a laugh.</p>' +
+        '<div class="ticket-grid">' +
+          TICKETS.map(function (t) {
+            return '<div class="ticket-card">' +
+              '<div class="ticket-tier">' + U.esc(t.name) + "</div>" +
+              '<div class="ticket-price">' + U.esc(t.price) + "</div>" +
+              '<p class="ticket-perk">' + U.esc(t.perk) + "</p>" +
+              '<button class="btn btn-gold btn-small ticket-buy">' + U.esc(t.cta) + "</button>" +
+            "</div>";
+          }).join("") + "</div>" +
+        '<p class="sync-note">No real tickets were harmed. One club, one squad, one sofa.</p>';
+      U.$$(".ticket-buy", mt).forEach(function (b) {
+        b.addEventListener("click", function () {
+          U.toast("\uD83C\uDF9F\uFE0F Ticket reserved on the sofa. Kick-off is whenever the lobby connects.");
+        });
+      });
+    }
+  };
+
+  /* ------------------------------------------------ FORUM (members) */
+  var FORUM_LABELS = { matchday: "Matchday", banter: "Banter", tactics: "Tactics", transfers: "Transfers & Squad", offtopic: "Off-topic" };
+  var forumState = { view: "list", category: "", threadId: null, composing: false };
+
+  function forumGate(mt) {
+    mt.innerHTML =
+      '<div class="panel"><p class="chat-gate-line">The dressing room is members only</p>' +
+      '<p class="chat-gate-sub">Sign in to read the threads and have your say.</p>' +
+      '<button class="btn btn-primary" id="forum-gate-btn">Sign in · Register</button></div>';
+    var b = U.$("#forum-gate-btn", mt);
+    if (b) b.addEventListener("click", function () {
+      if (!NET.hasBackend()) { U.toast("Connect the backend first (js/config.js)."); return; }
+      openAuth("login");
+    });
+  }
+
+  function renderForum() {
+    var mt = U.$("#forum-view");
+    if (!mt) return;
+    if (!NET.me) { forumGate(mt); return; }
+    if (forumState.view === "thread" && forumState.threadId) { renderForumThread(mt); return; }
+    renderForumList(mt);
+  }
+
+  function renderForumList(mt) {
+    mt.innerHTML =
+      '<div class="forum-cats" id="forum-cats">' +
+        '<button class="filter-btn' + (forumState.category === "" ? " active" : "") + '" data-cat="">All</button>' +
+        Object.keys(FORUM_LABELS).map(function (c) {
+          return '<button class="filter-btn' + (forumState.category === c ? " active" : "") + '" data-cat="' + c + '">' + U.esc(FORUM_LABELS[c]) + "</button>";
+        }).join("") +
+      "</div>" +
+      '<div class="admin-actions"><button class="btn btn-gold btn-small" id="forum-new-btn">+ New thread</button></div>' +
+      '<div id="forum-compose"></div>' +
+      '<div id="forum-threads">' + U.emptyState("Opening the room…", "", "💬") + "</div>";
+
+    U.$$("#forum-cats .filter-btn", mt).forEach(function (b) {
+      b.addEventListener("click", function () { forumState.category = b.getAttribute("data-cat"); renderForum(); });
+    });
+    U.$("#forum-new-btn", mt).addEventListener("click", function () { toggleCompose(); });
+
+    NET.forumThreads(forumState.category).then(function (res) {
+      var list = U.$("#forum-threads", mt);
+      if (!list) return;
+      if (!res || !res.ok) {
+        if (res && (res.error === "auth" || res.error === "session")) { NET.me = null; renderAccount(); renderForum(); return; }
+        list.innerHTML = liveBlock(res, "the forum") || U.emptyState("Couldn't open the room", "", "—");
+        return;
+      }
+      var threads = res.threads || [];
+      list.innerHTML = threads.length
+        ? threads.map(function (t) {
+            var lvl = t.level >= 9 ? '<span class="level-chip level-admin">ADMIN</span>' : t.level >= 5 ? '<span class="level-chip level-mod">MOD</span>' : "";
+            return '<article class="forum-thread-row" data-id="' + U.esc(t.id) + '">' +
+              (t.pinned ? '<span class="forum-pin">📌</span>' : "") +
+              '<div class="forum-thread-main">' +
+                '<span class="forum-cat-tag">' + U.esc(FORUM_LABELS[t.category] || t.category) + "</span>" +
+                '<span class="forum-thread-title">' + U.esc(t.title) + "</span>" +
+                '<span class="forum-thread-meta">' + U.esc(t.name) + " " + lvl + " · " + U.fmtDateTime(t.last) + "</span>" +
+              "</div>" +
+              '<span class="forum-thread-replies">' + t.replies + '<span class="forum-replies-label">repl' + (t.replies === 1 ? "y" : "ies") + "</span></span>" +
+            "</article>";
+          }).join("")
+        : U.emptyState("No threads here yet", "Be the one who starts it.", "🗨");
+      U.$$(".forum-thread-row", list).forEach(function (row) {
+        row.addEventListener("click", function () {
+          forumState.view = "thread"; forumState.threadId = row.getAttribute("data-id"); renderForum();
+        });
+      });
+    });
+  }
+
+  function toggleCompose() {
+    var box = U.$("#forum-compose");
+    if (!box) return;
+    if (box.innerHTML) { box.innerHTML = ""; return; }
+    box.innerHTML =
+      '<div class="panel forum-compose-box">' +
+        '<label class="field"><span class="field-label">Category</span><select id="forum-c-cat">' +
+          Object.keys(FORUM_LABELS).map(function (c) {
+            return '<option value="' + c + '"' + (forumState.category === c ? " selected" : "") + ">" + U.esc(FORUM_LABELS[c]) + "</option>";
+          }).join("") + "</select></label>" +
+        '<label class="field"><span class="field-label">Title</span><input type="text" id="forum-c-title" maxlength="100" placeholder="What\'s the topic?"></label>' +
+        '<label class="field"><span class="field-label">Opening post</span><textarea id="forum-c-body" rows="4" maxlength="4000" placeholder="Say your piece…"></textarea></label>' +
+        '<div class="admin-actions"><button class="btn btn-primary btn-small" id="forum-c-post">Post thread</button>' +
+        '<button class="btn btn-ghost btn-small" id="forum-c-cancel" type="button">Cancel</button>' +
+        '<span class="admin-inline-note" id="forum-c-msg"></span></div>' +
+      "</div>";
+    U.$("#forum-c-cancel", box).addEventListener("click", function () { box.innerHTML = ""; });
+    U.$("#forum-c-post", box).addEventListener("click", function () {
+      var cat = U.$("#forum-c-cat", box).value;
+      var title = U.$("#forum-c-title", box).value.trim();
+      var body = U.$("#forum-c-body", box).value.trim();
+      var msg = U.$("#forum-c-msg", box);
+      if (!title || !body) { msg.textContent = "Title and post, both."; return; }
+      this.disabled = true; msg.textContent = "Posting…";
+      NET.forumNew(cat, title, body).then(function (r) {
+        if (r && r.ok) { U.toast("Thread posted."); box.innerHTML = ""; forumState.view = "thread"; forumState.threadId = r.id; renderForum(); }
+        else if (r && r.error === "language") msg.textContent = "Mind the language — the stewards are watching.";
+        else { msg.textContent = "✗ " + ((r && r.error) || "Couldn't post."); }
+      });
+    });
+  }
+
+  function renderForumThread(mt) {
+    mt.innerHTML = '<button class="btn btn-ghost btn-small" id="forum-back">← All threads</button>' +
+      '<div id="forum-thread-body">' + U.emptyState("Opening…", "", "⏱") + "</div>";
+    U.$("#forum-back", mt).addEventListener("click", function () { forumState.view = "list"; forumState.threadId = null; renderForum(); });
+
+    NET.forumThread(forumState.threadId).then(function (res) {
+      var box = U.$("#forum-thread-body", mt);
+      if (!box) return;
+      if (!res || !res.ok) {
+        if (res && (res.error === "auth" || res.error === "session")) { NET.me = null; renderAccount(); renderForum(); return; }
+        box.innerHTML = U.emptyState("Thread not found", "It may have been removed.", "—"); return;
+      }
+      var t = res.thread, posts = res.posts || [];
+      function head(name, level, ts) {
+        var lvl = level >= 9 ? '<span class="level-chip level-admin">ADMIN</span>' : level >= 5 ? '<span class="level-chip level-mod">MOD</span>' : "";
+        return '<span class="forum-post-name">' + U.esc(name) + "</span>" + lvl + '<span class="forum-post-ts">' + U.fmtDateTime(ts) + "</span>";
+      }
+      var modDel = NET.isMod();
+      box.innerHTML =
+        '<div class="forum-cat-tag forum-cat-standalone">' + U.esc(FORUM_LABELS[t.category] || t.category) + "</div>" +
+        '<h1 class="forum-view-title">' + U.esc(t.title) + "</h1>" +
+        '<article class="forum-post forum-op">' +
+          '<div class="forum-post-head">' + head(t.name, t.level, t.ts) +
+            (modDel ? '<button class="forum-del" data-thread="' + U.esc(t.id) + '" title="Remove thread">×</button>' : "") + "</div>" +
+          '<div class="forum-post-text">' + U.esc(t.body).replace(/\n/g, "<br>") + "</div>" +
+        "</article>" +
+        '<div class="section-label">' + posts.length + " repl" + (posts.length === 1 ? "y" : "ies") + "</div>" +
+        '<div class="forum-posts">' +
+          posts.map(function (p) {
+            return '<article class="forum-post">' +
+              '<div class="forum-post-head">' + head(p.name, p.level, p.ts) +
+                (modDel ? '<button class="forum-del" data-post="' + U.esc(p.id) + '" title="Remove reply">×</button>' : "") + "</div>" +
+              '<div class="forum-post-text">' + U.esc(p.text).replace(/\n/g, "<br>") + "</div>" +
+            "</article>";
+          }).join("") +
+        "</div>" +
+        '<div class="panel forum-reply-box">' +
+          '<label class="field"><span class="field-label">Your reply</span><textarea id="forum-reply-text" rows="3" maxlength="2000" placeholder="Add to the conversation…"></textarea></label>' +
+          '<div class="admin-actions"><button class="btn btn-primary btn-small" id="forum-reply-btn">Reply</button>' +
+          '<span class="admin-inline-note" id="forum-reply-msg"></span></div>' +
+        "</div>";
+
+      U.$("#forum-reply-btn", box).addEventListener("click", function () {
+        var text = U.$("#forum-reply-text", box).value.trim();
+        var msg = U.$("#forum-reply-msg", box);
+        if (!text) { msg.textContent = "Say something first."; return; }
+        this.disabled = true; msg.textContent = "Posting…";
+        NET.forumReply(forumState.threadId, text).then(function (r) {
+          if (r && r.ok) { renderForum(); }
+          else if (r && r.error === "language") { msg.textContent = "Mind the language."; }
+          else { msg.textContent = "✗ " + ((r && r.error) || "Couldn't reply."); }
+        });
+      });
+      U.$$(".forum-del", box).forEach(function (b) {
+        b.addEventListener("click", function () {
+          var payload = b.hasAttribute("data-post") ? { postId: b.getAttribute("data-post") } : { threadId: b.getAttribute("data-thread") };
+          NET.forumDelete(payload).then(function (r) {
+            if (r && r.ok) {
+              U.toast("Removed.");
+              if (payload.threadId) { forumState.view = "list"; forumState.threadId = null; }
+              renderForum();
+            } else U.toast("Couldn't remove that.");
+          });
+        });
+      });
+    });
+  }
+
+  PAGES.forum = { enter: function () { renderForum(); } };
+
+  /* ------------------------------------------------ EASTER EGGS (ungated club fun) */
+  function initEasterEggs() {
+    var KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+    var kpos = 0;
+    document.addEventListener("keydown", function (e) {
+      var k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      kpos = (k === KONAMI[kpos]) ? kpos + 1 : (k === KONAMI[0] ? 1 : 0);
+      if (kpos === KONAMI.length) {
+        kpos = 0;
+        document.body.classList.add("konami");
+        U.toast("⚽ CHEAT UNLOCKED: the system was the friends we made along the way. (It was Tupci. It's always Tupci.)");
+        setTimeout(function () { document.body.classList.remove("konami"); }, 4000);
+      }
+    });
+
+    var CREST_LINES = [
+      "You'll Never Walk Alone. Especially in the group chat.",
+      "Anfield South. Capacity: one sofa.",
+      "Three lads from up and down the country, one badge.",
+      "Black Country steel, Scouse heart, Luton patience.",
+      "The whole side runs through the captain. He'll tell you himself.",
+      "472 goals. 435 assists. One ongoing argument.",
+      "The bot delivers. Donovan said so."
+    ];
+    var taps = 0, tapTimer = null, ci = 0;
+    var crest = U.$(".nav-crest");
+    if (crest) crest.addEventListener("click", function () {
+      taps++;
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(function () { taps = 0; }, 1200);
+      if (taps >= 5) {
+        taps = 0;
+        U.toast("🛡 " + CREST_LINES[ci % CREST_LINES.length]);
+        ci++;
+      }
+    });
+  }
+
   /* ------------------------------------------------ ADMIN (delegates) */
   PAGES.admin = {
     enter: function () { window.ADMIN.enter(U.$("#admin-view"), { renderAccount: renderAccount, applyConfig: applyConfig }); }
@@ -997,7 +1521,7 @@
 
   /* ------------------------------------------------ TACTICS (delegates) */
   PAGES.tactics = {
-    enter: function () { window.TACTICS.enter(U.$("#tactics-view")); }
+    enter: function () { applySquadOverrides(); window.TACTICS.enter(U.$("#tactics-view")); }
   };
 
   /* ========================================================
@@ -1019,6 +1543,7 @@
     bindNav();
     bindAuth();
     renderAccount();
+    initEasterEggs();
     window.addEventListener("hashchange", route);
     route();
 

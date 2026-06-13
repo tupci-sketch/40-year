@@ -83,14 +83,14 @@
       return res;
     },
 
-    register: function (name, pass) {
+    register: function (name, pass, turnstile) {
       var self = this;
-      return this._call("register", { name: name, pass: pass }).then(function (r) { return self._adopt(r); });
+      return this._call("register", { name: name, pass: pass, turnstile: turnstile || "" }).then(function (r) { return self._adopt(r); });
     },
 
-    login: function (name, pass) {
+    login: function (name, pass, turnstile) {
       var self = this;
-      return this._call("login", { name: name, pass: pass }).then(function (r) { return self._adopt(r); });
+      return this._call("login", { name: name, pass: pass, turnstile: turnstile || "" }).then(function (r) { return self._adopt(r); });
     },
 
     session: function () {
@@ -146,7 +146,20 @@
     adminBanner:    function (text, active){ return this._auth("admin_banner", { text: text, active: !!active }); },
     adminLore:      function (text)        { return this._auth("admin_lore", { text: text }); },
     adminFlavour:   function (id, text)    { return this._auth("admin_flavour", { id: id, text: text }); },
-    adminMilestone: function (payload)     { return this._auth("admin_milestone", payload); }
+    adminMilestone: function (payload)     { return this._auth("admin_milestone", payload); },
+
+    /* ---------- forum (members) ---------- */
+    forumThreads: function (category) { return this._auth("forum_threads", { category: category || "" }); },
+    forumThread:  function (id)       { return this._auth("forum_thread", { id: id }); },
+    forumNew:     function (category, title, body) { return this._auth("forum_new", { category: category, title: title, body: body }); },
+    forumReply:   function (threadId, text)        { return this._auth("forum_reply", { threadId: threadId, text: text }); },
+    forumDelete:  function (payload)  { return this._auth("forum_delete", payload || {}); }, // L5+
+
+    /* ---------- fixtures (L5+) · tiktok + personal (L9) ---------- */
+    adminFixtures: function (payload)  { return this._auth("admin_fixtures", payload || {}); },
+    adminTiktok:   function (handle)   { return this._auth("admin_tiktok", { handle: handle }); },
+    adminSquad:    function (payload)  { return this._auth("admin_squad", payload || {}); },
+    adminPersonal: function (payload)  { return this._auth("admin_personal", payload || {}); }
   };
 
   window.G = window.G || {};

@@ -42,6 +42,7 @@
 
   function playerOptions(selected) {
     return window.SQUAD.slice().sort(function (a, b) { return a.number - b.number; })
+      .filter(function (p) { return !p.disabled; })
       .map(function (p) {
         return '<option value="' + p.id + '"' + (p.id === selected ? " selected" : "") + ">#" + p.number + " " + U.esc(p.name) + "</option>";
       }).join("");
@@ -77,14 +78,20 @@
         blockMatchManager(matches) +
         (admin ? blockRecord(record) : "") +
         (admin ? blockCareer(career, baselineSeq) : "") +
+        blockFixtures(c) +
         blockBanner(c, admin) +
         (admin ? blockLore(c) : "") +
         blockUsers(admin) +
         (admin ? blockFlavour(c) : "") +
         (admin ? blockMilestones(c) : "") +
+        (admin ? blockTiktok(c) : "") +
+        (admin ? blockSquad() : "") +
+        (admin ? blockPersonal() : "") +
+        blockForumNote() +
         blockChatNote();
 
       bind(matches, career, record, baselineSeq, admin);
+      if (admin) { renderSquadEditor(); renderPersonal(); }
 
       // A pencil on the Results page may have sent us here with a target.
       var jump = null;
@@ -134,20 +141,24 @@
     var box = U.$("#adm-match-editor", root);
     if (!box) return;
     var isNew = !m;
-    m = m || { seq: 0, stage: "league", dateISO: "", opponent: "", ourScore: 0, theirScore: 0, result: "", scorers: [], note: "", players: [] };
+    m = m || { seq: 0, stage: "league", dateISO: "", opponent: "", ourScore: 0, theirScore: 0, result: "", scorers: [], note: "", players: [], compName: "" };
 
+    var STAGES = ["league", "playoff", "cup", "friendly", "international", "other"];
     box.innerHTML =
       '<div class="match-editor" id="me-box">' +
         '<div class="me-head">' + (isNew ? "New match — Match " + (maxSeq(matches) + 1) : "Editing Match " + m.seq) + "</div>" +
         '<div class="field-row">' +
           field("Opponent", '<input type="text" id="me-opp" maxlength="60" value="' + U.esc(m.opponent) + '">') +
-          field("Stage",
+          field("Type",
             '<select id="me-stage">' +
-              ["league", "playoff", "friendly"].map(function (s) {
+              STAGES.map(function (s) {
                 return '<option value="' + s + '"' + (m.stage === s ? " selected" : "") + ">" + s.charAt(0).toUpperCase() + s.slice(1) + "</option>";
               }).join("") +
             "</select>") +
           field("Date", '<input type="date" id="me-date" value="' + U.esc(m.dateISO || "") + '">', "optional") +
+        "</div>" +
+        '<div class="field-row">' +
+          field("Competition name", '<input type="text" id="me-compname" maxlength="50" value="' + U.esc(m.compName || "") + '">', "optional — e.g. England v Germany, FA Cup R1") +
         "</div>" +
         '<div class="field-row">' +
           field("Our score", '<input type="number" id="me-our" min="0" max="99" value="' + (m.ourScore === "" ? 0 : m.ourScore) + '">') +
@@ -186,6 +197,7 @@
       var payload = {
         seq: isNew ? 0 : m.seq,
         stage: U.$("#me-stage", box).value,
+        compName: U.$("#me-compname", box).value.trim(),
         dateISO: U.$("#me-date", box).value,
         opponent: U.$("#me-opp", box).value.trim(),
         ourScore: U.$("#me-our", box).value,
@@ -428,9 +440,219 @@
       "L5+");
   }
 
+  function blockForumNote() {
+    return block("The dressing room · forum",
+      '<p class="admin-note">Moderation lives in the forum itself — open any thread or reply and use the × to take it down. Members post; mods and the admin can remove.</p>' +
+      '<div class="admin-actions"><a class="btn btn-ghost btn-small" href="#forum">Open the forum →</a></div>',
+      "L5+");
+  }
+
+  function fixtureListHtml(fx) {
+    if (!fx || !fx.length) return '<p class="admin-inline-note">No fixtures scheduled.</p>';
+    return fx.map(function (f) {
+      return '<div class="admin-row"><span class="admin-row-main"><strong>' + U.esc(f.opponent || "TBC") + "</strong> · " +
+        U.esc((f.stage || "friendly")) + (f.compName ? " · " + U.esc(f.compName) : "") +
+        (f.dateISO ? " · " + U.esc(f.dateISO) : " · date TBC") + "</span>" +
+        '<button class="btn btn-ghost btn-small fx-del" data-id="' + U.esc(f.id) + '">✕</button></div>';
+    }).join("");
+  }
+
+  function blockFixtures(c) {
+    var stages = ["friendly", "league", "playoff", "cup", "international", "other"];
+    return block("Fixtures · what's coming up",
+      '<p class="admin-note">Shown in an Upcoming block at the top of Results. Past-dated fixtures drop off on their own.</p>' +
+      '<div class="field-row">' +
+        field("Opponent", '<input type="text" id="fx-opp" maxlength="60">') +
+        field("Type", '<select id="fx-stage">' + stages.map(function (s) { return '<option value="' + s + '">' + s.charAt(0).toUpperCase() + s.slice(1) + "</option>"; }).join("") + "</select>") +
+        field("Date", '<input type="date" id="fx-date">', "optional") +
+      "</div>" +
+      '<div class="field-row">' +
+        field("Competition name", '<input type="text" id="fx-compname" maxlength="50">', "optional — e.g. England v Germany") +
+        field("Note", '<input type="text" id="fx-note" maxlength="140">', "optional") +
+      "</div>" +
+      '<div class="admin-actions"><button class="btn btn-gold btn-small" id="fx-add">+ Add fixture</button><span class="admin-inline-note" id="fx-msg"></span></div>' +
+      '<div class="admin-sublist" id="fx-list">' + fixtureListHtml(c.fixtures || []) + "</div>",
+      "L5+");
+  }
+
+  function blockTiktok(c) {
+    return block("Socials · TikTok handle",
+      '<p class="admin-note">Whose profile shows on the <a href="#social">Socials</a> page. No @ needed — it self-updates with new uploads.</p>' +
+      '<div class="field-row">' + field("TikTok handle", '<input type="text" id="tt-handle" maxlength="30" value="' + U.esc(c.tiktok || "danwhizzy") + '">') + "</div>" +
+      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="tt-save">Save handle</button><span class="admin-inline-note" id="tt-msg"></span></div>',
+      "L9");
+  }
+
+  function toggleRow(id, label, on) {
+    return '<label class="pers-toggle"><input type="checkbox" id="' + id + '"' + (on ? " checked" : "") + '>' +
+      '<span class="pers-toggle-track"><span class="pers-toggle-dot"></span></span>' +
+      '<span class="pers-toggle-label">' + label + "</span></label>";
+  }
+
+  function blockPersonal() {
+    return block("Personal · birthdays & better halves",
+      '<p class="admin-note">Private by default. None of this reaches the site until you switch it on below — the data is held server-side and only sent to browsers when a toggle is green.</p>' +
+      '<div id="pers-view">' + U.emptyState("Loading…", "", "🔒") + "</div>",
+      "L9");
+  }
+
+  function renderPersonal() {
+    var mt = U.$("#pers-view", root);
+    if (!mt) return;
+    NET.adminPersonal({ action: "get" }).then(function (res) {
+      if (!res || !res.ok) { mt.innerHTML = '<p class="admin-inline-note">Couldn\u2019t load personal data.</p>'; return; }
+      var people = res.people || [];
+      mt.innerHTML =
+        '<div class="pers-toggles">' +
+          toggleRow("pers-bdays", "Show birthdays on the site", res.showBirthdays) +
+          toggleRow("pers-partners", "Show partner cameos on the site", res.showPartners) +
+        "</div>" +
+        '<div class="pers-people">' +
+          people.map(function (p) {
+            var who = window.SQUAD.filter(function (s) { return s.id === p.id; })[0];
+            var nm = who ? who.name : p.id;
+            return '<div class="pers-person" data-id="' + U.esc(p.id) + '">' +
+              '<div class="pers-person-head">' + U.esc(nm) + ' <span class="admin-inline-note">' + U.esc(p.id) + "</span></div>" +
+              '<div class="field-row">' +
+                field("Real name", '<input type="text" class="pers-real" maxlength="30" value="' + U.esc(p.real || "") + '">') +
+                field("Birthday", '<input type="text" class="pers-bday" maxlength="5" placeholder="MM-DD" value="' + U.esc(p.bday || "") + '">') +
+              "</div>" +
+              '<div class="field-row">' +
+                field("Hometown", '<input type="text" class="pers-home" maxlength="40" value="' + U.esc(p.hometown || "") + '">') +
+                field("Partner name", '<input type="text" class="pers-pname" maxlength="30" value="' + U.esc((p.partner && p.partner.name) || "") + '">') +
+                field("Partner club", '<input type="text" class="pers-pclub" maxlength="30" value="' + U.esc((p.partner && p.partner.club) || "") + '">') +
+              "</div>" +
+            "</div>";
+          }).join("") +
+        "</div>" +
+        '<div class="admin-actions"><button class="btn btn-primary btn-small" id="pers-save">Save personal data</button><span class="admin-inline-note" id="pers-msg"></span></div>';
+
+      function wireToggle(id, key) {
+        var el = U.$("#" + id, root);
+        if (!el) return;
+        el.addEventListener("change", function () {
+          var patch = {}; patch[key] = el.checked;
+          NET.adminPersonal(patch).then(function (r) {
+            if (r && r.ok) { U.toast(el.checked ? "Now showing on the site." : "Hidden again."); refreshConfig(); }
+            else { el.checked = !el.checked; U.toast("Couldn't change that."); }
+          });
+        });
+      }
+      wireToggle("pers-bdays", "showBirthdays");
+      wireToggle("pers-partners", "showPartners");
+
+      var sv = U.$("#pers-save", mt);
+      if (sv) sv.addEventListener("click", function () {
+        var btn = this, msg = U.$("#pers-msg", mt);
+        var list = U.$$(".pers-person", mt).map(function (row) {
+          return {
+            id: row.getAttribute("data-id"),
+            real: row.querySelector(".pers-real").value.trim(),
+            bday: row.querySelector(".pers-bday").value.trim(),
+            hometown: row.querySelector(".pers-home").value.trim(),
+            partner: { name: row.querySelector(".pers-pname").value.trim(), club: row.querySelector(".pers-pclub").value.trim() }
+          };
+        });
+        btn.disabled = true; msg.textContent = "Saving…";
+        NET.adminPersonal({ people: list }).then(function (r) {
+          btn.disabled = false;
+          msg.textContent = (r && r.ok) ? "✓ Saved" : "✗ " + ((r && r.error) || "failed");
+          if (r && r.ok) refreshConfig();
+        });
+      });
+    });
+  }
+
   /* ========================================================
      WIRING
      ======================================================== */
+  function blockSquad() {
+    return block("Squad · players",
+      '<p class="admin-note">Edit any player\u2019s identity, add a new one, or hide one who\u2019s left. Stats and match history are never touched \u2014 this is identity only. New players sit on the bench until their formation roles are set in the code.</p>' +
+      '<div id="sq-view">' + U.emptyState("Loading the squad\u2026", "", "\uD83D\uDC65") + "</div>",
+      "L9");
+  }
+
+  function squadRow(p) {
+    var tags = (p.isNew ? ' <span class="admin-inline-note">new</span>' : "") +
+      (p.disabled ? ' <span class="level-chip level-mod">hidden</span>' : "") +
+      (p.isCaptain ? ' <span class="level-chip level-admin">C</span>' : "");
+    return '<details class="sq-row" data-id="' + U.esc(p.id) + '" data-new="' + (p.isNew ? "1" : "") + '"' + (p.isNew ? " open" : "") + ">" +
+      "<summary>#" + (p.number || 0) + " " + U.esc(p.name) + " · " + U.esc(p.position || "") + tags + "</summary>" +
+      '<div class="field-row">' +
+        field("Name", '<input type="text" class="sq-name" maxlength="30" value="' + U.esc(p.name) + '">') +
+        field("Number", '<input type="number" class="sq-number" min="0" max="99" value="' + (p.number || 0) + '">') +
+        field("Position", '<input type="text" class="sq-pos" maxlength="4" value="' + U.esc(p.position || "") + '">') +
+      "</div>" +
+      '<div class="field-row">' +
+        field("Controlled by", '<select class="sq-control"><option value="human"' + (p.controlledBy === "human" ? " selected" : "") + ">Human</option><option value=\"bot\"" + (p.controlledBy !== "human" ? " selected" : "") + ">Bot (AI)</option></select>") +
+        field("Pronouns", '<input type="text" class="sq-pron" maxlength="12" value="' + U.esc(p.pronouns || "he/him") + '">') +
+        field("Card image", '<input type="text" class="sq-card" maxlength="60" value="' + U.esc(p.card || "") + '">', "filename in assets/img") +
+      "</div>" +
+      '<label class="field"><span class="field-label">Flavour</span><textarea class="sq-flavour" rows="2" maxlength="400">' + U.esc(p.flavour || "") + "</textarea></label>" +
+      '<div class="admin-actions sq-flags">' +
+        '<label class="sq-check"><input type="checkbox" class="sq-captain"' + (p.isCaptain ? " checked" : "") + "> Captain</label>" +
+        '<label class="sq-check"><input type="checkbox" class="sq-bench"' + (p.permaBench ? " checked" : "") + "> Permanent bench</label>" +
+        '<label class="sq-check"><input type="checkbox" class="sq-disabled"' + (p.disabled ? " checked" : "") + "> Hidden from squad</label>" +
+        (p.isNew ? '<button class="btn btn-ghost btn-small sq-del" type="button">✕ Remove</button>' : "") +
+      "</div>" +
+    "</details>";
+  }
+
+  function renderSquadEditor() {
+    var mt = U.$("#sq-view", root);
+    if (!mt) return;
+    var players = (window.SQUAD || []).slice().sort(function (a, b) { return (a.number || 0) - (b.number || 0); });
+    mt.innerHTML =
+      '<div id="sq-list">' + players.map(squadRow).join("") + "</div>" +
+      '<div class="admin-actions">' +
+        '<button class="btn btn-gold btn-small" id="sq-add" type="button">+ Add player</button>' +
+        '<button class="btn btn-primary btn-small" id="sq-save">Save squad</button>' +
+        '<span class="admin-inline-note" id="sq-msg"></span>' +
+      "</div>";
+
+    function wireDel(node) {
+      var del = node.querySelector(".sq-del");
+      if (del) del.addEventListener("click", function () { node.parentNode.removeChild(node); });
+    }
+    U.$$(".sq-row", mt).forEach(wireDel);
+
+    U.$("#sq-add", mt).addEventListener("click", function () {
+      var id = "p" + Date.now().toString(36);
+      var tmp = document.createElement("div");
+      tmp.innerHTML = squadRow({ id: id, name: "New Player", number: 0, position: "SUB", controlledBy: "bot", pronouns: "he/him", card: "", flavour: "", isNew: true });
+      var node = tmp.firstElementChild;
+      U.$("#sq-list", mt).appendChild(node);
+      wireDel(node);
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    U.$("#sq-save", mt).addEventListener("click", function () {
+      var btn = this, msg = U.$("#sq-msg", mt);
+      var list = U.$$(".sq-row", mt).map(function (row) {
+        function g(cls) { var el = row.querySelector("." + cls); return el ? el.value : ""; }
+        function ck(cls) { var el = row.querySelector("." + cls); return el ? el.checked : false; }
+        return {
+          id: row.getAttribute("data-id"),
+          name: g("sq-name"), number: g("sq-number"), position: g("sq-pos"),
+          controlledBy: g("sq-control"), pronouns: g("sq-pron"), card: g("sq-card"),
+          flavour: g("sq-flavour"),
+          isCaptain: ck("sq-captain"), permaBench: ck("sq-bench"), disabled: ck("sq-disabled"),
+          isNew: row.getAttribute("data-new") === "1"
+        };
+      });
+      btn.disabled = true; msg.textContent = "Saving…";
+      NET.adminSquad({ squad: list }).then(function (r) {
+        btn.disabled = false;
+        msg.textContent = (r && r.ok) ? "✓ Saved" : "✗ " + ((r && r.error) || "failed");
+        if (r && r.ok) {
+          U.toast("Squad updated.");
+          refreshConfig().then(function () { renderSquadEditor(); });
+        }
+      });
+    });
+  }
+
   function bind(matches, career, record, baselineSeq, admin) {
     var b;
 
@@ -543,6 +765,58 @@
       btn.addEventListener("click", function () {
         NET.adminMilestone({ action: "del", id: btn.getAttribute("data-id") }).then(function (r) {
           if (r && r.ok) { U.toast("Milestone removed."); refreshConfig().then(function () { enter(root, helpers); }); }
+        });
+      });
+    });
+
+    /* fixtures */
+    b = U.$("#fx-add", root);
+    if (b) b.addEventListener("click", function () {
+      var opp = U.$("#fx-opp", root).value.trim();
+      var msg = U.$("#fx-msg", root);
+      if (!opp) { msg.textContent = "Opponent needed."; return; }
+      b.disabled = true; msg.textContent = "Adding…";
+      NET.adminFixtures({
+        action: "add", opponent: opp,
+        stage: U.$("#fx-stage", root).value,
+        dateISO: U.$("#fx-date", root).value,
+        compName: U.$("#fx-compname", root).value.trim(),
+        note: U.$("#fx-note", root).value.trim()
+      }).then(function (r) {
+        b.disabled = false; msg.textContent = "";
+        if (r && r.ok) {
+          U.toast("Fixture added.");
+          U.$("#fx-opp", root).value = ""; U.$("#fx-compname", root).value = ""; U.$("#fx-note", root).value = "";
+          reloadFixtures();
+        } else msg.textContent = "✗ couldn't add";
+      });
+    });
+    bindFixtureDels();
+
+    /* tiktok handle */
+    b = U.$("#tt-save", root);
+    if (b) b.addEventListener("click", function () {
+      b.disabled = true;
+      var msg = U.$("#tt-msg", root);
+      NET.adminTiktok(U.$("#tt-handle", root).value).then(function (r) {
+        b.disabled = false;
+        msg.textContent = (r && r.ok) ? "✓ saved" : "✗ failed";
+        if (r && r.ok) { U.toast("TikTok handle saved."); refreshConfig(); }
+      });
+    });
+  }
+
+  function reloadFixtures() {
+    refreshConfig().then(function (res) {
+      var list = U.$("#fx-list", root);
+      if (list) { list.innerHTML = fixtureListHtml((cfgFrom(res).fixtures) || []); bindFixtureDels(); }
+    });
+  }
+  function bindFixtureDels() {
+    U.$$(".fx-del", root).forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        NET.adminFixtures({ action: "del", id: btn.getAttribute("data-id") }).then(function (r) {
+          if (r && r.ok) { U.toast("Fixture removed."); reloadFixtures(); }
         });
       });
     });
