@@ -1913,7 +1913,7 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 
 /* ---- Betfred logo image ---- */
 .sponsor-logo { display: block; width: 100%; max-width: 260px; height: auto; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
-.foot-betfred-logo { height: 13px; width: auto; vertical-align: middle; border-radius: 2px; margin-left: 4px; position: relative; top: -1px; }
+.foot-betfred-logo { display: inline-block; height: 13px; width: auto; vertical-align: middle; border-radius: 2px; margin-left: 4px; position: relative; top: -1px; }
 
 /* ---- TikTok profile fallback card ---- */
 .tiktok-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 30px 22px; background: var(--panel-grad); border: 1px solid var(--panel-border); border-radius: var(--radius-sm); text-align: center; }
