@@ -69,7 +69,7 @@ action — the client only decides what to draw.
 
 ## v3 update — what's new
 
-- **Faster:** player cards cropped + converted to WebP (18.45 MB → 1.19 MB), scripts deferred, crest preloaded.
+- **Faster:** player cards cropped (black borders removed) and resized/optimised as PNGs (~18 MB → ~12 MB, same filenames), scripts deferred, crest preloaded.
 - **Stats:** Goals Against on the home record; a "biggest contributors" board (goals + assists per game); the wide career/opposition tables now scroll on mobile instead of overflowing.
 - **Squad voice:** Donovan is she/her throughout; Tupci carries a "THE SYSTEM" badge.
 - **Match types:** League / Playoff / Cup / Friendly / International / Other, each with an optional competition name (e.g. "England v Germany").

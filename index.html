@@ -15,7 +15,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://*.tiktok.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://challenges.cloudflare.com https://*.tiktok.com; frame-src https://challenges.cloudflare.com https://*.tiktok.com; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
 
-  <link rel="preload" as="image" href="assets/img/crest.webp">
+  <link rel="preload" as="image" href="assets/img/crest.png">
   <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 
   <!-- Open Graph · after deploying, swap these two for your full
@@ -40,7 +40,7 @@
   <header class="site-head">
     <div class="nav-inner">
       <a class="crest-link" href="#home" aria-label="The 40Yr Virgil — home">
-        <img class="nav-crest" src="assets/img/crest.webp" alt="The 40Yr Virgil crest">
+        <img class="nav-crest" src="assets/img/crest.png" alt="The 40Yr Virgil crest">
         <span class="wordmark">THE <span>40YR</span> VIRGIL</span>
       </a>
       <button id="nav-toggle" aria-label="Open menu">☰</button>
@@ -72,7 +72,7 @@
       <div class="hero">
         <div class="hero-crest-wrap">
           <div class="hero-glow"></div>
-          <img class="hero-crest" src="assets/img/crest.webp" alt="The 40Yr Virgil crest" decoding="async">
+          <img class="hero-crest" src="assets/img/crest.png" alt="The 40Yr Virgil crest" decoding="async">
         </div>
         <h1 class="hero-name">THE <span class="accent">40YR</span> VIRGIL</h1>
         <span class="hero-est">EST. 2024</span>
@@ -112,6 +112,15 @@
         <a class="stat-tile" href="#stats"><span class="stat-tile-value">📊</span><span class="stat-tile-label">Stats</span></a>
         <a class="stat-tile" href="#honours"><span class="stat-tile-value">🏆</span><span class="stat-tile-label">Honours</span></a>
         <a class="stat-tile" href="#gaffer"><span class="stat-tile-value">🎩</span><span class="stat-tile-label">The Gaffer</span></a>
+      </div>
+
+      <div class="section-label">Our sponsor</div>
+      <div class="sponsor-strip">
+        <div class="sponsor-badge">
+          <span class="sponsor-badge-tag">Official Club Sponsor</span>
+          <span class="sponsor-wordmark">BETFRED</span>
+        </div>
+        <p class="sponsor-line">We're proudly backed by Betfred — so proud, in fact, that we named our stadium after them. Welcome to the Betfred Arena.</p>
       </div>
     </section>
 
@@ -211,8 +220,8 @@
         <ul class="about-facts">
           <li><strong>Founded</strong> 2024 — and never looked back, mostly because the rear-view mirror is unlicensed DLC.</li>
           <li><strong>Competition</strong> EA Sports FC 26 · Pro Clubs · Season 2.</li>
-          <li><strong>Stadium</strong> The Betfred Arena. Capacity: whatever the lobby allows.</li>
-          <li><strong>Principal sponsor</strong> Betfred — the shirt practically wears itself.</li>
+          <li><strong>Home</strong> We play at the Betfred Arena — capacity: whatever the lobby allows.</li>
+          <li><strong>Sponsor</strong> We're backed by Betfred. We liked them so much we named the stadium after them.</li>
           <li><strong>Personnel</strong> Three humans. Twelve algorithms. One badge.</li>
           <li><strong>Captain</strong> Tupci. Always CAM. Non-negotiable.</li>
           <li><strong>Super-sub</strong> Rizzy Dave. Not starting. Still dangerous.</li>
@@ -293,10 +302,10 @@
 
   <!-- ======================= FOOTER ======================= -->
   <footer class="site-foot">
-    <img class="foot-crest" src="assets/img/crest.webp" alt="" loading="lazy">
+    <img class="foot-crest" src="assets/img/crest.png" alt="" loading="lazy">
     <span class="foot-values">Loyalty · Heart · Glory</span>
     <span class="foot-tagline">One Club. One Squad. One Dream.</span>
-    <span class="foot-sponsor">Played at the Betfred Arena · Shirt sponsor: Betfred</span>
+    <span class="foot-sponsor">Our home: the <strong>Betfred Arena</strong> — backed by <span class="foot-betfred">BETFRED</span></span>
     <span class="foot-est">Est. 2024 · EA Sports FC Pro Clubs · <a href="#tickets">Tickets</a></span>
   </footer>
 
