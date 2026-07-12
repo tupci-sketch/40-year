@@ -121,6 +121,25 @@ action — the client only decides what to draw.
 - **Backend rebuilt:** `backend.gs` was re-authored from the client contract and
   the live Sheet schema, drop-in compatible with all existing data, and ships
   with a `healthCheck()` you run before redeploying.
+- **Twitch:** the Socials page embeds the live player (stream when live, Twitch's
+  offline screen when not), and a pulsing **LIVE** badge appears on the Social nav
+  link + page when the channel is broadcasting (see setup below).
+
+### Twitch LIVE badge (optional)
+
+The embedded Twitch player needs nothing — it shows the stream or the offline
+screen on its own. The **LIVE badge** needs the backend to ask Twitch whether the
+channel is live, which takes a Twitch app:
+
+1. Create an app at **dev.twitch.tv/console/apps** (any name; OAuth redirect
+   `http://localhost` is fine — it's unused). Copy the **Client ID** and generate a
+   **Client Secret**.
+2. In Apps Script → ⚙ **Project Settings → Script Properties**, add
+   `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET`.
+
+That's it — the backend caches live status for 60s and the site polls every ~90s.
+Until both properties are set, the badge simply never shows; nothing else changes.
+The channel checked is the one in Housekeeping → Socials (`twitch_handle`).
 
 ### Cloudflare Turnstile (bot check)
 

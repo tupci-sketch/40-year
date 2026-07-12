@@ -122,6 +122,7 @@
     career:  function () { return this._call("career"); },
     record:  function () { return this._call("record"); },
     config:  function () { return this._call("config"); },
+    twitchStatus: function () { return this._call("twitch_status"); },
 
     /* ---------- archive writes (server re-checks every level) ---------- */
     matchSave:   function (match) { return this._auth("match_save", { match: match }); },   // L5+

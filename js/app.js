@@ -436,6 +436,38 @@
       .replace(/\{opp\}/g, function () { return randOf(clubs && clubs.length ? clubs : ["a mystery club"]); });
   }
 
+  /* ---- Twitch live status: a pulsing LIVE badge on the Social nav + page.
+     Server-side check (backend holds the Twitch credentials); degrades to
+     nothing if the backend or credentials aren't set. ---- */
+  var twitchLive = null;
+  function applyTwitchLive() {
+    var nav = document.querySelector('.nav-link[data-route="social"]');
+    if (nav) {
+      var pip = nav.querySelector(".nav-live");
+      if (twitchLive && twitchLive.live) {
+        if (!pip) { pip = document.createElement("span"); pip.className = "nav-live"; pip.textContent = "LIVE"; nav.appendChild(pip); }
+      } else if (pip) { pip.parentNode.removeChild(pip); }
+    }
+    if (currentPage === "social") { var b = U.$("#social-live"); if (b) renderTwitchBadge(b); }
+  }
+  function renderTwitchBadge(el) {
+    if (twitchLive && twitchLive.live) {
+      el.hidden = false;
+      el.innerHTML =
+        '<span class="social-live-dot"></span>' +
+        '<span class="social-live-text">LIVE NOW</span>' +
+        (twitchLive.title ? '<span class="social-live-title">' + U.esc(twitchLive.title) + "</span>" : "") +
+        (twitchLive.viewers ? '<span class="social-live-viewers">' + twitchLive.viewers + " watching</span>" : "");
+    } else { el.hidden = true; el.innerHTML = ""; }
+  }
+  function pollTwitchLive() {
+    if (!NET.hasBackend()) return;
+    NET.twitchStatus().then(function (r) {
+      twitchLive = (r && r.ok) ? r : null;
+      applyTwitchLive();
+    });
+  }
+
   /* ========================================================
      PAGES
      ======================================================== */
@@ -1435,6 +1467,7 @@
           "&parent=" + encodeURIComponent(parent) + "&muted=true&autoplay=true";
         var twitchCard =
           '<div class="section-label">' + twitch + " on Twitch</div>" +
+          '<div id="social-live" class="social-live-badge" hidden></div>' +
           '<p class="screen-intro">When the club’s live, the stream plays right here. When it’s not, Twitch shows the offline screen — hit follow so you don’t miss kickoff.</p>' +
           '<div class="twitch-embed-wrap">' +
             '<iframe class="twitch-player" src="' + twitchSrc + '" title="' + twitch + ' on Twitch" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen scrolling="no" frameborder="0"></iframe>' +
@@ -1466,6 +1499,10 @@
         s.async = true;
         s.src = "https://www.tiktok.com/embed.js";
         document.body.appendChild(s);
+
+        var liveEl = U.$("#social-live");
+        if (liveEl) renderTwitchBadge(liveEl);
+        pollTwitchLive();
       });
     }
   };
@@ -1845,6 +1882,9 @@
       applyConfig(res);
       if (parseHash().name === "about") PAGES.about.enter();
     });
+
+    pollTwitchLive();
+    if (NET.hasBackend()) setInterval(pollTwitchLive, 90000);
 
     if (NET.hasBackend()) {
       NET.session().then(function () {
