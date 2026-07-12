@@ -39,6 +39,46 @@
     return bench;
   }
 
+  function shuffleT(a) {
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+
+  /* The wheel picks a chaotic-but-legal XI. House rules survive it:
+     a keeper goes in goal, the captain keeps CAM, Rizzy stays benched. */
+  function randomEleven(fkey) {
+    var f = window.FORMATIONS[fkey];
+    var squad = (window.SQUAD || []).filter(function (p) { return !p.disabled; });
+    var byGroup = function (g) { return squad.filter(function (p) { return U.posGroup(p) === g; }).map(function (p) { return p.id; }); };
+    var gks = shuffleT(byGroup("GK"));
+    var outfield = shuffleT(squad.filter(function (p) {
+      return U.posGroup(p) !== "GK" && p.id !== "rizzydave";
+    }).map(function (p) { return p.id; }));
+
+    var slots = f.slots.map(function () { return null; });
+    var used = {};
+    function take(id) { used[id] = 1; return id; }
+
+    // keepers first
+    f.slots.forEach(function (s, i) {
+      if (s.pos === "GK" && gks.length) slots[i] = take(gks.shift());
+    });
+    // captain's clause: Tupci owns CAM if the shape has one
+    var camIdx = -1;
+    f.slots.forEach(function (s, i) { if (camIdx === -1 && s.pos === "CAM") camIdx = i; });
+    var hasTupci = squad.some(function (p) { return p.id === "tupci"; });
+    if (camIdx !== -1 && hasTupci && !used["tupci"]) slots[camIdx] = take("tupci");
+    // fill the rest
+    var pool = outfield.filter(function (id) { return !used[id]; });
+    f.slots.forEach(function (s, i) {
+      if (!slots[i] && pool.length) slots[i] = take(pool.shift());
+    });
+    // anyone spare sits down; Rizzy anchors the bench
+    var bench = squad.map(function (p) { return p.id; }).filter(function (id) { return !used[id]; });
+    return { slots: slots, bench: pinRizzy(bench) };
+  }
+
   /* ------------------------------------------------ render */
   var root, pitchEl, benchEl;
 
@@ -52,7 +92,10 @@
             return '<button class="formation-tab" role="tab" data-f="' + k + '">' + k + '</button>';
           }).join("") +
         '</div>' +
-        '<button class="btn btn-ghost btn-small" id="tactics-reset">Reset XI</button>' +
+        '<div class="tactics-actions">' +
+          '<button class="btn btn-gold btn-small" id="tactics-random" title="Let the wheel pick the XI">🎲 Gaffer’s XI</button>' +
+          '<button class="btn btn-ghost btn-small" id="tactics-reset">Reset XI</button>' +
+        '</div>' +
       '</div>' +
       '<p class="tactics-note" id="tactics-note"></p>' +
       '<div class="pitch-wrap">' +
@@ -81,6 +124,11 @@
       state.arrangements[state.current] = defaults(state.current);
       render();
       U.toast("Back to the gaffer's whiteboard.");
+    });
+    U.$("#tactics-random", root).addEventListener("click", function () {
+      state.arrangements[state.current] = randomEleven(state.current);
+      render();
+      U.toast("The wheel has spoken. Rizzy Dave remains, as ever, seated.");
     });
 
     document.addEventListener("click", function (e) {

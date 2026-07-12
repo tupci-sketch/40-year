@@ -155,11 +155,14 @@
     forumReply:   function (threadId, text)        { return this._auth("forum_reply", { threadId: threadId, text: text }); },
     forumDelete:  function (payload)  { return this._auth("forum_delete", payload || {}); }, // L5+
 
-    /* ---------- fixtures (L5+) · tiktok + personal (L9) ---------- */
+    /* ---------- fixtures · socials · squad · fun (L5+) · personal · season (L9) ---------- */
     adminFixtures: function (payload)  { return this._auth("admin_fixtures", payload || {}); },
-    adminTiktok:   function (handle)   { return this._auth("admin_tiktok", { handle: handle }); },
+    adminTiktok:   function (handle)   { return this._auth("admin_socials", { tiktok: handle }); }, // legacy shim
+    adminSocials:  function (payload)  { return this._auth("admin_socials", payload || {}); },       // { tiktok, twitch }
     adminSquad:    function (payload)  { return this._auth("admin_squad", payload || {}); },
-    adminPersonal: function (payload)  { return this._auth("admin_personal", payload || {}); }
+    adminFun:      function (payload)  { return this._auth("admin_fun", payload || {}); },            // { action:"set", fun:{…} }
+    adminPersonal: function (payload)  { return this._auth("admin_personal", payload || {}); },
+    adminSeason:   function (payload)  { return this._auth("admin_season", payload || {}); }           // { action:"archive"|"get", … }
   };
 
   window.G = window.G || {};

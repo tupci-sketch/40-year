@@ -108,14 +108,25 @@ window.SQUAD = [
     }
   },
   {
-    id: "donovan", number: 8, name: "Donovan", position: "CM",
-    card: "donovan.png", controlledBy: "bot", eaPersona: "",
-    isCaptain: false, permaBench: false, pronouns: "she/her",
-    flavour: "The engine room. AI-cooled, never overheats, never asks for water breaks.",
+    id: "amy", number: 8, name: "Amy Whimsy", position: "CM",
+    card: "crest.png", controlledBy: "human", eaPersona: "",
+    isCaptain: false, permaBench: false, pronouns: "she/her", linkedTo: "donovan",
+    flavour: "Wears the 8 the algorithm kept warm. The human behind the machine — same number, same engine room, now with a pulse.",
     roles: {
       "4-2-1-3":   { start: true, pos: "LW" },
       "4-4-1-1":   { start: true, pos: "CM" },
       "4-1-2-1-2": { start: true, pos: "CM" }
+    }
+  },
+  {
+    id: "donovan", number: 8, name: "Donovan", position: "CM",
+    card: "donovan.png", controlledBy: "bot", eaPersona: "",
+    isCaptain: false, permaBench: true, retiredAI: true, pronouns: "she/her", linkedTo: "amy",
+    flavour: "The EA-era engine room — AI-cooled, never overheated, never asked for a water break. The algorithm that wore #8 before the human did.",
+    roles: {
+      "4-2-1-3":   { start: false },
+      "4-4-1-1":   { start: false },
+      "4-1-2-1-2": { start: false }
     }
   },
   {
@@ -130,17 +141,6 @@ window.SQUAD = [
     }
   },
   {
-    id: "sway", number: 10, name: "S Way", position: "CM",
-    card: "sway.png", controlledBy: "human", eaPersona: "",
-    isCaptain: false, permaBench: false,
-    flavour: "Dan\u2019s mate Sultan, in on a guest spot for Sunday. Ten on the back, swagger to match.",
-    roles: {
-      "4-2-1-3":   { start: false },
-      "4-4-1-1":   { start: false },
-      "4-1-2-1-2": { start: false }
-    }
-  },
-  {
     id: "danwhizzy", number: 17, name: "Danwhizzy", position: "ST",
     card: "danwhizzy.png", controlledBy: "human", eaPersona: "",
     isCaptain: false, permaBench: false, goldenBoot: true,
@@ -149,6 +149,17 @@ window.SQUAD = [
       "4-2-1-3":   { start: true, pos: "ST" },
       "4-4-1-1":   { start: true, pos: "ST" },
       "4-1-2-1-2": { start: true, pos: "LST" }
+    }
+  },
+  {
+    id: "medina", number: 21, name: "Funky Cool Medina", position: "CM",
+    card: "crest.png", controlledBy: "bot", eaPersona: "",
+    isCaptain: false, permaBench: false,
+    flavour: "Funky by name, cool by nature. An AI metronome in central midfield — keeps the tempo smooth and the passing funky.",
+    roles: {
+      "4-2-1-3":   { start: false },
+      "4-4-1-1":   { start: false },
+      "4-1-2-1-2": { start: false }
     }
   },
   {
@@ -228,7 +239,7 @@ window.FORMATIONS = {
       { pos: "DM",  x: 38, y: 45, player: "moreira" },
       { pos: "DM",  x: 62, y: 45, player: "tmidi" },
       { pos: "CAM", x: 50, y: 62, player: "tupci" },
-      { pos: "LW",  x: 18, y: 82, player: "donovan" },
+      { pos: "LW",  x: 18, y: 82, player: "amy" },
       { pos: "ST",  x: 50, y: 86, player: "danwhizzy" },
       { pos: "RW",  x: 82, y: 82, player: "walker" }
     ],
@@ -244,7 +255,7 @@ window.FORMATIONS = {
       { pos: "CB",  x: 62, y: 22, player: "ferry" },
       { pos: "RB",  x: 84, y: 26, player: "kubikova" },
       { pos: "LM",  x: 16, y: 52, player: "zilkov" },
-      { pos: "CM",  x: 38, y: 50, player: "donovan" },
+      { pos: "CM",  x: 38, y: 50, player: "amy" },
       { pos: "CM",  x: 62, y: 50, player: "moulin" },
       { pos: "RM",  x: 84, y: 52, player: "walker" },
       { pos: "CAM", x: 50, y: 68, player: "tupci" },
@@ -262,7 +273,7 @@ window.FORMATIONS = {
       { pos: "CB",  x: 62, y: 22, player: "ferry" },
       { pos: "RB",  x: 84, y: 26, player: "kubikova" },
       { pos: "DM",  x: 50, y: 42, player: "tmidi" },
-      { pos: "CM",  x: 36, y: 56, player: "donovan" },
+      { pos: "CM",  x: 36, y: 56, player: "amy" },
       { pos: "CM",  x: 64, y: 56, player: "moulin" },
       { pos: "CAM", x: 50, y: 70, player: "tupci" },
       { pos: "LST", x: 40, y: 88, player: "danwhizzy" },
@@ -306,3 +317,62 @@ window.GAFFER_QUOTES = [
   "\u201CWe respect every opponent. We fear no algorithm.\u201D",
   "\u201CAsk the data. The data says we believe.\u201D"
 ];
+
+/* ------------------------------------------------------------
+   The Funhouse \u2014 defaults for every editable club toy. These
+   are only fallbacks: the live lists live in the backend under
+   config.fun and are edited from Housekeeping \u2192 Fun & Games.
+   Placeholders in chants/rumours: {name} = a random squad
+   surname, {full} = full name, {opp} = a mystery opponent.
+   ------------------------------------------------------------ */
+window.FUN_DEFAULTS = {
+  gaffer: {
+    names: window.GAFFER_NAMES.slice(),
+    quotes: window.GAFFER_QUOTES.slice(),
+    pinned: ""
+  },
+  chants: [
+    "Oh {name}, {name}, he/she gets the ball and then it's in the net!",
+    "{full}! {full}! The purple army sings your name!",
+    "We've got {name}, super {name}, we've only got the one \u2014 but that's enough for us!",
+    "Sign him up, sign her up, {name}'s on the teamsheet \u2014 up the Virgil, we go marching in!",
+    "From the sofa to the stands, forty years and one big dream \u2014 {name}'s the name we scream!",
+    "{name} on the wing, {name} scores again, the router held, the lads went in \u2014 we go again!"
+  ],
+  superlatives: [
+    "Player of the Season",
+    "Most likely to argue with the ref",
+    "Best in the group chat",
+    "Worst FIFA points spender",
+    "Most likely to blame the router",
+    "Golden Boot of the sofa",
+    "Most dramatic screenshot",
+    "Captain's Player of the Year",
+    "Most likely to score then refuse to celebrate",
+    "The one the lobby connection loves to punish"
+  ],
+  oracle: [
+    "The wheel says: 3\u20131. Comfortable.",
+    "It is written. You win, but the router makes you sweat.",
+    "Ask again after half time.",
+    "The algorithm foresees a Rizzy Dave non-appearance.",
+    "Signs point to a very dramatic screenshot.",
+    "Draw. Nobody's happy. Everybody blames Dan.",
+    "Tupci scores. Obviously. He's the system.",
+    "The data is unclear \u2014 but the vibes are immaculate.",
+    "Defeat. But a moral victory, which is the only kind that counts here.",
+    "Clean sheet incoming. Donovan sends her regards."
+  ],
+  rumours: [
+    "{full} 'has held talks' with {opp} \u2014 the group chat is in meltdown.",
+    "BREAKING: {opp} table a shock bid for {name}. The board laughed, then blocked their number.",
+    "{name} spotted liking a {opp} post. Loyalty committee convened at once.",
+    "Sources close to {name} insist he/she is '100% committed to the sofa'.",
+    "{opp} readying an audacious swoop for {full}. Fee: vibes and a firm handshake.",
+    "{name} to {opp}? 'Absolutely not,' said a spokesperson who is also the captain."
+  ],
+  rumourClubs: [
+    "a Championship mystery club", "Real Sofa CF", "Kitchen Athletic", "Dial-Up Rovers",
+    "FC Router Disaster", "Pub League United", "the away end", "Betfred Arena's rivals"
+  ]
+};

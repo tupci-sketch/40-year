@@ -134,7 +134,7 @@
   /* ========================================================
      ROUTER
      ======================================================== */
-  var ROUTES = ["home", "squad", "tactics", "player", "results", "stats", "honours", "gaffer", "about", "news", "social", "forum", "tickets", "chat", "admin"];
+  var ROUTES = ["home", "squad", "tactics", "player", "results", "stats", "honours", "gaffer", "funhouse", "about", "news", "social", "forum", "tickets", "chat", "admin"];
 
   function parseHash() {
     var h = (location.hash || "#home").replace(/^#/, "");
@@ -398,6 +398,44 @@
     return fl[p.id] || p.flavour;
   }
 
+  /* ---- Funhouse config: live lists from backend cfg().fun, falling
+     back to window.FUN_DEFAULTS so every toy works offline / pre-seed. ---- */
+  function funCfg() {
+    var d = window.FUN_DEFAULTS || {};
+    var f = cfg().fun || {};
+    function list(key) {
+      var v = f[key];
+      return (v && v.length) ? v : (d[key] || []);
+    }
+    var g = f.gaffer || {};
+    var dg = d.gaffer || {};
+    return {
+      gaffer: {
+        names: (g.names && g.names.length) ? g.names : (dg.names || []),
+        quotes: (g.quotes && g.quotes.length) ? g.quotes : (dg.quotes || []),
+        pinned: g.pinned || dg.pinned || ""
+      },
+      chants: list("chants"),
+      superlatives: list("superlatives"),
+      oracle: list("oracle"),
+      rumours: list("rumours"),
+      rumourClubs: list("rumourClubs")
+    };
+  }
+
+  /* shared little helpers for the toys */
+  function activeSquad() {
+    return (window.SQUAD || []).filter(function (p) { return !p.disabled; });
+  }
+  function randOf(arr) { return arr && arr.length ? arr[Math.floor(Math.random() * arr.length)] : ""; }
+  function fillChant(tpl, clubs) {
+    var sq = activeSquad();
+    return String(tpl || "")
+      .replace(/\{full\}/g, function () { var p = randOf(sq); return p ? p.name : "the lads"; })
+      .replace(/\{name\}/g, function () { var p = randOf(sq); return p ? U.surname(p) : "the lad"; })
+      .replace(/\{opp\}/g, function () { return randOf(clubs && clubs.length ? clubs : ["a mystery club"]); });
+  }
+
   /* ========================================================
      PAGES
      ======================================================== */
@@ -510,6 +548,19 @@
     };
   }
 
+  /* Amy ↔ Donovan: two #8s, one person — one EA-AI, one human. */
+  function linkNote(p) {
+    var other = U.playerById(p.linkedTo);
+    if (!other) return "";
+    var link = '<a href="#player/' + other.id + '">' + U.esc(other.name) + "</a>";
+    if (p.retiredAI) {
+      return '<span class="link-badge">SAME #8</span> Retired now — the engine room the algorithm ran before the human took the shirt. That’s ' + link +
+        " today. One was EA’s AI, one’s the real thing; their records stay their own.";
+    }
+    return '<span class="link-badge">SAME #8</span> Wears the 8 that ' + link +
+      " — the EA-AI original — kept warm. Same person in spirit: one was the algorithm, this one’s got a pulse. The two tallies never merge.";
+  }
+
   function rolesBlock(p) {
     var pr = pron(p);
     var rows = Object.keys(window.FORMATIONS).map(function (fkey) {
@@ -562,6 +613,7 @@
             '<p class="profile-flavour">' + U.esc(flavourOf(p)) + "</p>" +
             (p.isCaptain ? '<p class="profile-line profile-captain-line">Wears the armband. Picks the formation. Plays CAM in all of them.</p>' : "") +
             (p.isSystem ? '<p class="profile-line profile-system-line"><span class="system-badge">THE SYSTEM</span> Everything we do runs through ' + pron(p).obj + '. In footballing terms, the whole side <em>is</em> the player.</p>' : "") +
+            (p.linkedTo && U.playerById(p.linkedTo) ? '<p class="profile-line profile-link-line">' + linkNote(p) + "</p>" : "") +
             benchGag +
             rolesBlock(p) +
             '<div class="section-label">The record <span class="live-dot" title="From the club archive"></span></div>' +
@@ -991,13 +1043,14 @@
   PAGES.gaffer = {
     enter: function () {
       var mount = U.$("#gaffer-box");
-      var pinned = cfg().gaffer;
+      var gf = funCfg().gaffer;
+      var pinned = gf.pinned || cfg().gaffer;
 
       function pool() {
-        return window.GAFFER_NAMES.concat(window.SQUAD.map(function (p) { return p.name; }));
+        return gf.names.concat(activeSquad().map(function (p) { return p.name; }));
       }
       function quote() {
-        return window.GAFFER_QUOTES[Math.floor(Math.random() * window.GAFFER_QUOTES.length)];
+        return randOf(gf.quotes) || "“We go again.”";
       }
 
       function renderCard(name, sub, allowSpin) {
@@ -1044,6 +1097,128 @@
       } else {
         renderCard("?????", "The dugout stands empty. It always does.", true);
       }
+    }
+  };
+
+  /* ------------------------------------------------ FUNHOUSE (club toys) */
+  function shuffle(a) {
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+
+  function funCard(id, icon, title, blurb, btnLabel) {
+    return '<div class="fun-card panel">' +
+      '<div class="fun-card-head"><span class="fun-icon">' + icon + '</span><span class="fun-title">' + U.esc(title) + "</span></div>" +
+      '<p class="fun-blurb">' + U.esc(blurb) + "</p>" +
+      '<div class="fun-out" id="fun-out-' + id + '"></div>' +
+      '<div class="fun-actions"><button class="btn btn-gold btn-small" id="fun-btn-' + id + '">' + U.esc(btnLabel) + "</button>" +
+        '<button class="btn btn-ghost btn-small fun-copy" data-out="fun-out-' + id + '" hidden>Copy</button></div>' +
+    "</div>";
+  }
+
+  PAGES.funhouse = {
+    enter: function () {
+      DATA.config().then(function () {
+        applySquadOverrides();
+        var mt = U.$("#funhouse-view");
+        if (!mt) return;
+        var fun = funCfg();
+
+        mt.innerHTML =
+          '<p class="screen-intro">The club’s toy box. Everything here spins, and every list is editable in Housekeeping → Fun &amp; Games. Contract length: one click.</p>' +
+          '<div class="fun-grid">' +
+            funCard("xi", "🎲", "The XI the Gaffer Picked", "One tap and the wheel throws out a starting eleven. Tactical merit not guaranteed.", "Pick the XI") +
+            funCard("chant", "📣", "Matchday Chant Machine", "Terrace poetry, generated on demand. Best sung badly.", "Give us a song") +
+            funCard("super", "🏅", "Squad Superlatives", "Hands out the club’s least official awards to random names.", "Hand out awards") +
+            funCard("oracle", "🔮", "The Oracle", "Ask it anything. It answers in the club’s voice, which is to say: unreliably.", "Consult the Oracle") +
+            funCard("rumour", "📰", "Transfer Rumour Mill", "Definitely-real gossip from sources definitely close to the sofa.", "Start a rumour") +
+            funCard("motm", "⭐", "Player of the Matchday", "The wheel appoints a hero. No stats were consulted.", "Name the hero") +
+          "</div>";
+
+        function out(id) { return U.$("#fun-out-" + id, mt); }
+        function showCopy(id) { var c = mt.querySelector('.fun-copy[data-out="fun-out-' + id + '"]'); if (c) c.hidden = false; }
+
+        /* Random XI */
+        U.$("#fun-btn-xi", mt).addEventListener("click", function () {
+          var sq = activeSquad();
+          var gks = sq.filter(function (p) { return U.posGroup(p) === "GK"; });
+          var others = shuffle(sq.filter(function (p) { return U.posGroup(p) !== "GK" && p.id !== "rizzydave"; }));
+          var xi = [];
+          if (gks.length) xi.push(randOf(gks));
+          xi = xi.concat(others.slice(0, 10));
+          out("xi").innerHTML =
+            '<ul class="fun-list">' + xi.map(function (p) {
+              return "<li><span class='fun-num'>#" + p.number + "</span> " + U.esc(p.name) +
+                (p.id === "tupci" ? " <span class='fun-tag'>CAM, obviously</span>" : "") + "</li>";
+            }).join("") + "</ul>" +
+            '<p class="fun-foot">Rizzy Dave, as ever, did not make the cut. The meter is patient.</p>';
+          showCopy("xi");
+        });
+
+        /* Chant */
+        U.$("#fun-btn-chant", mt).addEventListener("click", function () {
+          out("chant").innerHTML = '<p class="fun-chant">“' + U.esc(fillChant(randOf(fun.chants), fun.rumourClubs)) + '”</p>';
+          showCopy("chant");
+        });
+
+        /* Superlatives */
+        U.$("#fun-btn-super", mt).addEventListener("click", function () {
+          var awards = shuffle(fun.superlatives).slice(0, Math.min(5, fun.superlatives.length));
+          var people = shuffle(activeSquad());
+          out("super").innerHTML = '<ul class="fun-list">' + awards.map(function (a, i) {
+            var who = people[i % people.length];
+            return "<li><span class='fun-award'>" + U.esc(a) + "</span><span class='fun-winner'>" + U.esc(who ? who.name : "—") + "</span></li>";
+          }).join("") + "</ul>";
+          showCopy("super");
+        });
+
+        /* Oracle */
+        out("oracle").innerHTML =
+          '<input type="text" id="fun-oracle-q" class="fun-input" maxlength="80" placeholder="Ask the Oracle (optional)…">';
+        U.$("#fun-btn-oracle", mt).addEventListener("click", function () {
+          var q = (U.$("#fun-oracle-q", mt) || {}).value || "";
+          out("oracle").innerHTML =
+            '<input type="text" id="fun-oracle-q" class="fun-input" maxlength="80" value="' + U.esc(q) + '" placeholder="Ask the Oracle (optional)…">' +
+            '<p class="fun-oracle-answer">🔮 ' + U.esc(randOf(fun.oracle)) + "</p>";
+          showCopy("oracle");
+        });
+
+        /* Rumour */
+        U.$("#fun-btn-rumour", mt).addEventListener("click", function () {
+          out("rumour").innerHTML = '<p class="fun-rumour">' + U.esc(fillChant(randOf(fun.rumours), fun.rumourClubs)) + "</p>";
+          showCopy("rumour");
+        });
+
+        /* Player of the Matchday */
+        U.$("#fun-btn-motm", mt).addEventListener("click", function () {
+          var who = randOf(activeSquad());
+          var lines = [
+            "carried the whole side and refused to make it weird.",
+            "was everywhere. The router could not cope.",
+            "did something the algorithm will study for years.",
+            "gets the nod. The screenshot is already framed.",
+            "ran the game from a position nobody asked them to play."
+          ];
+          out("motm").innerHTML = who
+            ? '<div class="fun-motm"><span class="fun-num">#' + who.number + '</span> <strong>' + U.esc(who.name) + "</strong> — " + U.esc(randOf(lines)) + "</div>"
+            : "";
+          showCopy("motm");
+        });
+
+        /* copy buttons */
+        U.$$(".fun-copy", mt).forEach(function (c) {
+          c.addEventListener("click", function () {
+            var el = U.$("#" + c.getAttribute("data-out"), mt);
+            var txt = el ? (el.innerText || el.textContent || "").trim() : "";
+            if (!txt) return;
+            try {
+              navigator.clipboard.writeText(txt).then(function () { U.toast("Copied. Go on, share it."); },
+                function () { U.toast("Couldn’t copy — select and copy manually."); });
+            } catch (e) { U.toast("Couldn’t copy — select and copy manually."); }
+          });
+        });
+      });
     }
   };
 
@@ -1251,6 +1426,15 @@
         var mt = U.$("#social-view");
         if (!mt) return;
         var handle = String(cfg().tiktok || "danwhizzy").replace(/^@/, "").replace(/[^a-zA-Z0-9_.]/g, "") || "danwhizzy";
+        var twitch = String(cfg().twitch || "40yrvirgil").replace(/^@/, "").replace(/[^a-zA-Z0-9_]/g, "") || "40yrvirgil";
+        var twitchCard =
+          '<div class="section-label">' + twitch + " on Twitch</div>" +
+          '<div class="twitch-card">' +
+            '<span class="twitch-card-avatar">' + twitch.charAt(0).toUpperCase() + "</span>" +
+            '<span class="twitch-card-handle">' + twitch + "</span>" +
+            '<span class="twitch-card-sub">Live from the Betfred Arena (the sofa). Follow for matchday streams.</span>' +
+            '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.twitch.tv/' + twitch + '">Watch on Twitch →</a>' +
+          "</div>";
         mt.innerHTML =
           '<div class="section-label">@' + handle + " on TikTok</div>" +
           '<p class="screen-intro">The golden boot moonlights as a content machine. Latest uploads, straight from the source \u2014 this updates itself every time he posts.</p>' +
@@ -1264,7 +1448,8 @@
               "</section>" +
             "</blockquote>" +
           "</div>" +
-          '<p class="social-fallback">Feed not loading? TikTok\u2019s profile widget can be temperamental \u2014 <a href="https://www.tiktok.com/@' + handle + '" target="_blank" rel="noopener">open @' + handle + " on TikTok \u2192</a></p>";
+          '<p class="social-fallback">Feed not loading? TikTok\u2019s profile widget can be temperamental \u2014 <a href="https://www.tiktok.com/@' + handle + '" target="_blank" rel="noopener">open @' + handle + " on TikTok \u2192</a></p>" +
+          twitchCard;
         var old = document.getElementById("tiktok-embed-script");
         if (old) old.parentNode.removeChild(old);
         var s = document.createElement("script");

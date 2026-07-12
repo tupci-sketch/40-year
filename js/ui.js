@@ -136,7 +136,8 @@
   function chips(p) {
     var out = controlBadge(p) + captainBadge(p);
     if (p.goldenBoot) out += '<span class="badge badge-gold" title="Top scorer — tally is live">GOLDEN BOOT</span>';
-    if (p.permaBench) out += '<span class="badge badge-bench" title="Perma-bench">SUB</span>';
+    if (p.retiredAI) out += '<span class="badge badge-retired" title="Retired EA-AI original">RETIRED · AI</span>';
+    else if (p.permaBench) out += '<span class="badge badge-bench" title="Perma-bench">SUB</span>';
     return out;
   }
 
@@ -155,7 +156,8 @@
       '<span class="card-tile-overlay">' +
         '<span class="card-tile-num">#' + p.number + '</span>' +
         '<span class="card-tile-name">' + esc(p.name) + '</span>' +
-        '<span class="card-tile-meta"><span class="card-tile-pos">' + esc(p.position) + '</span>' + controlBadge(p) + captainBadge(p) + '</span>' +
+        '<span class="card-tile-meta"><span class="card-tile-pos">' + esc(p.position) + '</span>' + controlBadge(p) + captainBadge(p) +
+          (p.retiredAI ? '<span class="badge badge-retired">RETIRED</span>' : "") + '</span>' +
       '</span>' +
     '</a>';
   }

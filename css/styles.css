@@ -1920,3 +1920,50 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 .tiktok-card-avatar { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: "Anton", sans-serif; font-size: 1.8rem; color: #fff; background: linear-gradient(135deg, var(--purple-electric), var(--purple-deep)); }
 .tiktok-card-handle { font-family: "Oswald", sans-serif; font-size: 1.25rem; color: var(--white); letter-spacing: 0.04em; }
 .tiktok-card-sub { color: var(--silver); font-size: 0.85rem; margin-bottom: 4px; }
+
+/* ============================================================
+   v4 — RETIRED badge · Amy↔Donovan link · Twitch · Funhouse ·
+   tactics random XI. Appended; nothing above is altered.
+   ============================================================ */
+
+/* ---- RETIRED · AI badge + the two-#8 link line ---- */
+.badge-retired { background: rgba(164, 165, 166, 0.1); color: var(--silver); border: 1px solid rgba(164, 165, 166, 0.4); letter-spacing: 0.06em; }
+.profile-link-line { color: var(--silver); font-size: 0.9rem; border-left: 2px solid var(--purple-electric); padding-left: 10px; }
+.link-badge { display: inline-block; font-family: var(--font-sub); font-size: 0.62rem; letter-spacing: 0.08em; color: var(--gold-bright); border: 1px solid rgba(242, 180, 92, 0.5); border-radius: 4px; padding: 1px 6px; margin-right: 6px; vertical-align: middle; }
+
+/* ---- Twitch profile card (mirrors the TikTok card) ---- */
+.twitch-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 30px 22px; margin-top: 14px; background: var(--panel-grad); border: 1px solid var(--panel-border); border-radius: var(--radius-sm); text-align: center; }
+.twitch-card-avatar { width: 64px; height: 64px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: "Anton", sans-serif; font-size: 1.8rem; color: #fff; background: linear-gradient(135deg, #9146FF, #5111A4); }
+.twitch-card-handle { font-family: "Oswald", sans-serif; font-size: 1.25rem; color: var(--white); letter-spacing: 0.04em; }
+.twitch-card-sub { color: var(--silver); font-size: 0.85rem; margin-bottom: 4px; max-width: 34ch; }
+
+/* ---- Tactics: action buttons cluster ---- */
+.tactics-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---- Funhouse ---- */
+.fun-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 640px) { .fun-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 960px) { .fun-grid { grid-template-columns: 1fr 1fr 1fr; } }
+.fun-card { display: flex; flex-direction: column; gap: 10px; padding: 18px; }
+.fun-card-head { display: flex; align-items: center; gap: 10px; }
+.fun-icon { font-size: 1.5rem; }
+.fun-title { font-family: var(--font-sub); font-size: 1.05rem; letter-spacing: 0.03em; color: var(--white); text-transform: uppercase; }
+.fun-blurb { color: var(--silver); font-size: 0.86rem; margin: 0; }
+.fun-out { min-height: 8px; }
+.fun-out:empty { min-height: 0; }
+.fun-actions { display: flex; gap: 8px; margin-top: auto; }
+.fun-list { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.fun-list li { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; background: rgba(105, 22, 204, 0.1); border-radius: 8px; font-size: 0.92rem; }
+.fun-num { font-family: var(--font-sub); color: var(--gold-bright); font-size: 0.8rem; min-width: 2.4em; }
+.fun-tag { color: var(--silver); font-size: 0.72rem; font-style: italic; margin-left: auto; }
+.fun-foot { color: var(--silver); font-size: 0.78rem; font-style: italic; margin: 8px 0 0; }
+.fun-award { color: var(--gold-bright); font-family: var(--font-sub); letter-spacing: 0.02em; }
+.fun-winner { margin-left: auto; color: var(--white); font-weight: 600; }
+.fun-chant, .fun-rumour { font-size: 1.02rem; color: var(--white); line-height: 1.5; margin: 4px 0 0; }
+.fun-chant { font-style: italic; }
+.fun-oracle-answer { color: var(--gold-bright); font-size: 1rem; margin: 8px 0 0; }
+.fun-motm { font-size: 1rem; color: var(--white); }
+.fun-input { width: 100%; padding: 8px 10px; background: rgba(7, 3, 11, 0.5); border: 1px solid var(--line); border-radius: 8px; color: var(--white); margin-bottom: 6px; }
+
+/* ---- Housekeeping: Fun & Games editors ---- */
+.fun-edit { width: 100%; padding: 8px 10px; background: rgba(7, 3, 11, 0.5); border: 1px solid var(--line); border-radius: 8px; color: var(--white); font-family: var(--font-body); font-size: 0.9rem; resize: vertical; }

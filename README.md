@@ -26,21 +26,30 @@ backend.gs              the Apps Script backend ("The Archivist")
 assets/img/             crest + player cards
 ```
 
-## Deploying the backend (upgrade over the old one)
+## Deploying the backend (a rebuilt, drop-in-compatible `backend.gs`)
 
-1. Open the existing Apps Script project.
-2. Select everything in the editor, paste in `backend.gs`, **Save**.
-3. **Deploy → Manage deployments → ✏ edit → New version → Deploy.**
+The backend source was rebuilt from the site's own client contract and the
+live Sheet's exact layout. It is **drop-in compatible**: same tabs, same
+password/session hashing (same `PEPPER` script property), so every existing
+login and all archived data keep working.
+
+1. **Back up first.** Copy the current Apps Script editor code somewhere safe —
+   that text *is* your live backend and your only rollback.
+2. Open the existing Apps Script project, select everything, paste in
+   `backend.gs`, **Save**.
+3. **Run `healthCheck()` from the editor** (Run ▸ `healthCheck`) and read the
+   Execution log. It must show each tab's row count and `schema OK`. This is
+   read-only apart from appending any missing header columns — it changes no
+   data.
+4. Only then **Deploy → Manage deployments → ✏ edit → New version → Deploy.**
    The `/exec` URL does not change; the site keeps working.
-4. Load the site once. The first request creates the new tabs and
-   seeds the full archive automatically. Existing accounts, chat and
-   config are untouched. The old `ea_*` tabs stay as curios; the old
-   hourly trigger deletes itself the next time it fires.
+5. Load the site once and confirm an existing user (e.g. `tupci`) is still
+   signed in / can sign in, and the record, careers and results read as before.
 
-Fresh install instead: paste `backend.gs` into a new Apps Script
-project, run `setup()` once (grant permissions), then Deploy → Web
-app (Execute as **Me**, access **Anyone**) and put the `/exec` URL in
-`js/config.js`.
+Fresh install instead: paste `backend.gs` into a new Apps Script project, run
+`setup()` once (grant permissions), then Deploy → Web app (Execute as **Me**,
+access **Anyone**) and put the `/exec` URL in `js/config.js`. Seeding is guarded
+by the `archive_seeded` config flag, so it never overwrites an existing archive.
 
 ## How the numbers work
 
@@ -60,6 +69,15 @@ First account to register becomes level 9 (the keys). Levels: 1 fan ·
 5+ steward/mod · 9 admin. The server re-checks the level on every
 action — the client only decides what to draw.
 
+**What each level can do in Housekeeping:**
+
+- **L5+ (mods):** log/edit matches, fixtures, squad identity, socials
+  (TikTok + Twitch), player flavour, milestones, the announcement banner,
+  and Fun & Games — plus chat and forum moderation.
+- **L9 (admin only):** the things that could rewrite history or break trust —
+  deleting matches, career + club-record baselines, the lore, user levels and
+  bans, personal data (birthdays/partners), and archiving a season.
+
 ## Troubleshooting
 
 - **"Backend not connected"** — `js/config.js` has no `/exec` URL.
@@ -78,6 +96,31 @@ action — the client only decides what to draw.
 - **Security:** Content-Security-Policy + referrer policy; Cloudflare Turnstile on register/login.
 - **Squad management (admin):** add, edit, or hide players from Housekeeping → "Squad · players" — identity only; stats and match history are never touched. Hidden players drop off the squad and team-sheet pickers but stay attached to past results.
 - **Easter eggs:** Konami code, five taps on the crest, and a few club in-jokes.
+
+## v4 update — what's new
+
+- **One stat entry, not two.** The match editor merged the old *Scorers* and
+  *Per-player stats* sections into a single **Players** list — enter each
+  player's line once and the scoresheet is derived from the Goals field.
+  Legacy scorer-only matches fold in automatically when you open them.
+- **Squad moves:** SWAY removed everywhere. **Amy Whimsy** joins as the human
+  **#8** (she takes the shirt in every formation); **Donovan** is retained as a
+  separate **RETIRED · AI** #8 — the EA-AI original, cross-linked to Amy, stats
+  never merged. New signing **Funky Cool Medina (#21)**, an AI central mid.
+- **Socials:** Twitch (`40yrvirgil`) added beside TikTok; both handles editable
+  in Housekeeping → "Socials".
+- **The Funhouse** (new page): the manager wheel plus a Random XI generator,
+  chant machine, squad superlatives, an Oracle, a transfer-rumour mill and
+  Player of the Matchday. Every word-list is editable in Housekeeping →
+  "Fun & Games". The tactics board gained a **🎲 Gaffer's XI** shuffle.
+- **Access levels rebalanced** so mods (L5) can run the day-to-day club; only
+  history/trust-critical actions stay admin-only (see *Accounts & levels*).
+- **Season archiving groundwork:** the backend now tracks seasons and can
+  archive one (snapshotting its record + careers read-only) and start a fresh
+  season under the same club — ready for FC26 → FC27 in September.
+- **Backend rebuilt:** `backend.gs` was re-authored from the client contract and
+  the live Sheet schema, drop-in compatible with all existing data, and ships
+  with a `healthCheck()` you run before redeploying.
 
 ### Cloudflare Turnstile (bot check)
 

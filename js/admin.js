@@ -2,9 +2,10 @@
    The 40Yr Virgil — Housekeeping console  v2 "The Ledger"
    ------------------------------------------------------------
    The archive is managed here, game by game.
-     L5+ (mods)  · add matches, edit any match + per-player stats
+     L5+ (mods)  · matches (add/edit), fixtures, squad identity,
+                   socials, flavour, milestones, banner, Fun & Games
      L9 (admin)  · delete matches, career baselines, club record,
-                   banner, lore, users, flavour, milestones
+                   lore, users, personal data, season archive
    The server re-checks every level on every action; this file
    only decides what to draw.
    ============================================================ */
@@ -76,22 +77,25 @@
 
       grid.innerHTML =
         blockMatchManager(matches) +
+        blockFixtures(c) +
+        blockSquad() +
+        blockSocials(c) +
+        blockFun(c) +
+        blockFlavour(c) +
+        blockMilestones(c) +
+        blockBanner(c) +
+        blockUsers(admin) +
         (admin ? blockRecord(record) : "") +
         (admin ? blockCareer(career, baselineSeq) : "") +
-        blockFixtures(c) +
-        blockBanner(c, admin) +
         (admin ? blockLore(c) : "") +
-        blockUsers(admin) +
-        (admin ? blockFlavour(c) : "") +
-        (admin ? blockMilestones(c) : "") +
-        (admin ? blockTiktok(c) : "") +
-        (admin ? blockSquad() : "") +
         (admin ? blockPersonal() : "") +
+        (admin ? blockSeason(c) : "") +
         blockForumNote() +
         blockChatNote();
 
       bind(matches, career, record, baselineSeq, admin);
-      if (admin) { renderSquadEditor(); renderPersonal(); }
+      renderSquadEditor();
+      if (admin) renderPersonal();
 
       // A pencil on the Results page may have sent us here with a target.
       var jump = null;
@@ -171,12 +175,9 @@
               }).join("") +
             "</select>", "override for forfeits etc.") +
         "</div>" +
-        '<div class="section-label">Scorers</div>' +
-        '<div id="me-scorers"></div>' +
-        '<button class="btn btn-ghost btn-small" id="me-scorer-add" type="button">+ Add scorer</button>' +
-        '<div class="section-label">Per-player stats <span class="admin-inline-note">optional — these keep careers ticking</span></div>' +
+        '<div class="section-label">Players <span class="admin-inline-note">one line per player involved — the Goals here fill the scoresheet automatically</span></div>' +
         '<div id="me-players"></div>' +
-        '<button class="btn btn-ghost btn-small" id="me-player-add" type="button">+ Add player line</button>' +
+        '<button class="btn btn-ghost btn-small" id="me-player-add" type="button">+ Add player</button>' +
         field("Match note", '<input type="text" id="me-note" maxlength="200" value="' + U.esc(m.note || "") + '">', "one line for the books") +
         '<div class="admin-actions">' +
           '<button class="btn btn-primary btn-small" id="me-save">' + (isNew ? "Add to the ledger" : "Save changes") + "</button>" +
@@ -185,15 +186,33 @@
         "</div>" +
       "</div>";
 
-    (m.scorers || []).forEach(function (s) { addScorerRow(s.id, s.goals); });
-    (m.players || []).forEach(function (p) { addPlayerRow(p); });
+    // One unified player list. Legacy matches stored goals only in the
+    // scorer list — fold those in (goals pre-filled) so nothing is lost.
+    var seedPlayers = (m.players || []).slice();
+    var haveIds = {};
+    seedPlayers.forEach(function (p) { if (p && p.id) haveIds[p.id] = 1; });
+    (m.scorers || []).forEach(function (s) {
+      if (s && s.id && !haveIds[s.id]) { seedPlayers.push({ id: s.id, goals: s.goals }); haveIds[s.id] = 1; }
+    });
+    seedPlayers.forEach(function (p) { addPlayerRow(p); });
 
-    U.$("#me-scorer-add", box).addEventListener("click", function () { addScorerRow("", 1); });
     U.$("#me-player-add", box).addEventListener("click", function () { addPlayerRow(null); });
     U.$("#me-cancel", box).addEventListener("click", function () { box.innerHTML = ""; });
 
     U.$("#me-save", box).addEventListener("click", function () {
       var btn = this;
+      var players = U.$$(".me-player", box).map(function (row) {
+        var g = function (cls) { return row.querySelector("." + cls).value; };
+        return {
+          id: row.querySelector("select").value,
+          goals: g("mp-g"), assists: g("mp-a"), rating: g("mp-r"),
+          shots: g("mp-sh"), tackles: g("mp-tk"),
+          passesMade: g("mp-pm"), passAttempts: g("mp-pa"), redCards: g("mp-rc")
+        };
+      }).filter(function (p) { return p.id; });
+      // Scorers are DERIVED from the player lines — enter stats once, only.
+      var scorers = players.filter(function (p) { return Number(p.goals) > 0; })
+        .map(function (p) { return { id: p.id, goals: p.goals }; });
       var payload = {
         seq: isNew ? 0 : m.seq,
         stage: U.$("#me-stage", box).value,
@@ -204,18 +223,8 @@
         theirScore: U.$("#me-their", box).value,
         result: U.$("#me-result", box).value,
         note: U.$("#me-note", box).value,
-        scorers: U.$$(".me-scorer", box).map(function (row) {
-          return { id: row.querySelector("select").value, goals: row.querySelector("input").value };
-        }).filter(function (s) { return s.id; }),
-        players: U.$$(".me-player", box).map(function (row) {
-          var g = function (cls) { return row.querySelector("." + cls).value; };
-          return {
-            id: row.querySelector("select").value,
-            goals: g("mp-g"), assists: g("mp-a"), rating: g("mp-r"),
-            shots: g("mp-sh"), tackles: g("mp-tk"),
-            passesMade: g("mp-pm"), passAttempts: g("mp-pa"), redCards: g("mp-rc")
-          };
-        }).filter(function (p) { return p.id; })
+        scorers: scorers,
+        players: players
       };
       var msg = U.$("#me-msg", box);
       if (!payload.opponent) { msg.textContent = "Opponent needed."; return; }
@@ -234,18 +243,6 @@
     });
 
     box.scrollIntoView({ behavior: "smooth", block: "start" });
-
-    function addScorerRow(id, goals) {
-      var mountS = U.$("#me-scorers", box);
-      var row = document.createElement("div");
-      row.className = "field-row me-scorer";
-      row.innerHTML =
-        '<label class="field"><span class="field-label">Player</span><select>' + playerOptions(id) + "</select></label>" +
-        '<label class="field me-narrow"><span class="field-label">Goals</span><input type="number" min="1" max="20" value="' + (goals || 1) + '"></label>' +
-        '<button class="btn btn-ghost btn-small me-row-del" type="button">✕</button>';
-      row.querySelector(".me-row-del").addEventListener("click", function () { row.remove(); });
-      mountS.appendChild(row);
-    }
 
     function addPlayerRow(p) {
       p = p || {};
@@ -373,14 +370,13 @@
   /* ========================================================
      4 · BANNER / LORE / USERS / FLAVOUR / MILESTONES / CHAT
      ======================================================== */
-  function blockBanner(c, admin) {
-    if (!admin) return "";
+  function blockBanner(c) {
     var b = c.banner || { text: "", active: false };
     return block("Announcement banner",
       field("Banner text", '<input type="text" id="adm-banner-text" maxlength="160" value="' + U.esc(b.text || "") + '">') +
       '<label class="field field-check"><input type="checkbox" id="adm-banner-active"' + (b.active ? " checked" : "") + "> Banner is live</label>" +
       '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-banner-save">Save banner</button></div>',
-      "L9");
+      "L5+");
   }
 
   function blockLore(c) {
@@ -415,7 +411,7 @@
       "</div>" +
       '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-flavour-save">Set flavour</button></div>' +
       (current ? '<div class="admin-sublist">' + current + "</div>" : ""),
-      "L9");
+      "L5+");
   }
 
   function blockMilestones(c) {
@@ -431,7 +427,7 @@
       "</div>" +
       '<div class="admin-actions"><button class="btn btn-primary btn-small" id="adm-ms-add">Add milestone</button></div>' +
       (list ? '<div class="admin-sublist">' + list + "</div>" : '<p class="admin-inline-note">No milestones yet. Make some history first.</p>'),
-      "L9");
+      "L5+");
   }
 
   function blockChatNote() {
@@ -475,11 +471,69 @@
       "L5+");
   }
 
-  function blockTiktok(c) {
-    return block("Socials · TikTok handle",
-      '<p class="admin-note">Whose profile shows on the <a href="#social">Socials</a> page. No @ needed — it self-updates with new uploads.</p>' +
-      '<div class="field-row">' + field("TikTok handle", '<input type="text" id="tt-handle" maxlength="30" value="' + U.esc(c.tiktok || "danwhizzy") + '">') + "</div>" +
-      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="tt-save">Save handle</button><span class="admin-inline-note" id="tt-msg"></span></div>',
+  function blockSocials(c) {
+    return block("Socials · TikTok &amp; Twitch",
+      '<p class="admin-note">Which accounts show on the <a href="#social">Socials</a> page. No @ needed. TikTok self-updates with new uploads; Twitch links to the channel.</p>' +
+      '<div class="field-row">' +
+        field("TikTok handle", '<input type="text" id="tt-handle" maxlength="30" value="' + U.esc(c.tiktok || "danwhizzy") + '">') +
+        field("Twitch handle", '<input type="text" id="tw-handle" maxlength="30" value="' + U.esc(c.twitch || "40yrvirgil") + '">') +
+      "</div>" +
+      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="soc-save">Save socials</button><span class="admin-inline-note" id="soc-msg"></span></div>',
+      "L5+");
+  }
+
+  /* ---------- Fun & Games (L5+) ---------- */
+  function funList(c, key) {
+    var f = (c.fun || {})[key];
+    var d = (window.FUN_DEFAULTS || {})[key] || [];
+    return (f && f.length) ? f : d;
+  }
+  function funArea(id, label, lines, hint) {
+    return '<label class="field"><span class="field-label">' + label +
+      (hint ? ' <span class="admin-inline-note">' + hint + "</span>" : "") + "</span>" +
+      '<textarea class="fun-edit" id="' + id + '" rows="4">' + U.esc((lines || []).join("\n")) + "</textarea></label>";
+  }
+  function blockFun(c) {
+    var g = (c.fun && c.fun.gaffer) || {};
+    var dg = (window.FUN_DEFAULTS || {}).gaffer || {};
+    var names = (g.names && g.names.length) ? g.names : (dg.names || []);
+    var quotes = (g.quotes && g.quotes.length) ? g.quotes : (dg.quotes || []);
+    return block("Fun &amp; Games · the Funhouse",
+      '<p class="admin-note">Every list behind the <a href="#funhouse">Funhouse</a> toys and the <a href="#gaffer">Gaffer</a> wheel — one entry per line. Chants &amp; rumours accept placeholders: <code>{name}</code> a random surname, <code>{full}</code> a full name, <code>{opp}</code> a mystery club.</p>' +
+      funArea("fun-gaffer-names", "Manager wheel · names", names) +
+      funArea("fun-gaffer-quotes", "Manager wheel · quotes", quotes) +
+      '<div class="field-row">' +
+        field("Pinned gaffer", '<input type="text" id="fun-gaffer-pinned" maxlength="40" value="' + U.esc(g.pinned || "") + '">', "blank = the wheel spins freely") +
+      "</div>" +
+      funArea("fun-chants", "Chant machine", funList(c, "chants")) +
+      funArea("fun-superlatives", "Squad superlatives (awards)", funList(c, "superlatives")) +
+      funArea("fun-oracle", "The Oracle (answers)", funList(c, "oracle")) +
+      funArea("fun-rumours", "Transfer rumours", funList(c, "rumours")) +
+      funArea("fun-rumourClubs", "Rumour clubs (for {opp})", funList(c, "rumourClubs")) +
+      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="fun-save">Save Fun &amp; Games</button><span class="admin-inline-note" id="fun-msg"></span></div>',
+      "L5+");
+  }
+
+  /* ---------- Season archive (L9) ---------- */
+  function blockSeason(c) {
+    var seasons = c.seasons || [];
+    var current = c.currentSeason || "";
+    var list = seasons.length
+      ? '<div class="admin-sublist">' + seasons.map(function (s) {
+          return '<div class="admin-row"><span class="admin-row-main"><strong>' + U.esc(s.label || s.id) + "</strong>" +
+            (s.id === current ? ' <span class="level-chip level-mod">current</span>' : "") +
+            (s.archived ? ' <span class="admin-inline-note">archived ' + U.esc((s.endedISO || "").slice(0, 10)) + "</span>" : "") +
+          "</span></div>";
+        }).join("") + "</div>"
+      : '<p class="admin-inline-note">Season tracking initialises on the next backend deploy.</p>';
+    return block("Seasons · archive &amp; roll over",
+      '<p class="admin-note">When a season ends (FC26 → FC27), archive it: the current record and careers are snapshotted read-only and a fresh season starts under the same club. Accounts, chat, forum and squad carry over. This cannot be undone — use it once, in September.</p>' +
+      list +
+      '<div class="field-row">' +
+        field("New season id", '<input type="text" id="season-id" maxlength="12" placeholder="fc27">', "short, lowercase") +
+        field("New season label", '<input type="text" id="season-label" maxlength="40" placeholder="Season 3 · FC27">') +
+      "</div>" +
+      '<div class="admin-actions"><button class="btn btn-ghost btn-small" id="season-archive">Archive season &amp; start new</button><span class="admin-inline-note" id="season-msg"></span></div>',
       "L9");
   }
 
@@ -570,7 +624,7 @@
     return block("Squad · players",
       '<p class="admin-note">Edit any player\u2019s identity, add a new one, or hide one who\u2019s left. Stats and match history are never touched \u2014 this is identity only. New players sit on the bench until their formation roles are set in the code.</p>' +
       '<div id="sq-view">' + U.emptyState("Loading the squad\u2026", "", "\uD83D\uDC65") + "</div>",
-      "L9");
+      "L5+");
   }
 
   function squadRow(p) {
@@ -793,15 +847,64 @@
     });
     bindFixtureDels();
 
-    /* tiktok handle */
-    b = U.$("#tt-save", root);
+    /* socials (tiktok + twitch) */
+    b = U.$("#soc-save", root);
     if (b) b.addEventListener("click", function () {
       b.disabled = true;
-      var msg = U.$("#tt-msg", root);
-      NET.adminTiktok(U.$("#tt-handle", root).value).then(function (r) {
+      var msg = U.$("#soc-msg", root);
+      NET.adminSocials({ tiktok: U.$("#tt-handle", root).value, twitch: U.$("#tw-handle", root).value }).then(function (r) {
         b.disabled = false;
         msg.textContent = (r && r.ok) ? "✓ saved" : "✗ failed";
-        if (r && r.ok) { U.toast("TikTok handle saved."); refreshConfig(); }
+        if (r && r.ok) { U.toast("Socials saved."); refreshConfig(); }
+      });
+    });
+
+    /* fun & games */
+    b = U.$("#fun-save", root);
+    if (b) b.addEventListener("click", function () {
+      b.disabled = true;
+      var msg = U.$("#fun-msg", root);
+      function lines(id) {
+        return (U.$("#" + id, root).value || "").split("\n").map(function (s) { return s.trim(); }).filter(function (s) { return !!s; });
+      }
+      var fun = {
+        gaffer: {
+          names: lines("fun-gaffer-names"),
+          quotes: lines("fun-gaffer-quotes"),
+          pinned: (U.$("#fun-gaffer-pinned", root).value || "").trim()
+        },
+        chants: lines("fun-chants"),
+        superlatives: lines("fun-superlatives"),
+        oracle: lines("fun-oracle"),
+        rumours: lines("fun-rumours"),
+        rumourClubs: lines("fun-rumourClubs")
+      };
+      NET.adminFun({ action: "set", fun: fun }).then(function (r) {
+        b.disabled = false;
+        msg.textContent = (r && r.ok) ? "✓ saved" : "✗ " + ((r && r.error) || "failed");
+        if (r && r.ok) { U.toast("Fun & Games saved."); refreshConfig(); }
+      });
+    });
+
+    /* season archive (L9) */
+    b = U.$("#season-archive", root);
+    if (b) b.addEventListener("click", function () {
+      var btn = this, msg = U.$("#season-msg", root);
+      var id = (U.$("#season-id", root).value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      var label = (U.$("#season-label", root).value || "").trim();
+      if (!id) { msg.textContent = "New season id needed."; return; }
+      if (btn.getAttribute("data-armed") !== "1") {
+        btn.setAttribute("data-armed", "1");
+        btn.textContent = "Sure? This archives the season";
+        setTimeout(function () { btn.setAttribute("data-armed", ""); btn.textContent = "Archive season & start new"; }, 3500);
+        return;
+      }
+      btn.disabled = true; msg.textContent = "Archiving…";
+      NET.adminSeason({ action: "archive", newId: id, newLabel: label }).then(function (r) {
+        btn.disabled = false; btn.setAttribute("data-armed", "");
+        btn.textContent = "Archive season & start new";
+        msg.textContent = (r && r.ok) ? "✓ archived" : "✗ " + ((r && r.error) || "failed");
+        if (r && r.ok) { U.toast("Season archived. New season begins."); refreshConfig().then(function () { enter(root, helpers); }); }
       });
     });
   }
