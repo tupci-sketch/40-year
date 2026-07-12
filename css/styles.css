@@ -1967,3 +1967,129 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 
 /* ---- Housekeeping: Fun & Games editors ---- */
 .fun-edit { width: 100%; padding: 8px 10px; background: rgba(7, 3, 11, 0.5); border: 1px solid var(--line); border-radius: 8px; color: var(--white); font-family: var(--font-body); font-size: 0.9rem; resize: vertical; }
+
+/* ============================================================
+   The Book of Tüpci (hidden) + mobile crest tap fix
+   ============================================================ */
+
+/* Kill mobile double-tap zoom + long-press image menu on the crests
+   so the tap-counter easter egg works on touch devices. */
+.hero-crest, .nav-crest {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.hero-crest { cursor: pointer; }
+
+.tupci-book {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 8px 2px 40px;
+  text-align: center;
+}
+.tupci-eyebrow {
+  font-family: var(--font-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  color: var(--silver);
+  margin-bottom: 6px;
+}
+.tupci-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 6vw, 2.6rem);
+  color: var(--gold-bright);
+  text-shadow: var(--glow-gold);
+  margin-bottom: 22px;
+}
+.tupci-cmds {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 26px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tupci-cmds li, .tupci-cmd-xi {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 14px 16px;
+  background: var(--panel-grad);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--white);
+  line-height: 1.5;
+}
+.tupci-num {
+  font-family: var(--font-display);
+  color: var(--gold);
+  font-size: 1.1rem;
+  min-width: 2.2em;
+  text-align: right;
+  flex: 0 0 auto;
+}
+.tupci-text { flex: 1; }
+
+/* Layer 2 trigger — faint, easy to miss. */
+.tupci-margin {
+  display: inline-block;
+  background: none;
+  border: none;
+  color: rgba(164, 165, 166, 0.35);
+  font-style: italic;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 6px 10px;
+  transition: color 0.3s;
+}
+.tupci-margin:hover, .tupci-margin:focus { color: var(--silver); outline: none; }
+
+/* Reveal fade for XI and the prayers. */
+.tupci-reveal {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.tupci-reveal.shown { opacity: 1; transform: none; }
+
+.tupci-xi { margin-top: 6px; }
+.tupci-xi-lead { color: var(--silver); font-style: italic; margin-bottom: 10px; }
+.tupci-cmd-xi { text-align: left; border-color: rgba(242, 180, 92, 0.45); }
+
+/* Layer 3 trigger — the amen, quietly clickable once XI is shown. */
+.tupci-amen {
+  margin-top: 18px;
+  background: none;
+  border: none;
+  font-family: var(--font-sub);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  color: rgba(218, 152, 81, 0.5);
+  cursor: pointer;
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.tupci-amen:hover, .tupci-amen:focus { color: var(--gold-bright); text-shadow: var(--glow-gold); outline: none; }
+.tupci-amen:disabled { color: var(--silver); cursor: default; text-shadow: none; }
+
+.tupci-prayers { margin-top: 26px; text-align: left; }
+.tupci-prayer {
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  background: rgba(7, 3, 11, 0.4);
+  border-left: 2px solid var(--purple-electric);
+  border-radius: var(--radius-sm);
+}
+.tupci-prayer-title {
+  font-family: var(--font-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 1rem;
+  color: var(--gold-bright);
+  margin-bottom: 8px;
+}
+.tupci-prayer-body { color: var(--white); line-height: 1.7; font-size: 0.95rem; }
+.tupci-exit { display: inline-block; margin-top: 26px; }

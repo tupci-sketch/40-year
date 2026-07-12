@@ -134,7 +134,7 @@
   /* ========================================================
      ROUTER
      ======================================================== */
-  var ROUTES = ["home", "squad", "tactics", "player", "results", "stats", "honours", "gaffer", "funhouse", "about", "news", "social", "forum", "tickets", "chat", "admin"];
+  var ROUTES = ["home", "squad", "tactics", "player", "results", "stats", "honours", "gaffer", "funhouse", "about", "news", "social", "forum", "tickets", "book", "chat", "admin"];
 
   function parseHash() {
     var h = (location.hash || "#home").replace(/^#/, "");
@@ -1666,6 +1666,95 @@
 
   PAGES.forum = { enter: function () { renderForum(); } };
 
+  /* ------------------------------------------------ THE BOOK OF TÜPCI (hidden) */
+  var ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+
+  var COMMANDMENTS = [
+    "I am Tüpci thy Captain, who brought thee up out of Division 5, out of the house of relegation, and who leadeth thee toward the Elite Division. Thou shalt have no gaffers before me.",
+    "Thou shalt not make unto thee any false formation, nor any likeness of a system that runs through any man but the Captain. Thou shalt not bow down to the 4-4-2.",
+    "Thou shalt not move Tüpci off CAM. For the board will not hold him guiltless that draggeth his token to the wing.",
+    "Remember the matchday, to keep it holy. Six days shalt thou grind the group chat, but the seventh is the fixture — thou shalt show up, and thou shalt press.",
+    "Honour thy Captain and thy talisman, that thy days may be long, and thy climb to the Elite Division swift, upon the archive which the club giveth thee.",
+    "Thou shalt not score in thine own net.",
+    "Thou shalt not commit the flat back four when the diamond is called for.",
+    "Thou shalt not steal Danwhizzy’s tap-in and claim it as a solo run. The archive remembereth who assisted.",
+    "Thou shalt not bear false witness against thy router. When thou laggeth, blame thyself, not the servers — for they know not what they do, but they know thy IP.",
+    "Thou shalt not covet thy opponent’s meta squad, nor his finesse shot, nor his overpowered striker, nor anything that is thy opponent’s. Trust the process. Pass to the purple shirts."
+  ];
+
+  var COMMANDMENT_XI = "Rizzy Dave stayeth on the bench. Not starting. Still dangerous. So it was written, so it shall remain.";
+
+  var PRAYERS = [
+    { title: "The Captain’s Creed", body:
+      "I believe in Tüpci, the Captain almighty,\nmaker of chances and assists,\nand in the CAM, his one eternal position,\nnon-negotiable, begotten not rotated,\nof one formation with the system.\nThrough him all goals were made.\nHe is ever-present, and of his 392 games there shall be no end.\nUp the Virgil." },
+    { title: "The Tüpci Prayer", body:
+      "Our Captain, who art in CAM,\nhallowed be thy touch.\nThy through-ball come, thy vision be done,\nin the final third as it is in the build-up.\nGive us this day our killer pass,\nand forgive us our misplaced ones,\nas we forgive those who overhit theirs.\nLead us not into a flat 4-4-2,\nbut deliver us the system.\nFor thine is the swagger, the armband, and the assist,\nfor ever and ever. Up the Virgil." },
+    { title: "Hail Tüpci", body:
+      "Hail Tüpci, full of vision, the ball is with thee.\nBlessed art thou among midfielders,\nand blessed is the movement of thy runs.\nHoly Captain, spine of the side,\ndictate for us sinners now,\nand at the hour of the reset. Up the Virgil." },
+    { title: "The System’s Grace", body:
+      "Bless us, O Captain, and these thy lineups,\nwhich we are about to receive from thy clipboard.\nThou art at CAM. Thou wilt always be at CAM.\nWe give thanks, and we press. Amen. Up the Virgil." },
+    { title: "Act of Contrition (for moving him off CAM)", body:
+      "O my Captain, I am heartily sorry\nfor having dragged thy token to the wing.\nI detest my drag-and-drops,\nbut most of all because they offend thee,\nwho art the whole system.\nI firmly resolve, with the help of the reset button,\nto keep thee at CAM, to sin no more,\nand to avoid the near occasion of a diamond formation. Up the Virgil." },
+    { title: "The Doxology", body:
+      "Glory be to the Captain,\nand to the armband, and to the holy assist.\nAs it was in Division 5,\nis now in the archive,\nand ever shall be, 392 without end. Up the Virgil." },
+    { title: "Psalm 90 (the OVR)", body:
+      "The Captain is my shepherd, I shall not lack service.\nHe maketh me to run beyond in green channels,\nhe leadeth me past the still fullbacks.\nYea, though I walk through the valley of the low block,\nI will fear no press, for the system is with me.\nSurely goals and assists shall follow me all the days of the season,\nand I will dwell in the final third for ever. Up the Virgil." },
+    { title: "The Ever-Present Litany", body:
+      "Captain, hear us. Captain, graciously hear us.\nFrom relegation, deliver us, Tüpci.\nFrom the dropped router, deliver us, Tüpci.\nFrom the own goal, deliver us, Tüpci.\nSystem of the whole side, have mercy on us.\nEver-present of 392 games, have mercy on us.\nHe who is always CAM, pray for us. Up the Virgil." }
+  ];
+
+  function reveal(el) {
+    if (!el) return;
+    el.hidden = false;
+    requestAnimationFrame(function () { el.classList.add("shown"); });
+  }
+
+  PAGES.book = {
+    enter: function () {
+      var mt = U.$("#book-view");
+      if (!mt) return;
+      mt.innerHTML =
+        '<div class="tupci-book">' +
+          '<p class="tupci-eyebrow">Brought down from Mount Betfred</p>' +
+          '<h1 class="tupci-title">The Ten Commandments of Tüpci</h1>' +
+          '<ol class="tupci-cmds">' +
+            COMMANDMENTS.map(function (c, i) {
+              return '<li><span class="tupci-num">' + ROMAN[i] + '</span><span class="tupci-text">' + U.esc(c) + "</span></li>";
+            }).join("") +
+          "</ol>" +
+          '<button type="button" class="tupci-margin" id="tupci-xi-trigger">…and an eleventh, written small in the margin.</button>' +
+          '<div class="tupci-reveal tupci-xi" id="tupci-xi" hidden></div>' +
+          '<div class="tupci-reveal tupci-prayers" id="tupci-prayers" hidden></div>' +
+          '<a class="back-link tupci-exit" href="#home">← close the book</a>' +
+        "</div>";
+
+      var xiTrigger = U.$("#tupci-xi-trigger", mt);
+      xiTrigger.addEventListener("click", function () {
+        xiTrigger.hidden = true;
+        var xi = U.$("#tupci-xi", mt);
+        xi.innerHTML =
+          '<p class="tupci-xi-lead">And an eleventh, for it is the oldest law of all —</p>' +
+          '<p class="tupci-cmd-xi"><span class="tupci-num">XI</span><span class="tupci-text">' + U.esc(COMMANDMENT_XI) + "</span></p>" +
+          '<button type="button" class="tupci-amen" id="tupci-amen">Up the Virgil.</button>';
+        reveal(xi);
+        U.$("#tupci-amen", mt).addEventListener("click", function () {
+          this.disabled = true;
+          this.textContent = "Amen.";
+          var pr = U.$("#tupci-prayers", mt);
+          pr.innerHTML =
+            '<p class="tupci-eyebrow">Deeper still — the prayers</p>' +
+            PRAYERS.map(function (p) {
+              return '<article class="tupci-prayer">' +
+                '<h2 class="tupci-prayer-title">' + U.esc(p.title) + "</h2>" +
+                '<p class="tupci-prayer-body">' + U.esc(p.body).replace(/\n/g, "<br>") + "</p>" +
+              "</article>";
+            }).join("");
+          reveal(pr);
+        });
+      });
+    }
+  };
+
   /* ------------------------------------------------ EASTER EGGS (ungated club fun) */
   function initEasterEggs() {
     var KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
@@ -1690,16 +1779,22 @@
       "472 goals. 435 assists. One ongoing argument.",
       "The bot delivers. Donovan said so."
     ];
+    // Bind to the big hub crest (a plain <img>, no wrapping link) so taps
+    // count cleanly; the nav crest is an anchor to #home and fights the count.
+    // touch-action:manipulation (in CSS) stops mobile double-tap zoom.
     var taps = 0, tapTimer = null, ci = 0;
-    var crest = U.$(".nav-crest");
+    var crest = U.$(".hero-crest") || U.$(".nav-crest");
     if (crest) crest.addEventListener("click", function () {
       taps++;
       clearTimeout(tapTimer);
       tapTimer = setTimeout(function () { taps = 0; }, 1200);
-      if (taps >= 5) {
-        taps = 0;
+      if (taps === 5) {
         U.toast("🛡 " + CREST_LINES[ci % CREST_LINES.length]);
         ci++;
+      } else if (taps >= 10) {
+        taps = 0;
+        U.toast("📖 The Book of Tüpci is open. Up the Virgil.");
+        location.hash = "#book";
       }
     });
   }
