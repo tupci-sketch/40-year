@@ -648,6 +648,7 @@
         '<label class="sq-check"><input type="checkbox" class="sq-captain"' + (p.isCaptain ? " checked" : "") + "> Captain</label>" +
         '<label class="sq-check"><input type="checkbox" class="sq-bench"' + (p.permaBench ? " checked" : "") + "> Permanent bench</label>" +
         '<label class="sq-check"><input type="checkbox" class="sq-disabled"' + (p.disabled ? " checked" : "") + "> Hidden from squad</label>" +
+        '<label class="sq-check"><input type="checkbox" class="sq-retired"' + (p.retiredAI ? " checked" : "") + "> Retired · AI</label>" +
         (p.isNew ? '<button class="btn btn-ghost btn-small sq-del" type="button">✕ Remove</button>' : "") +
       "</div>" +
     "</details>";
@@ -686,12 +687,15 @@
       var list = U.$$(".sq-row", mt).map(function (row) {
         function g(cls) { var el = row.querySelector("." + cls); return el ? el.value : ""; }
         function ck(cls) { var el = row.querySelector("." + cls); return el ? el.checked : false; }
+        var id0 = row.getAttribute("data-id");
+        var orig0 = (window.SQUAD || []).filter(function (pp) { return pp.id === id0; })[0] || {};
         return {
-          id: row.getAttribute("data-id"),
+          id: id0,
           name: g("sq-name"), number: g("sq-number"), position: g("sq-pos"),
           controlledBy: g("sq-control"), pronouns: g("sq-pron"), card: g("sq-card"),
           flavour: g("sq-flavour"),
           isCaptain: ck("sq-captain"), permaBench: ck("sq-bench"), disabled: ck("sq-disabled"),
+          retiredAI: ck("sq-retired"), linkedTo: orig0.linkedTo || "",
           isNew: row.getAttribute("data-new") === "1"
         };
       });
