@@ -2093,3 +2093,20 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 }
 .tupci-prayer-body { color: var(--white); line-height: 1.7; font-size: 0.95rem; }
 .tupci-exit { display: inline-block; margin-top: 26px; }
+
+/* ---- Twitch live player (shows the stream when live, offline screen when not) ---- */
+.twitch-embed-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto 14px;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+/* aspect-ratio fallback for very old engines */
+@supports not (aspect-ratio: 16 / 9) { .twitch-embed-wrap { height: 0; padding-bottom: 56.25%; } }
+.twitch-player { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.twitch-card-slim { padding: 16px 18px; gap: 6px; }

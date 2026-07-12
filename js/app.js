@@ -1427,13 +1427,22 @@
         if (!mt) return;
         var handle = String(cfg().tiktok || "danwhizzy").replace(/^@/, "").replace(/[^a-zA-Z0-9_.]/g, "") || "danwhizzy";
         var twitch = String(cfg().twitch || "40yrvirgil").replace(/^@/, "").replace(/[^a-zA-Z0-9_]/g, "") || "40yrvirgil";
+        // The Twitch player itself decides what to show: the live stream when
+        // the channel is broadcasting, or its offline screen when it isn't.
+        // `parent` must match the hosting domain, so read it live.
+        var parent = location.hostname || "40yrvirgil.co.uk";
+        var twitchSrc = "https://player.twitch.tv/?channel=" + encodeURIComponent(twitch) +
+          "&parent=" + encodeURIComponent(parent) + "&muted=true&autoplay=true";
         var twitchCard =
           '<div class="section-label">' + twitch + " on Twitch</div>" +
-          '<div class="twitch-card">' +
-            '<span class="twitch-card-avatar">' + twitch.charAt(0).toUpperCase() + "</span>" +
+          '<p class="screen-intro">When the club’s live, the stream plays right here. When it’s not, Twitch shows the offline screen — hit follow so you don’t miss kickoff.</p>' +
+          '<div class="twitch-embed-wrap">' +
+            '<iframe class="twitch-player" src="' + twitchSrc + '" title="' + twitch + ' on Twitch" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen scrolling="no" frameborder="0"></iframe>' +
+          "</div>" +
+          '<div class="twitch-card twitch-card-slim">' +
             '<span class="twitch-card-handle">' + twitch + "</span>" +
-            '<span class="twitch-card-sub">Live from the Betfred Arena (the sofa). Follow for matchday streams.</span>' +
-            '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.twitch.tv/' + twitch + '">Watch on Twitch →</a>' +
+            '<span class="twitch-card-sub">Live from the Betfred Arena (the sofa).</span>' +
+            '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.twitch.tv/' + twitch + '">Open on Twitch →</a>' +
           "</div>";
         mt.innerHTML =
           '<div class="section-label">@' + handle + " on TikTok</div>" +
