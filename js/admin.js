@@ -478,7 +478,13 @@
         field("TikTok handle", '<input type="text" id="tt-handle" maxlength="30" value="' + U.esc(c.tiktok || "danwhizzy") + '">') +
         field("Twitch handle", '<input type="text" id="tw-handle" maxlength="30" value="' + U.esc(c.twitch || "40yrvirgil") + '">') +
       "</div>" +
-      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="soc-save">Save socials</button><span class="admin-inline-note" id="soc-msg"></span></div>',
+      '<div class="admin-actions">' +
+        '<button class="btn btn-primary btn-small" id="soc-save">Save socials</button>' +
+        '<button class="btn btn-ghost btn-small" id="soc-test" type="button">Test Twitch connection</button>' +
+        '<span class="admin-inline-note" id="soc-msg"></span>' +
+      "</div>" +
+      '<p class="admin-note">The LIVE badge only appears while the channel is actually streaming, and needs the Twitch app keys set as Script Properties (see README). Use Test to see exactly what Twitch reports.</p>' +
+      '<div class="admin-sublist" id="soc-test-out"></div>',
       "L5+");
   }
 
@@ -860,6 +866,30 @@
         b.disabled = false;
         msg.textContent = (r && r.ok) ? "✓ saved" : "✗ failed";
         if (r && r.ok) { U.toast("Socials saved."); refreshConfig(); }
+      });
+    });
+
+    /* test twitch connection */
+    b = U.$("#soc-test", root);
+    if (b) b.addEventListener("click", function () {
+      var out = U.$("#soc-test-out", root);
+      b.disabled = true;
+      out.innerHTML = '<p class="admin-inline-note">Asking Twitch…</p>';
+      NET.twitchStatus().then(function (r) {
+        b.disabled = false;
+        function row(l) { return '<div class="admin-row"><span class="admin-row-main">' + U.esc(l) + "</span></div>"; }
+        if (!r || (r.ok === false && r.error === "offline")) { out.innerHTML = row("Backend offline — try again in a moment."); return; }
+        if (r.ok === false && r.error === "kind") { out.innerHTML = row("✗ This backend has no twitch_status endpoint yet — deploy the latest backend.gs."); return; }
+        var lines = [
+          "Channel checked: " + (r.handle || "—"),
+          "Credentials set: " + (r.configured ? "yes ✓" : "NO — add TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET in Apps Script → Script Properties"),
+          "Live right now: " + (r.live ? "YES ✓ — badge should show" : "no")
+        ];
+        if (r.reason) lines.push("Reason: " + r.reason);
+        if (r.title) lines.push("Stream title: " + r.title);
+        if (r.live && r.viewers != null) lines.push("Viewers: " + r.viewers);
+        if (r.error) lines.push("Detail: " + r.error);
+        out.innerHTML = lines.map(row).join("");
       });
     });
 
