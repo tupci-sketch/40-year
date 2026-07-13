@@ -74,7 +74,30 @@
   }
 
   var GROUPS = { GK: "GK", RB: "DEF", LB: "DEF", CB: "DEF", CM: "MID", CDM: "MID", CAM: "MID", RM: "MID", LM: "MID", ST: "ATT", "Sub ST": "ATT", RW: "ATT", LW: "ATT", LST: "ATT", RST: "ATT" };
-  function posGroup(p) { return GROUPS[p.position] || "MID"; }
+
+  /* Position synonyms → a canonical set, so the board can match a
+     player's positions against a formation slot regardless of label. */
+  var POS_CANON = {
+    DM: "CDM", CDM: "CDM", CF: "ST", ST: "ST", LST: "ST", RST: "ST",
+    RWB: "RB", RB: "RB", LWB: "LB", LB: "LB", RCB: "CB", LCB: "CB", CB: "CB",
+    GK: "GK", CM: "CM", CAM: "CAM", RM: "RM", LM: "LM", RW: "RW", LW: "LW"
+  };
+  var CGROUP = { GK: "GK", RB: "DEF", LB: "DEF", CB: "DEF", CDM: "MID", CM: "MID", CAM: "MID", RM: "MID", LM: "MID", RW: "ATT", LW: "ATT", ST: "ATT" };
+  function canonPos(p) { p = String(p == null ? "" : p).toUpperCase().replace(/[^A-Z]/g, ""); return POS_CANON[p] || p; }
+  function positionsOf(p) {
+    if (p && p.positions && p.positions.length) return p.positions;
+    return (p && p.position) ? [p.position] : [];
+  }
+  function posGroup(p) { return GROUPS[positionsOf(p)[0]] || CGROUP[canonPos(positionsOf(p)[0])] || "MID"; }
+  /* "exact" (plays that position) | "group" (same area of the pitch) | "no". */
+  function posFit(player, slotPos) {
+    var slot = canonPos(slotPos);
+    var mine = positionsOf(player).map(canonPos);
+    if (mine.indexOf(slot) !== -1) return "exact";
+    var g = CGROUP[slot];
+    for (var i = 0; i < mine.length; i++) { if (CGROUP[mine[i]] === g) return "group"; }
+    return "no";
+  }
 
   function surname(p) {
     var bits = p.name.trim().split(/\s+/);
@@ -248,6 +271,7 @@
     fmtDate: fmtDate, fmtDateTime: fmtDateTime,
     num: num, pick: pick, divisionLabel: divisionLabel, winPct: winPct,
     playerById: playerById, posGroup: posGroup, surname: surname,
+    canonPos: canonPos, positionsOf: positionsOf, posFit: posFit,
     normName: normName, findMemberFor: findMemberFor, squadFor: squadFor,
     controlBadge: controlBadge, captainBadge: captainBadge, chips: chips,
     pill: pill, cardTile: cardTile, statTile: statTile, runCountUps: runCountUps,

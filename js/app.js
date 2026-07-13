@@ -351,6 +351,7 @@
       if (o) {
         if (o.name) p.name = o.name;
         if (o.number != null && o.number !== "") p.number = o.number;
+        if (o.positions && o.positions.length) p.positions = o.positions.slice(0, 3);
         if (o.position) p.position = o.position;
         if (o.controlledBy) p.controlledBy = o.controlledBy;
         p.isCaptain = !!o.isCaptain;
@@ -358,11 +359,11 @@
         if (o.pronouns) p.pronouns = o.pronouns;
         if (o.flavour) p.flavour = o.flavour;
         if (o.card) p.card = o.card;
+        if (o.retiredAI != null) p.retiredAI = !!o.retiredAI;
+        if (o.linkedTo) p.linkedTo = o.linkedTo;
         p.disabled = !!o.disabled;
-        if (p.disabled && p.roles) {
-          Object.keys(p.roles).forEach(function (f) { p.roles[f] = { start: false }; });
-        }
       }
+      normPositions(p);
       return p;
     });
 
@@ -370,20 +371,30 @@
     merged.forEach(function (p) { have[p.id] = true; });
     overrides.forEach(function (o) {
       if (o && o.isNew && o.id && !have[o.id]) {
-        var roles = {};
-        Object.keys(window.FORMATIONS || {}).forEach(function (f) { roles[f] = { start: false }; });
-        merged.push({
+        var np = {
           id: o.id, name: o.name || o.id, number: o.number || 0,
+          positions: (o.positions && o.positions.length) ? o.positions.slice(0, 3) : [o.position || "SUB"],
           position: o.position || "SUB", card: o.card || "crest.png",
           controlledBy: o.controlledBy === "human" ? "human" : "bot",
           isCaptain: !!o.isCaptain, permaBench: !!o.permaBench,
           pronouns: o.pronouns || "he/him", flavour: o.flavour || "",
-          roles: roles, disabled: !!o.disabled, isNew: true
-        });
+          retiredAI: !!o.retiredAI, linkedTo: o.linkedTo || "",
+          disabled: !!o.disabled, isNew: true
+        };
+        normPositions(np);
+        merged.push(np);
       }
     });
 
     window.SQUAD = merged;
+  }
+
+  /* Ensure every player has a positions[] (≤3) with position = positions[0]. */
+  function normPositions(p) {
+    if (!p.positions || !p.positions.length) p.positions = p.position ? [p.position] : ["SUB"];
+    p.positions = p.positions.filter(function (x) { return !!x; }).slice(0, 3);
+    if (!p.positions.length) p.positions = ["SUB"];
+    p.position = p.positions[0];
   }
 
   function refreshSquadViews() {
@@ -595,15 +606,26 @@
 
   function rolesBlock(p) {
     var pr = pron(p);
+    var positions = U.positionsOf(p);
+    var chips = positions.map(function (pos) {
+      return '<span class="pos-chip">' + U.esc(pos) + "</span>";
+    }).join("");
+
     var rows = Object.keys(window.FORMATIONS).map(function (fkey) {
-      var role = (p.roles && p.roles[fkey]) || {};
+      var f = window.FORMATIONS[fkey];
+      var best = null, bestLevel = null;
+      f.slots.forEach(function (s) {
+        var fit = U.posFit(p, s.pos);
+        if (fit === "exact" && bestLevel !== "exact") { best = s.pos; bestLevel = "exact"; }
+        else if (fit === "group" && !bestLevel) { best = s.pos; bestLevel = "group"; }
+      });
       var cell;
-      if (role.start) {
-        var pos = role.pos || p.position;
-        var label = POS_LABEL[pos] || pos;
-        cell = '<span class="role-pos">' + U.esc(pos) + '</span><span class="role-label">' + U.esc(label) + "</span>";
-      } else {
+      if (p.permaBench || !best) {
         cell = '<span class="role-bench">Bench</span>';
+      } else {
+        var label = (POS_LABEL[best] || best) + (bestLevel === "group" ? " (cover)" : "");
+        cell = '<span class="role-pos' + (bestLevel === "group" ? " role-pos-alt" : "") + '">' + U.esc(best) + '</span>' +
+          '<span class="role-label">' + U.esc(label) + "</span>";
       }
       return '<div class="role-row">' +
         '<span class="role-formation">' + U.esc(fkey) + "</span>" + cell +
@@ -612,10 +634,12 @@
 
     var foot = p.permaBench ? ("Every formation. Same seat. " + pr.Subj + " " + pr.ownsVerb + " it.")
       : p.isCaptain ? "Three shapes, one position. That's the deal."
-      : ("How the gaffer lines " + pr.obj + " up, shape by shape.");
+      : ("Where the shapes tend to put " + pr.obj + ".");
 
-    return '<div class="section-label">Where ' + pr.subj + " " + pr.verb + "</div>" +
-      '<div class="roles-block">' + rows + '<p class="roles-foot">' + foot + "</p></div>";
+    return (chips ? '<div class="section-label">Positions</div><div class="pos-chips">' + chips + "</div>" : "") +
+      '<div class="section-label">Where ' + pr.subj + " " + pr.verb + "</div>" +
+      '<div class="roles-block">' + rows + '<p class="roles-foot">' + foot + "</p>" +
+      '<a class="btn btn-ghost btn-small" href="#tactics">See on the tactics board →</a></div>';
   }
 
   PAGES.player = {
@@ -1852,7 +1876,11 @@
 
   /* ------------------------------------------------ TACTICS (delegates) */
   PAGES.tactics = {
-    enter: function () { applySquadOverrides(); window.TACTICS.enter(U.$("#tactics-view")); }
+    enter: function () {
+      applySquadOverrides();
+      window.OFFICIAL_LINEUPS = cfg().lineups || {};
+      window.TACTICS.enter(U.$("#tactics-view"));
+    }
   };
 
   /* ========================================================

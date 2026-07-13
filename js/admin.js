@@ -49,6 +49,21 @@
       }).join("");
   }
 
+  function posOptions(sel, allowEmpty) {
+    return (allowEmpty ? '<option value="">—</option>' : "") +
+      (window.POSITIONS || []).map(function (P) {
+        return '<option value="' + P + '"' + (P === sel ? " selected" : "") + ">" + P + "</option>";
+      }).join("");
+  }
+  function posSelects(p) {
+    var ps = (p.positions && p.positions.length) ? p.positions : (p.position ? [p.position] : []);
+    return '<div class="sq-pos-row">' +
+      '<select class="sq-pos1">' + posOptions(ps[0] || "", false) + "</select>" +
+      '<select class="sq-pos2">' + posOptions(ps[1] || "", true) + "</select>" +
+      '<select class="sq-pos3">' + posOptions(ps[2] || "", true) + "</select>" +
+    "</div>";
+  }
+
   /* ========================================================
      ENTRY
      ======================================================== */
@@ -642,7 +657,7 @@
       '<div class="field-row">' +
         field("Name", '<input type="text" class="sq-name" maxlength="30" value="' + U.esc(p.name) + '">') +
         field("Number", '<input type="number" class="sq-number" min="0" max="99" value="' + (p.number || 0) + '">') +
-        field("Position", '<input type="text" class="sq-pos" maxlength="4" value="' + U.esc(p.position || "") + '">') +
+        field("Positions", posSelects(p), "up to 3 — primary first; drives the tactics board") +
       "</div>" +
       '<div class="field-row">' +
         field("Controlled by", '<select class="sq-control"><option value="human"' + (p.controlledBy === "human" ? " selected" : "") + ">Human</option><option value=\"bot\"" + (p.controlledBy !== "human" ? " selected" : "") + ">Bot (AI)</option></select>") +
@@ -681,7 +696,7 @@
     U.$("#sq-add", mt).addEventListener("click", function () {
       var id = "p" + Date.now().toString(36);
       var tmp = document.createElement("div");
-      tmp.innerHTML = squadRow({ id: id, name: "New Player", number: 0, position: "SUB", controlledBy: "bot", pronouns: "he/him", card: "", flavour: "", isNew: true });
+      tmp.innerHTML = squadRow({ id: id, name: "New Player", number: 0, positions: ["CM"], position: "CM", controlledBy: "bot", pronouns: "he/him", card: "", flavour: "", isNew: true });
       var node = tmp.firstElementChild;
       U.$("#sq-list", mt).appendChild(node);
       wireDel(node);
@@ -695,9 +710,11 @@
         function ck(cls) { var el = row.querySelector("." + cls); return el ? el.checked : false; }
         var id0 = row.getAttribute("data-id");
         var orig0 = (window.SQUAD || []).filter(function (pp) { return pp.id === id0; })[0] || {};
+        var positions = [g("sq-pos1"), g("sq-pos2"), g("sq-pos3")].filter(function (x) { return !!x; });
         return {
           id: id0,
-          name: g("sq-name"), number: g("sq-number"), position: g("sq-pos"),
+          name: g("sq-name"), number: g("sq-number"),
+          positions: positions, position: positions[0] || "SUB",
           controlledBy: g("sq-control"), pronouns: g("sq-pron"), card: g("sq-card"),
           flavour: g("sq-flavour"),
           isCaptain: ck("sq-captain"), permaBench: ck("sq-bench"), disabled: ck("sq-disabled"),

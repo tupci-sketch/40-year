@@ -20,12 +20,69 @@
     arrangements: {} // fkey -> { slots:[playerId], bench:[playerId] }
   };
 
-  function defaults(fkey) {
+  /* ---- roster-driven fill ---- */
+  function roster() { return (window.SQUAD || []).filter(function (p) { return !p.disabled; }); }
+
+  /* Position-aware auto-fill. `seed` (optional {slots}) is honoured first, then
+     the captain to CAM, then exact-position fits, then same-area fits, then
+     anyone. Perma-bench players stay off the XI. Empty slots stay null. */
+  function autoFill(fkey, seed) {
     var f = window.FORMATIONS[fkey];
-    return {
-      slots: f.slots.map(function (s) { return s.player; }),
-      bench: f.bench.slice()
-    };
+    var players = roster();
+    var byId = {}; players.forEach(function (p) { byId[p.id] = p; });
+    var slots = f.slots.map(function () { return null; });
+    var used = {};
+    function place(i, id) { if (id && byId[id] && !used[id]) { slots[i] = id; used[id] = 1; return true; } return false; }
+
+    if (seed && seed.slots) f.slots.forEach(function (s, i) { place(i, seed.slots[i]); });
+
+    var camIdx = -1;
+    f.slots.forEach(function (s, i) { if (camIdx === -1 && U.canonPos(s.pos) === "CAM") camIdx = i; });
+    if (camIdx !== -1 && !slots[camIdx] && byId.tupci && !byId.tupci.permaBench) place(camIdx, "tupci");
+
+    var avail = players.filter(function (p) { return !p.permaBench; }).map(function (p) { return p.id; });
+    ["exact", "group"].forEach(function (level) {
+      f.slots.forEach(function (s, i) {
+        if (slots[i]) return;
+        for (var k = 0; k < avail.length; k++) { var id = avail[k]; if (!used[id] && U.posFit(byId[id], s.pos) === level) { place(i, id); break; } }
+      });
+    });
+    f.slots.forEach(function (s, i) {
+      if (slots[i]) return;
+      for (var k = 0; k < avail.length; k++) { var id = avail[k]; if (!used[id]) { place(i, id); break; } }
+    });
+
+    var bench = players.map(function (p) { return p.id; }).filter(function (id) { return !used[id]; });
+    return { slots: slots, bench: pinRizzy(bench) };
+  }
+
+  function officialXI(fkey) {
+    var L = (window.OFFICIAL_LINEUPS || {})[fkey];
+    return (L && L.slots && L.slots.length) ? { slots: L.slots.slice(), bench: (L.bench || []).slice() } : null;
+  }
+  function lineupKey(fkey) { return "v40.lineup." + fkey; }
+  function loadLocal(fkey) {
+    try { var v = JSON.parse(localStorage.getItem(lineupKey(fkey)) || "null"); return (v && v.slots) ? v : null; } catch (e) { return null; }
+  }
+  function saveLocal(fkey, a) {
+    try { localStorage.setItem(lineupKey(fkey), JSON.stringify({ slots: a.slots, bench: a.bench })); } catch (e) { /* private mode */ }
+  }
+
+  function defaults(fkey) { return autoFill(fkey, officialXI(fkey) || loadLocal(fkey)); }
+
+  /* Keep an arrangement consistent with the current roster: drop players who've
+     left, and slide any new signings onto the bench so they appear at once. */
+  function reconcile(fkey) {
+    var a = state.arrangements[fkey];
+    if (!a) return;
+    var have = {}; roster().forEach(function (p) { have[p.id] = 1; });
+    a.slots = a.slots.map(function (id) { return have[id] ? id : null; });
+    a.bench = a.bench.filter(function (id) { return have[id]; });
+    var present = {};
+    a.slots.forEach(function (id) { if (id) present[id] = 1; });
+    a.bench.forEach(function (id) { present[id] = 1; });
+    roster().forEach(function (p) { if (!present[p.id]) a.bench.push(p.id); });
+    pinRizzy(a.bench);
   }
 
   function arr() {
@@ -38,6 +95,8 @@
     if (i !== -1) { bench.splice(i, 1); bench.push("rizzydave"); }
     return bench;
   }
+
+  function canSave() { return !!(window.NET && window.NET.isMod && window.NET.isMod()); }
 
   function shuffleT(a) {
     a = a.slice();
@@ -95,6 +154,7 @@
         '<div class="tactics-actions">' +
           '<button class="btn btn-gold btn-small" id="tactics-random" title="Let the wheel pick the XI">🎲 Gaffer’s XI</button>' +
           '<button class="btn btn-ghost btn-small" id="tactics-reset">Reset XI</button>' +
+          (canSave() ? '<button class="btn btn-primary btn-small" id="tactics-save" title="Set the club\'s official XI for this shape">Save club XI</button>' : "") +
         '</div>' +
       '</div>' +
       '<p class="tactics-note" id="tactics-note"></p>' +
@@ -111,7 +171,7 @@
         '<span class="bench-label">Bench</span>' +
         '<div class="bench-rail" id="bench-rail"></div>' +
       '</div>' +
-      '<p class="tactics-hint">Drag a shirt onto another to swap. Tap a shirt for the mini card.</p>' +
+      '<p class="tactics-hint">Drag a shirt to swap. While dragging, slots glow <span class="fit-key fit-key-exact">green</span> where they play and <span class="fit-key fit-key-group">amber</span> nearby. Tap a shirt for the card.</p>' +
       '<div class="minicard" id="minicard" hidden></div>';
 
     pitchEl = U.$("#pitch", root);
@@ -121,14 +181,29 @@
       b.addEventListener("click", function () { setFormation(b.getAttribute("data-f")); });
     });
     U.$("#tactics-reset", root).addEventListener("click", function () {
-      state.arrangements[state.current] = defaults(state.current);
+      try { localStorage.removeItem(lineupKey(state.current)); } catch (e) { /* fine */ }
+      state.arrangements[state.current] = autoFill(state.current, officialXI(state.current));
       render();
-      U.toast("Back to the gaffer's whiteboard.");
+      U.toast(officialXI(state.current) ? "Back to the club's XI." : "Back to the gaffer's whiteboard.");
     });
     U.$("#tactics-random", root).addEventListener("click", function () {
       state.arrangements[state.current] = randomEleven(state.current);
+      saveLocal(state.current, state.arrangements[state.current]);
       render();
       U.toast("The wheel has spoken. Rizzy Dave remains, as ever, seated.");
+    });
+    var saveBtn = U.$("#tactics-save", root);
+    if (saveBtn) saveBtn.addEventListener("click", function () {
+      var a = arr();
+      saveBtn.disabled = true;
+      window.NET.adminLineup({ formation: state.current, slots: a.slots, bench: a.bench }).then(function (r) {
+        saveBtn.disabled = false;
+        if (r && r.ok) {
+          window.OFFICIAL_LINEUPS = window.OFFICIAL_LINEUPS || {};
+          window.OFFICIAL_LINEUPS[state.current] = { slots: a.slots.slice(), bench: a.bench.slice() };
+          U.toast("Saved as the club's " + state.current + " XI.");
+        } else U.toast("Couldn't save that — mods only.");
+      });
     });
 
     document.addEventListener("click", function (e) {
@@ -170,7 +245,8 @@
       ghost.innerHTML = '<span>' + slot.pos + '</span>';
       pitchEl.appendChild(ghost);
 
-      var p = U.playerById(a.slots[i]);
+      var p = a.slots[i] ? U.playerById(a.slots[i]) : null;
+      if (!p) return; // empty slot — the ghost stays, droppable
       var tok = U.el("div", {
         "class": "token" + (p.controlledBy === "human" ? " token-human" : ""),
         "data-slot": String(i), "data-id": p.id,
@@ -207,6 +283,22 @@
     });
   }
 
+  /* Colour every slot by how well the dragged player fits it. */
+  function highlightFor(id) {
+    var p = U.playerById(id); if (!p) return;
+    var f = window.FORMATIONS[state.current];
+    U.$$(".slot-ghost", pitchEl).forEach(function (g) {
+      var i = Number(g.getAttribute("data-slot"));
+      var fit = U.posFit(p, f.slots[i].pos);
+      g.classList.remove("fit-exact", "fit-group");
+      if (fit === "exact") g.classList.add("fit-exact");
+      else if (fit === "group") g.classList.add("fit-group");
+    });
+  }
+  function clearHighlights() {
+    U.$$(".slot-ghost", pitchEl).forEach(function (g) { g.classList.remove("fit-exact", "fit-group"); });
+  }
+
   /* ------------------------------------------------ drag engine */
   var drag = null; // { src:{type,index}, id, ghost, startX, startY, moved }
 
@@ -236,6 +328,7 @@
         }
         drag.ghost = makeGhost(node);
         node.classList.add("drag-src");
+        highlightFor(drag.id);
       }
       moveGhost(drag.ghost, e.clientX, e.clientY);
     });
@@ -245,6 +338,7 @@
       var d = drag; drag = null;
       if (d.ghost) { d.ghost.remove(); }
       node.classList.remove("drag-src");
+      clearHighlights();
 
       if (!d.moved) { showMini(node, d.src); return; }
       handleDrop(d, e.clientX, e.clientY);
@@ -254,6 +348,7 @@
       if (drag && drag.node === node) {
         if (drag.ghost) drag.ghost.remove();
         node.classList.remove("drag-src");
+        clearHighlights();
         drag = null;
       }
     });
@@ -312,10 +407,10 @@
           afterSwap(a, [a.slots[slotI], a.slots[d.src.index]]);
         }
       } else {
-        // bench → pitch swap
+        // bench → pitch (swap, or fill an empty slot)
         var out = a.slots[slotI];
         a.slots[slotI] = d.id;
-        a.bench[d.src.index] = out;
+        if (out) a.bench[d.src.index] = out; else a.bench.splice(d.src.index, 1);
         afterSwap(a, [d.id, out]);
       }
       render();
@@ -347,6 +442,7 @@
       var t2 = a.bench[bench.index];
       a.bench[bench.index] = a.bench[d.src.index];
       a.bench[d.src.index] = t2;
+      saveLocal(state.current, a);
       render();
       return;
     }
@@ -356,6 +452,7 @@
 
   function afterSwap(a, movedIds) {
     pinRizzy(a.bench);
+    saveLocal(state.current, a);
     // Captain's clause
     if (movedIds.indexOf("tupci") !== -1) {
       var f = window.FORMATIONS[state.current];
@@ -402,8 +499,10 @@
   /* ------------------------------------------------ public */
   window.TACTICS = {
     enter: function (container) {
-      if (!state.mounted || root !== container) mount(container);
-      else hideMini();
+      if (!state.mounted || root !== container) { mount(container); return; }
+      reconcile(state.current);
+      render();
+      hideMini();
     }
   };
 })();

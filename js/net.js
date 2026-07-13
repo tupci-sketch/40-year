@@ -162,6 +162,7 @@
     adminSocials:  function (payload)  { return this._auth("admin_socials", payload || {}); },       // { tiktok, twitch }
     adminSquad:    function (payload)  { return this._auth("admin_squad", payload || {}); },
     adminFun:      function (payload)  { return this._auth("admin_fun", payload || {}); },            // { action:"set", fun:{…} }
+    adminLineup:   function (payload)  { return this._auth("admin_lineup", payload || {}); },          // { formation, slots, bench }
     adminPersonal: function (payload)  { return this._auth("admin_personal", payload || {}); },
     adminSeason:   function (payload)  { return this._auth("admin_season", payload || {}); }           // { action:"archive"|"get", … }
   };
