@@ -286,6 +286,27 @@ window.FORMATIONS = {
 window.DEFAULT_FORMATION = "4-2-1-3";
 
 /* ------------------------------------------------------------
+   Positions — each player's up to 3 positions (primary first).
+   The tactics board fills slots by matching these; a player
+   without an entry here defaults to their single `position`.
+   Fully editable per player in Housekeeping → Squad.
+   ------------------------------------------------------------ */
+window.POSITIONS = ["GK", "RB", "RWB", "CB", "LB", "LWB", "CDM", "CM", "CAM", "RM", "LM", "RW", "LW", "CF", "ST"];
+(function () {
+  var M = {
+    yeyu: ["GK"], kubikova: ["RB", "RWB"], alghamdi: ["LB", "LWB"], ferry: ["CB"],
+    moulin: ["CM", "CDM"], pereira: ["CB"], tupci: ["CAM"], amy: ["CM", "CAM"],
+    walker: ["RM", "RW", "ST"], danwhizzy: ["ST", "CF"], medina: ["CM", "CDM"],
+    donovan: ["CM"], lejeune: ["RW", "RM"], zilkov: ["LM", "LW"], tmidi: ["CDM", "CM"],
+    moreira: ["CDM", "CM"], rizzydave: ["ST"]
+  };
+  (window.SQUAD || []).forEach(function (p) {
+    p.positions = (M[p.id] && M[p.id].slice()) || [p.position];
+    p.position = p.positions[0];
+  });
+})();
+
+/* ------------------------------------------------------------
    The Gaffer — joke candidates for the random-manager shuffle.
    Invented names only; squad members get mixed in at runtime.
    ------------------------------------------------------------ */
