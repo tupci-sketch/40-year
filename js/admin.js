@@ -64,6 +64,40 @@
     "</div>";
   }
 
+  /* ---------- teamsheet helpers ---------- */
+  function formationOptions(sel) {
+    return Object.keys(window.FORMATIONS || {}).map(function (k) {
+      return '<option value="' + k + '"' + (k === sel ? " selected" : "") + ">" + k + "</option>";
+    }).join("");
+  }
+  function venueOptions(sel) {
+    var opts = [["", "—"], ["H", "Home"], ["A", "Away"], ["N", "Neutral"]];
+    return opts.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === sel ? " selected" : "") + ">" + o[1] + "</option>"; }).join("");
+  }
+  /* Position-aware auto XI for a formation → array of player ids per slot. */
+  function autoXI(fkey) {
+    var f = window.FORMATIONS[fkey];
+    var players = (window.SQUAD || []).filter(function (p) { return !p.disabled && !p.permaBench; });
+    var byId = {}; players.forEach(function (p) { byId[p.id] = p; });
+    var out = f.slots.map(function () { return ""; });
+    var used = {};
+    var camIdx = -1;
+    f.slots.forEach(function (s, i) { if (camIdx === -1 && U.canonPos(s.pos) === "CAM") camIdx = i; });
+    if (camIdx !== -1 && byId.tupci) { out[camIdx] = "tupci"; used.tupci = 1; }
+    var ids = players.map(function (p) { return p.id; });
+    ["exact", "group"].forEach(function (level) {
+      f.slots.forEach(function (s, i) {
+        if (out[i]) return;
+        for (var k = 0; k < ids.length; k++) { var id = ids[k]; if (!used[id] && U.posFit(byId[id], s.pos) === level) { out[i] = id; used[id] = 1; break; } }
+      });
+    });
+    f.slots.forEach(function (s, i) {
+      if (out[i]) return;
+      for (var k = 0; k < ids.length; k++) { var id = ids[k]; if (!used[id]) { out[i] = id; used[id] = 1; break; } }
+    });
+    return out;
+  }
+
   /* ========================================================
      ENTRY
      ======================================================== */
@@ -190,6 +224,20 @@
               }).join("") +
             "</select>", "override for forfeits etc.") +
         "</div>" +
+        '<div class="section-label">Teamsheet <span class="admin-inline-note">the XI that played — powers the match report &amp; mini-pitch</span></div>' +
+        '<div class="field-row">' +
+          field("Formation", '<select id="me-formation">' + formationOptions((m.lineup && m.lineup.formation) || window.DEFAULT_FORMATION) + "</select>") +
+          field("Venue", '<select id="me-venue">' + venueOptions(m.venue || "") + "</select>", "optional") +
+        "</div>" +
+        '<div class="me-teamsheet" id="me-xi"></div>' +
+        '<div class="admin-actions">' +
+          '<button class="btn btn-ghost btn-small" id="me-xi-auto" type="button">Auto-pick XI</button>' +
+          '<button class="btn btn-ghost btn-small" id="me-xi-seed" type="button">Seed player stats from XI</button>' +
+        "</div>" +
+        '<div class="field-row">' +
+          field("Captain", '<select id="me-captain">' + '<option value="">—</option>' + playerOptions((m.lineup && m.lineup.captain) || "") + "</select>") +
+          field("Man of the Match", '<select id="me-motm"><option value="">Auto (top rating)</option>' + playerOptions(m.motm || "") + "</select>") +
+        "</div>" +
         '<div class="section-label">Players <span class="admin-inline-note">one line per player involved — the Goals here fill the scoresheet automatically</span></div>' +
         '<div id="me-players"></div>' +
         '<button class="btn btn-ghost btn-small" id="me-player-add" type="button">+ Add player</button>' +
@@ -214,6 +262,29 @@
     U.$("#me-player-add", box).addEventListener("click", function () { addPlayerRow(null); });
     U.$("#me-cancel", box).addEventListener("click", function () { box.innerHTML = ""; });
 
+    // ---- Teamsheet ----
+    function renderXI(fkey, seedXi) {
+      var f = window.FORMATIONS[fkey];
+      if (!f) return;
+      var byIdx = {};
+      (seedXi || []).forEach(function (x, idx) { byIdx[idx] = x.id; });
+      U.$("#me-xi", box).innerHTML = f.slots.map(function (s, i) {
+        return '<label class="me-xi-row"><span class="me-xi-pos">' + s.pos + "</span>" +
+          '<select class="me-xi-sel" data-pos="' + s.pos + '"><option value="">—</option>' + playerOptions(byIdx[i] || "") + "</select></label>";
+      }).join("");
+    }
+    renderXI(U.$("#me-formation", box).value, (m.lineup && m.lineup.xi) || null);
+    U.$("#me-formation", box).addEventListener("change", function () { renderXI(this.value, null); });
+    U.$("#me-xi-auto", box).addEventListener("click", function () {
+      var fkey = U.$("#me-formation", box).value;
+      renderXI(fkey, autoXI(fkey).map(function (id) { return { id: id }; }));
+    });
+    U.$("#me-xi-seed", box).addEventListener("click", function () {
+      var have = {}; U.$$(".me-player", box).forEach(function (row) { have[row.querySelector("select").value] = 1; });
+      U.$$(".me-xi-sel", box).forEach(function (sel) { if (sel.value && !have[sel.value]) { addPlayerRow({ id: sel.value }); have[sel.value] = 1; } });
+      U.toast("Stat lines seeded from the XI.");
+    });
+
     U.$("#me-save", box).addEventListener("click", function () {
       var btn = this;
       var players = U.$$(".me-player", box).map(function (row) {
@@ -228,6 +299,11 @@
       // Scorers are DERIVED from the player lines — enter stats once, only.
       var scorers = players.filter(function (p) { return Number(p.goals) > 0; })
         .map(function (p) { return { id: p.id, goals: p.goals }; });
+      // Teamsheet: the XI (in slot order) + subs = stat-line players not in the XI.
+      var xi = U.$$(".me-xi-sel", box).map(function (sel) { return { id: sel.value, pos: sel.getAttribute("data-pos") }; })
+        .filter(function (x) { return x.id; });
+      var inXi = {}; xi.forEach(function (x) { inXi[x.id] = 1; });
+      var subs = players.map(function (p) { return p.id; }).filter(function (id) { return !inXi[id]; });
       var payload = {
         seq: isNew ? 0 : m.seq,
         stage: U.$("#me-stage", box).value,
@@ -239,7 +315,10 @@
         result: U.$("#me-result", box).value,
         note: U.$("#me-note", box).value,
         scorers: scorers,
-        players: players
+        players: players,
+        lineup: { formation: U.$("#me-formation", box).value, xi: xi, subs: subs, captain: U.$("#me-captain", box).value },
+        motm: U.$("#me-motm", box).value,
+        venue: U.$("#me-venue", box).value
       };
       var msg = U.$("#me-msg", box);
       if (!payload.opponent) { msg.textContent = "Opponent needed."; return; }

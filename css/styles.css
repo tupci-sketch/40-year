@@ -2165,3 +2165,10 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 /* ---- Squad editor: 3-position selects ---- */
 .sq-pos-row { display: flex; gap: 6px; }
 .sq-pos-row select { flex: 1; min-width: 0; }
+
+/* ---- Match editor: teamsheet ---- */
+.me-teamsheet { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0 10px; }
+@media (min-width: 640px) { .me-teamsheet { grid-template-columns: 1fr 1fr 1fr; } }
+.me-xi-row { display: flex; align-items: center; gap: 6px; }
+.me-xi-pos { font-family: var(--font-sub); font-size: 0.72rem; color: var(--gold); min-width: 2.8em; text-align: right; }
+.me-xi-row select { flex: 1; min-width: 0; }
