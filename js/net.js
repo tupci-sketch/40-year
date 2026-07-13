@@ -163,6 +163,8 @@
     adminSquad:    function (payload)  { return this._auth("admin_squad", payload || {}); },
     adminFun:      function (payload)  { return this._auth("admin_fun", payload || {}); },            // { action:"set", fun:{…} }
     adminLineup:   function (payload)  { return this._auth("admin_lineup", payload || {}); },          // { formation, slots, bench }
+    adminNews:     function (payload)  { return this._auth("admin_news", payload || {}); },            // { news:[…] }
+    adminLeague:   function (payload)  { return this._auth("admin_league", payload || {}); },          // { league:{…} }
     adminPersonal: function (payload)  { return this._auth("admin_personal", payload || {}); },
     adminSeason:   function (payload)  { return this._auth("admin_season", payload || {}); }           // { action:"archive"|"get", … }
   };

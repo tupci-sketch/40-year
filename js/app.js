@@ -519,7 +519,7 @@
       var live = U.$("#home-live");
       live.innerHTML = '<div class="tile-row">' + U.statTile("All-time record", null, { sub: "opening the books…" }) + "</div>";
 
-      Promise.all([DATA.record(), DATA.matches()]).then(function (rs) {
+      Promise.all([DATA.record(), DATA.matches(), DATA.config()]).then(function (rs) {
         var recRes = rs[0], mRes = rs[1];
         var block = liveBlock(recRes, "the club record") || liveBlock(mRes, "the match archive");
         if (block) { live.innerHTML = block; return; }
@@ -539,6 +539,7 @@
           : "";
 
         live.innerHTML =
+          leagueStrip() +
           '<div class="tile-row">' +
             U.statTile("Played", rec.played, { accent: "electric" }) +
             U.statTile("Won", rec.wins, { accent: "win" }) +
@@ -813,6 +814,24 @@
       '<div class="section-label">Results</div>';
   }
 
+  function leagueStrip() {
+    var L = cfg().league;
+    if (!L || !(L.division || L.rank || L.points || L.status)) return "";
+    var form = String(L.form || "").trim().split(/\s+/).filter(Boolean).map(function (r) {
+      var c = r === "W" ? "win" : r === "D" ? "draw" : "loss";
+      return '<span class="pill pill-' + c + ' pill-small">' + U.esc(r) + "</span>";
+    }).join("");
+    function cell(v, lab) { return v ? '<div class="league-cell"><span class="league-val">' + U.esc(v) + '</span><span class="league-lab">' + lab + "</span></div>" : ""; }
+    return '<div class="league-strip panel">' +
+      '<div class="league-row">' +
+        cell(L.division, "Division") + cell(L.rank, "Position") + cell(L.points, "Points") + cell(L.played, "Played") +
+        (form ? '<div class="league-cell league-form"><span class="league-form-pills">' + form + '</span><span class="league-lab">Form</span></div>' : "") +
+      "</div>" +
+      (L.status ? '<div class="league-status">' + U.esc(L.status) + "</div>" : "") +
+      (L.note ? '<div class="league-note">' + U.esc(L.note) + "</div>" : "") +
+    "</div>";
+  }
+
   PAGES.results = {
     enter: function () {
       var mount = U.$("#results-list");
@@ -823,10 +842,10 @@
         var block = liveBlock(res, "the match archive");
         if (block) { mount.innerHTML = block; return; }
         var list = res.matches || [];
-        if (!list.length) { mount.innerHTML = U.waitingState("matches"); return; }
+        if (!list.length) { mount.innerHTML = leagueStrip() + U.waitingState("matches"); return; }
         var canEdit = NET.isMod();
 
-        mount.innerHTML = fixturesHtml() + list.map(function (m, i) {
+        mount.innerHTML = leagueStrip() + fixturesHtml() + list.map(function (m, i) {
           var stage = STAGE_LABEL[m.stage] || "League";
           var stageTag = U.esc(stage) + (m.compName ? " · " + U.esc(m.compName) : "");
           var scorers = U.scorersLine((m.scorers || []).map(function (s) {
@@ -1611,16 +1630,27 @@
   PAGES.news = {
     enter: function () {
       var mt = U.$("#news-view");
-      mt.innerHTML = '<div class="news-grid">' +
-        NEWS.map(function (a) {
-          return '<article class="news-card">' +
-            '<div class="news-card-head"><span class="news-tag">' + U.esc(a.tag) + "</span>" +
-              '<span class="news-date">' + U.esc(U.fmtDate(a.date)) + "</span></div>" +
-            '<h2 class="news-title">' + U.esc(a.title) + "</h2>" +
-            '<p class="news-body">' + U.esc(a.body) + "</p>" +
-          "</article>";
-        }).join("") + "</div>" +
-        '<p class="sync-note">Satire. Mostly. The 392 is real.</p>';
+      mt.innerHTML = U.emptyState("Opening the Gazette…", "", "📰");
+      DATA.config().then(function () {
+        var arts = (cfg().news && cfg().news.length) ? cfg().news.slice() : NEWS;
+        arts = arts.slice().sort(function (a, b) {
+          var pa = a.pinned ? 1 : 0, pb = b.pinned ? 1 : 0;
+          if (pa !== pb) return pb - pa;
+          return String(b.dateISO || b.date || "").localeCompare(String(a.dateISO || a.date || ""));
+        });
+        mt.innerHTML = '<div class="news-grid">' +
+          arts.map(function (a) {
+            var date = a.dateISO || a.date || "";
+            return '<article class="news-card' + (a.pinned ? " news-pinned" : "") + '">' +
+              '<div class="news-card-head"><span class="news-tag">' + U.esc(a.tag) + "</span>" +
+                (a.pinned ? '<span class="news-pin" title="Pinned">📌</span>' : "") +
+                '<span class="news-date">' + U.esc(U.fmtDate(date)) + "</span></div>" +
+              '<h2 class="news-title">' + U.esc(a.title) + "</h2>" +
+              '<p class="news-body">' + U.esc(a.body).replace(/\n/g, "<br>") + "</p>" +
+            "</article>";
+          }).join("") + "</div>" +
+          '<p class="sync-note">The Gazette. Satire, mostly. The 392 is real.</p>';
+      });
     }
   };
 

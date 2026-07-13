@@ -2197,3 +2197,15 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 .result-opp:hover { color: var(--gold-bright); }
 .result-motm { color: var(--gold-bright); font-size: 0.78rem; }
 .result-link { text-decoration: none; display: block; }
+
+/* ---- League strip + news ---- */
+.league-strip { padding: 12px 16px; margin-bottom: 14px; }
+.league-row { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
+.league-cell { display: flex; flex-direction: column; gap: 2px; }
+.league-val { font-family: var(--font-display); font-size: 1.5rem; color: var(--gold-bright); line-height: 1; }
+.league-lab { font-family: var(--font-sub); font-size: 0.66rem; letter-spacing: 0.08em; color: var(--silver); text-transform: uppercase; }
+.league-form .league-form-pills { display: flex; gap: 3px; }
+.league-status { margin-top: 8px; font-family: var(--font-sub); color: var(--win); letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.85rem; }
+.league-note { color: var(--silver); font-size: 0.85rem; margin-top: 4px; }
+.news-pinned { border-color: rgba(242, 180, 92, 0.5); }
+.news-card-head .news-pin { margin-left: 4px; }

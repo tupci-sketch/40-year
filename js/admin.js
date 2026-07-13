@@ -130,6 +130,8 @@
         blockSquad() +
         blockSocials(c) +
         blockFun(c) +
+        blockNews(c) +
+        blockLeague(c) +
         blockFlavour(c) +
         blockMilestones(c) +
         blockBanner(c) +
@@ -720,6 +722,42 @@
   /* ========================================================
      WIRING
      ======================================================== */
+  function newsRow(a) {
+    a = a || {};
+    return '<details class="news-edit-row"' + (a._new ? " open" : "") + ">" +
+      "<summary>" + U.esc(a.tag || "CLUB") + " · " + U.esc(a.title || "(untitled)") + (a.pinned ? " 📌" : "") + "</summary>" +
+      '<div class="field-row">' +
+        field("Tag", '<input type="text" class="nw-tag" maxlength="20" value="' + U.esc(a.tag || "CLUB") + '">') +
+        field("Date", '<input type="date" class="nw-date" value="' + U.esc(a.dateISO || a.date || "") + '">') +
+      "</div>" +
+      field("Title", '<input type="text" class="nw-title" maxlength="120" value="' + U.esc(a.title || "") + '">') +
+      '<label class="field"><span class="field-label">Body</span><textarea class="nw-body" rows="4" maxlength="4000">' + U.esc(a.body || "") + "</textarea></label>" +
+      '<div class="admin-actions"><label class="sq-check"><input type="checkbox" class="nw-pin"' + (a.pinned ? " checked" : "") + "> Pinned</label>" +
+        '<button class="btn btn-ghost btn-small nw-del" type="button">✕ Remove</button></div>' +
+    "</details>";
+  }
+  function blockNews(c) {
+    var arts = (c.news && c.news.length) ? c.news : [];
+    return block("The Gazette · club news",
+      '<p class="admin-note">Post and edit club news, shown on the <a href="#news">News</a> page (pinned + newest first). Leave the list empty to fall back to the built-in stories.</p>' +
+      '<div id="nw-list">' + arts.map(newsRow).join("") + "</div>" +
+      '<div class="admin-actions"><button class="btn btn-gold btn-small" id="nw-add" type="button">+ New article</button>' +
+        '<button class="btn btn-primary btn-small" id="nw-save">Save news</button>' +
+        '<span class="admin-inline-note" id="nw-msg"></span></div>',
+      "L5+");
+  }
+  function blockLeague(c) {
+    var L = c.league || {};
+    function f(id, lab, val, hint) { return field(lab, '<input type="text" id="' + id + '" maxlength="40" value="' + U.esc(val || "") + '">', hint); }
+    return block("League &amp; division",
+      '<p class="admin-note">The club’s current standing — shown on the Hub and atop Results. Form is letters, e.g. <code>W W D L W</code>.</p>' +
+      '<div class="field-row">' + f("lg-div", "Division", L.division) + f("lg-rank", "Position", L.rank) + f("lg-pts", "Points", L.points) + f("lg-pld", "Played", L.played) + "</div>" +
+      '<div class="field-row">' + f("lg-form", "Form", L.form, "e.g. W W D L W") + f("lg-status", "Status", L.status, "e.g. Promotion push") + "</div>" +
+      f("lg-note", "Note", L.note) +
+      '<div class="admin-actions"><button class="btn btn-primary btn-small" id="lg-save">Save league</button><span class="admin-inline-note" id="lg-msg"></span></div>',
+      "L5+");
+  }
+
   function blockSquad() {
     return block("Squad · players",
       '<p class="admin-note">Edit any player\u2019s identity, add a new one, or hide one who\u2019s left. Stats and match history are never touched \u2014 this is identity only. New players sit on the bench until their formation roles are set in the code.</p>' +
@@ -1018,6 +1056,55 @@
         b.disabled = false;
         msg.textContent = (r && r.ok) ? "✓ saved" : "✗ " + ((r && r.error) || "failed");
         if (r && r.ok) { U.toast("Fun & Games saved."); refreshConfig(); }
+      });
+    });
+
+    /* news (The Gazette) */
+    function wireNewsDels() {
+      U.$$(".nw-del", root).forEach(function (btn) {
+        if (btn.getAttribute("data-wired")) return;
+        btn.setAttribute("data-wired", "1");
+        btn.addEventListener("click", function () {
+          var d = btn.closest(".news-edit-row");
+          if (d) d.parentNode.removeChild(d);
+        });
+      });
+    }
+    wireNewsDels();
+    b = U.$("#nw-add", root);
+    if (b) b.addEventListener("click", function () {
+      var tmp = document.createElement("div");
+      tmp.innerHTML = newsRow({ tag: "CLUB", dateISO: new Date().toISOString().slice(0, 10), _new: true });
+      U.$("#nw-list", root).appendChild(tmp.firstElementChild);
+      wireNewsDels();
+    });
+    b = U.$("#nw-save", root);
+    if (b) b.addEventListener("click", function () {
+      var btn = this, msg = U.$("#nw-msg", root);
+      var list = U.$$(".news-edit-row", root).map(function (row) {
+        function g(cls) { var el = row.querySelector("." + cls); return el ? el.value : ""; }
+        return { tag: g("nw-tag"), dateISO: g("nw-date"), title: g("nw-title"), body: g("nw-body"), pinned: row.querySelector(".nw-pin").checked };
+      }).filter(function (a) { return a.title || a.body; });
+      btn.disabled = true; msg.textContent = "Saving…";
+      NET.adminNews({ news: list }).then(function (r) {
+        btn.disabled = false;
+        msg.textContent = (r && r.ok) ? "✓ Saved" : "✗ " + ((r && r.error) || "failed");
+        if (r && r.ok) { U.toast("News updated."); refreshConfig(); }
+      });
+    });
+
+    /* league / division */
+    b = U.$("#lg-save", root);
+    if (b) b.addEventListener("click", function () {
+      var btn = this;
+      btn.disabled = true;
+      NET.adminLeague({ league: {
+        division: U.$("#lg-div", root).value, rank: U.$("#lg-rank", root).value, points: U.$("#lg-pts", root).value,
+        played: U.$("#lg-pld", root).value, form: U.$("#lg-form", root).value, status: U.$("#lg-status", root).value, note: U.$("#lg-note", root).value
+      } }).then(function (r) {
+        btn.disabled = false;
+        U.$("#lg-msg", root).textContent = (r && r.ok) ? "✓ saved" : "✗ failed";
+        if (r && r.ok) { U.toast("League updated."); refreshConfig(); }
       });
     });
 
