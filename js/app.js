@@ -71,6 +71,35 @@
     return out;
   }
 
+  /* Man of the Match: the explicitly-set one, else the top match rating. */
+  function motmOf(m) {
+    if (m.motm) return m.motm;
+    var best = null;
+    (m.players || []).forEach(function (p) {
+      if (p.rating === "" || p.rating == null) return;
+      if (!best || Number(p.rating) > Number(best.rating)) best = p;
+    });
+    return best ? best.id : "";
+  }
+  function motmCounts(matches) {
+    var map = {};
+    (matches || []).forEach(function (m) { var id = motmOf(m); if (id) map[id] = (map[id] || 0) + 1; });
+    return map;
+  }
+  /* Longest win streak + longest unbeaten run (chronological). */
+  function streaks(matches) {
+    var chron = (matches || []).slice().sort(function (a, b) { return a.seq - b.seq; });
+    var win = 0, winBest = 0, unb = 0, unbBest = 0;
+    chron.forEach(function (m) {
+      if (m.result === "W") { win++; unb++; }
+      else if (m.result === "D") { win = 0; unb++; }
+      else { win = 0; unb = 0; }
+      if (win > winBest) winBest = win;
+      if (unb > unbBest) unbBest = unb;
+    });
+    return { win: winBest, unbeaten: unbBest };
+  }
+
   /* Club totals = stored baseline + every match after the baseline seq. */
   function computeRecord(record, matches, baselineSeq) {
     var r = {
@@ -134,7 +163,7 @@
   /* ========================================================
      ROUTER
      ======================================================== */
-  var ROUTES = ["home", "squad", "tactics", "player", "results", "stats", "honours", "gaffer", "funhouse", "about", "news", "social", "forum", "tickets", "book", "chat", "admin"];
+  var ROUTES = ["home", "squad", "tactics", "player", "results", "match", "opponent", "stats", "honours", "gaffer", "funhouse", "about", "news", "social", "forum", "tickets", "book", "chat", "admin"];
 
   function parseHash() {
     var h = (location.hash || "#home").replace(/^#/, "");
@@ -704,6 +733,7 @@
           ? (ratings.reduce(function (a, b) { return a + b; }, 0) / ratings.length).toFixed(2)
           : null;
         var tricks = hatTricks(matches).filter(function (h) { return h.id === p.id; });
+        var motmCount = 0; matches.forEach(function (mm) { if (motmOf(mm) === p.id) motmCount++; });
 
         var html = "";
         if (c) {
@@ -732,11 +762,12 @@
           );
         }
 
-        if (avgRating || logAssists || tricks.length) {
+        if (avgRating || logAssists || tricks.length || motmCount) {
           html += '<div class="section-label">From the match log</div><div class="tile-row">' +
             (avgRating ? U.statTile("Avg rating", avgRating, { accent: "electric", sub: ratings.length + " detailed games" }) : "") +
             (logGoals ? U.statTile("Logged goals", logGoals) : "") +
             (logAssists ? U.statTile("Logged assists", logAssists) : "") +
+            (motmCount ? U.statTile("Man of the Match", motmCount, { accent: "gold" }) : "") +
             (tricks.length ? U.statTile("Hat-tricks", tricks.length, { accent: "gold", sub: tricks.map(function (t) { return "vs " + t.opponent; }).join(" · ") }) : "") +
           "</div>";
         }
@@ -803,6 +834,7 @@
             return { name: p ? p.name : s.id, goals: s.goals };
           }));
           var detailed = (m.players || []).slice().sort(function (a, b) { return (Number(b.rating) || 0) - (Number(a.rating) || 0); });
+          var motmId = motmOf(m), motmP = motmId ? U.playerById(motmId) : null;
 
           var statsPanel = detailed.length
             ? '<details class="opp-panel">' +
@@ -830,11 +862,13 @@
               '<div class="result-mid">' +
                 '<span class="result-line"><strong>The 40Yr Virgil</strong> <span class="result-score">' +
                   (m.ourScore !== "" ? m.ourScore : "–") + " — " + (m.theirScore !== "" ? m.theirScore : "–") +
-                "</span> " + U.esc(m.opponent || "Unknown") + "</span>" +
+                '</span> <a class="result-opp" href="#opponent/' + encodeURIComponent(m.opponent || "") + '">' + U.esc(m.opponent || "Unknown") + "</a></span>" +
                 (scorers ? '<span class="result-scorers">⚽ ' + scorers + "</span>" : "") +
+                (motmP ? '<span class="result-motm">🌟 MOTM ' + U.esc(U.surname(motmP)) + "</span>" : "") +
               "</div>" +
               '<div class="result-side"><span class="result-date">Match ' + m.seq + (m.dateISO ? " · " + U.fmtDate(m.dateISO) : "") + "</span>" +
-                '<span class="result-tag">' + stageTag + "</span>" + editBtn +
+                '<span class="result-tag">' + stageTag + "</span>" +
+                '<a class="result-report" href="#match/' + m.seq + '">Report →</a>' + editBtn +
               "</div>" +
             "</div>" + statsPanel +
           "</article>";
@@ -848,6 +882,111 @@
             });
           });
         }
+      });
+    }
+  };
+
+  /* ------------------------------------------------ MATCH REPORT */
+  function miniPitch(m) {
+    var lu = m.lineup;
+    if (!lu || !lu.xi || !lu.xi.length || !window.FORMATIONS[lu.formation]) {
+      return '<p class="mr-nolineup">No teamsheet recorded for this game' + (NET.isMod() ? " — add one in Housekeeping." : ".") + "</p>";
+    }
+    var f = window.FORMATIONS[lu.formation];
+    var tokens = lu.xi.map(function (x, i) {
+      var slot = f.slots[i]; if (!slot) return "";
+      var p = U.playerById(x.id);
+      var num = p ? p.number : "?";
+      var nm = p ? U.surname(p) : x.id;
+      var cap = (lu.captain && lu.captain === x.id) ? '<span class="mr-arm">C</span>' : "";
+      return '<div class="mr-token' + (p && p.controlledBy === "human" ? " token-human" : "") + '" style="left:' + slot.x + "%;bottom:" + slot.y + '%">' +
+        '<span class="mr-shirt">' + num + cap + '</span><span class="mr-name">' + U.esc(nm) + "</span></div>";
+    }).join("");
+    var subs = (lu.subs || []).map(function (id) { var p = U.playerById(id); return p ? U.esc(U.surname(p)) : U.esc(id); }).join(", ");
+    return '<div class="section-label">The XI · ' + U.esc(lu.formation) + "</div>" +
+      '<div class="mr-pitch-wrap"><div class="mr-pitch"><div class="pitch-lines"><div class="pl-halfway"></div><div class="pl-centre"></div></div>' + tokens + "</div></div>" +
+      (subs ? '<p class="mr-subs">Subs: ' + subs + "</p>" : "");
+  }
+
+  function statsTable(detailed) {
+    return '<div class="section-label">Player stats</div>' +
+      '<div class="table-scroll"><table class="opp-table opp-table-wide"><thead><tr><th>Player</th><th>G</th><th>A</th><th>R</th><th>Sh</th><th>Tk</th><th>Pass</th></tr></thead><tbody>' +
+      detailed.map(function (t) {
+        var p = U.playerById(t.id);
+        var nm = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a>" : U.esc(t.id);
+        return "<tr><td>" + nm + "</td><td>" + (t.goals !== "" ? t.goals : "—") + "</td><td>" + (t.assists !== "" ? t.assists : "—") +
+          "</td><td>" + (t.rating !== "" ? Number(t.rating).toFixed(1) : "—") + "</td><td>" + (t.shots !== "" ? t.shots : "—") +
+          "</td><td>" + (t.tackles !== "" ? t.tackles : "—") + "</td><td>" + (t.passesMade !== "" ? t.passesMade + "/" + t.passAttempts : "—") + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+
+  PAGES.match = {
+    enter: function (arg) {
+      var seq = Number(arg);
+      var mt = U.$("#match-view");
+      mt.innerHTML = U.emptyState("Opening the report…", "", "⏱");
+      DATA.matches().then(function (res) {
+        var block = liveBlock(res, "the match archive");
+        if (block) { mt.innerHTML = block; return; }
+        var m = (res.matches || []).filter(function (x) { return Number(x.seq) === seq; })[0];
+        if (!m) { mt.innerHTML = U.emptyState("No such match", "It may have been struck from the books.", "—"); return; }
+        applySquadOverrides();
+        var stage = STAGE_LABEL[m.stage] || "Match";
+        var venueLabel = m.venue === "H" ? "Home" : m.venue === "A" ? "Away" : m.venue === "N" ? "Neutral" : "";
+        var scorers = U.scorersLine((m.scorers || []).map(function (s) { var p = U.playerById(s.id); return { name: p ? p.name : s.id, goals: s.goals }; }));
+        var motmId = motmOf(m), motmP = motmId ? U.playerById(motmId) : null;
+        var detailed = (m.players || []).slice().sort(function (a, b) { return (Number(b.rating) || 0) - (Number(a.rating) || 0); });
+
+        mt.innerHTML =
+          '<article class="match-report">' +
+            '<div class="mr-head">' + U.pill(m.result) +
+              '<div class="mr-score">' + (m.ourScore !== "" ? m.ourScore : "–") + " — " + (m.theirScore !== "" ? m.theirScore : "–") + "</div>" +
+              '<div class="mr-teams"><strong>The 40Yr Virgil</strong> vs <a href="#opponent/' + encodeURIComponent(m.opponent || "") + '">' + U.esc(m.opponent || "Unknown") + "</a></div>" +
+              '<div class="mr-meta">Match ' + m.seq + " · " + U.esc(stage) + (m.compName ? " · " + U.esc(m.compName) : "") + (venueLabel ? " · " + venueLabel : "") + (m.dateISO ? " · " + U.fmtDate(m.dateISO) : "") + "</div>" +
+              (scorers ? '<div class="mr-scorers">⚽ ' + scorers + "</div>" : "") +
+              (motmP ? '<div class="mr-motm">🌟 Man of the Match — <a href="#player/' + motmP.id + '">' + U.esc(motmP.name) + "</a></div>" : "") +
+            "</div>" +
+            miniPitch(m) +
+            (detailed.length ? statsTable(detailed) : "") +
+            (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "") +
+            (NET.isMod() ? '<div class="admin-actions"><button class="btn btn-ghost btn-small" id="mr-edit">Edit in Housekeeping →</button></div>' : "") +
+            '<a class="back-link" href="#results">← All results</a>' +
+          "</article>";
+        var eb = U.$("#mr-edit", mt);
+        if (eb) eb.addEventListener("click", function () { try { sessionStorage.setItem("v40.editseq", String(m.seq)); } catch (e) { /* fine */ } location.hash = "#admin"; });
+        U.runCountUps(mt);
+      });
+    }
+  };
+
+  /* ------------------------------------------------ OPPONENT */
+  PAGES.opponent = {
+    enter: function (arg) {
+      var name = decodeURIComponent(arg || "");
+      var mt = U.$("#opponent-view");
+      mt.innerHTML = U.emptyState("Opening the dossier…", "", "⏱");
+      DATA.matches().then(function (res) {
+        var block = liveBlock(res, "the match archive");
+        if (block) { mt.innerHTML = block; return; }
+        var games = (res.matches || []).filter(function (m) { return (m.opponent || "").trim().toLowerCase() === name.trim().toLowerCase(); });
+        if (!games.length) { mt.innerHTML = U.emptyState("Never met " + name, "", "—") + '<a class="back-link" href="#stats">← Back to stats</a>'; return; }
+        var w = 0, d = 0, l = 0, gf = 0, ga = 0;
+        games.forEach(function (m) { if (m.result === "W") w++; else if (m.result === "D") d++; else l++; gf += Number(m.ourScore) || 0; ga += Number(m.theirScore) || 0; });
+        mt.innerHTML =
+          '<h1 class="mr-oppname">vs ' + U.esc(games[0].opponent) + "</h1>" +
+          '<div class="tile-row">' +
+            U.statTile("Played", games.length) + U.statTile("Won", w, { accent: "win" }) + U.statTile("Drawn", d, { accent: "draw" }) +
+            U.statTile("Lost", l, { accent: "loss" }) + U.statTile("Goals for", gf, { accent: "gold" }) + U.statTile("Goals against", ga) +
+          "</div>" +
+          '<div class="section-label">Every meeting</div>' +
+          games.map(function (m) {
+            return '<a class="result-row result-link" href="#match/' + m.seq + '"><div class="result-main">' + U.pill(m.result) +
+              '<div class="result-mid"><span class="result-line"><strong>The 40Yr Virgil</strong> <span class="result-score">' +
+              (m.ourScore !== "" ? m.ourScore : "–") + " — " + (m.theirScore !== "" ? m.theirScore : "–") + "</span> " + U.esc(m.opponent) + "</span></div>" +
+              '<div class="result-side"><span class="result-date">Match ' + m.seq + (m.dateISO ? " · " + U.fmtDate(m.dateISO) : "") + "</span></div></div></a>";
+          }).join("") +
+          '<a class="back-link" href="#stats">← Back to stats</a>';
+        U.runCountUps(mt);
       });
     }
   };
@@ -907,6 +1046,8 @@
             U.statTile("Record", logW + " – " + logD + " – " + logL) +
             U.statTile("Scored", logGF, { accent: "gold" }) +
             U.statTile("Conceded", logGA) +
+            U.statTile("Longest win run", streaks(matches).win, { accent: "win" }) +
+            U.statTile("Longest unbeaten", streaks(matches).unbeaten, { accent: "electric" }) +
           "</div>" +
           '<p class="sync-note">All-time totals = the EA-era baseline plus every match logged since. The recorded games are the slice with full match-by-match detail.</p>';
         U.runCountUps(clubMt);
@@ -938,6 +1079,12 @@
         var trickRows = Object.keys(trickMap).map(function (id) { return { id: id, val: trickMap[id] }; })
           .sort(function (a, b) { return b.val - a.val; });
 
+        var motmMap = motmCounts(matches);
+        var motmRows = Object.keys(motmMap).map(function (id) { return { id: id, val: motmMap[id] }; }).sort(function (a, b) { return b.val - a.val; });
+        var redMap = {};
+        matches.forEach(function (m) { (m.players || []).forEach(function (p) { redMap[p.id] = (redMap[p.id] || 0) + (Number(p.redCards) || 0); }); });
+        var redRows = Object.keys(redMap).filter(function (id) { return redMap[id] > 0; }).map(function (id) { return { id: id, val: redMap[id] }; }).sort(function (a, b) { return b.val - a.val; });
+
         /* ---- biggest contributor: goals + assists per game (career, decent sample) ---- */
         var contribRows = careerList.filter(function (c) { return Number(c.games) >= 20; })
           .map(function (c) {
@@ -967,7 +1114,9 @@
             lb("Assists · detailed games", assistRows, function (r) { return r.val; }) +
             lb("Career assists · all-time", careerList.filter(function (c) { return c.assists > 0; }).sort(function (a, b) { return b.assists - a.assists; }).map(function (c) { return { id: c.id, val: c.assists }; }), function (r) { return r.val; }) +
             lb("Average rating · detailed games", ratingRows, function (r) { return r.val.toFixed(2); }) +
+            lb("Man of the Match", motmRows, function (r) { return r.val; }) +
             lb("Hat-tricks", trickRows, function (r) { return r.val; }) +
+            lb("Discipline · red cards", redRows, function (r) { return r.val; }) +
           "</div>" +
           '<p class="sync-note">Recorded-game boards count everyone — including the algorithms. Donovan and Pereira are on the scoresheet and the archive will never let them forget it.</p>';
 
@@ -1006,7 +1155,7 @@
           '<div class="panel">' +
             '<div class="table-scroll"><table class="opp-table opp-table-wide"><thead><tr><th>Opponent</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th></tr></thead><tbody>' +
             opps.map(function (o) {
-              return "<tr><td>" + U.esc(o.name) + "</td><td>" + o.p + "</td><td>" + o.w + "</td><td>" + o.d + "</td><td>" + o.l + "</td><td>" + o.gf + "</td><td>" + o.ga + "</td></tr>";
+              return '<tr><td><a href="#opponent/' + encodeURIComponent(o.name) + '">' + U.esc(o.name) + "</a></td><td>" + o.p + "</td><td>" + o.w + "</td><td>" + o.d + "</td><td>" + o.l + "</td><td>" + o.gf + "</td><td>" + o.ga + "</td></tr>";
             }).join("") +
             "</tbody></table></div>" +
           "</div>";
