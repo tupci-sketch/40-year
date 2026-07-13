@@ -728,10 +728,15 @@
   }
 
   function squadRow(p) {
-    var tags = (p.isNew ? ' <span class="admin-inline-note">new</span>' : "") +
+    // `_justAdded` = added in this editing session (keep the box open once).
+    // `isNew` = a config-only player (not in the base squad) — must persist so
+    // the board materialises it, but that must NOT force the box open on reload.
+    var justAdded = !!p._justAdded;
+    var persistNew = !!(p.isNew || justAdded);
+    var tags = (justAdded ? ' <span class="admin-inline-note">new</span>' : "") +
       (p.disabled ? ' <span class="level-chip level-mod">hidden</span>' : "") +
       (p.isCaptain ? ' <span class="level-chip level-admin">C</span>' : "");
-    return '<details class="sq-row" data-id="' + U.esc(p.id) + '" data-new="' + (p.isNew ? "1" : "") + '"' + (p.isNew ? " open" : "") + ">" +
+    return '<details class="sq-row" data-id="' + U.esc(p.id) + '" data-new="' + (persistNew ? "1" : "") + '"' + (justAdded ? " open" : "") + ">" +
       "<summary>#" + (p.number || 0) + " " + U.esc(p.name) + " · " + U.esc(p.position || "") + tags + "</summary>" +
       '<div class="field-row">' +
         field("Name", '<input type="text" class="sq-name" maxlength="30" value="' + U.esc(p.name) + '">') +
@@ -749,7 +754,7 @@
         '<label class="sq-check"><input type="checkbox" class="sq-bench"' + (p.permaBench ? " checked" : "") + "> Permanent bench</label>" +
         '<label class="sq-check"><input type="checkbox" class="sq-disabled"' + (p.disabled ? " checked" : "") + "> Hidden from squad</label>" +
         '<label class="sq-check"><input type="checkbox" class="sq-retired"' + (p.retiredAI ? " checked" : "") + "> Retired · AI</label>" +
-        (p.isNew ? '<button class="btn btn-ghost btn-small sq-del" type="button">✕ Remove</button>' : "") +
+        (persistNew ? '<button class="btn btn-ghost btn-small sq-del" type="button">✕ Remove</button>' : "") +
       "</div>" +
     "</details>";
   }
@@ -775,7 +780,7 @@
     U.$("#sq-add", mt).addEventListener("click", function () {
       var id = "p" + Date.now().toString(36);
       var tmp = document.createElement("div");
-      tmp.innerHTML = squadRow({ id: id, name: "New Player", number: 0, positions: ["CM"], position: "CM", controlledBy: "bot", pronouns: "he/him", card: "", flavour: "", isNew: true });
+      tmp.innerHTML = squadRow({ id: id, name: "New Player", number: 0, positions: ["CM"], position: "CM", controlledBy: "bot", pronouns: "he/him", card: "", flavour: "", isNew: true, _justAdded: true });
       var node = tmp.firstElementChild;
       U.$("#sq-list", mt).appendChild(node);
       wireDel(node);
