@@ -917,61 +917,86 @@
   };
 
   /* ------------------------------------------------ MATCH REPORT */
-  /* Reconstruct a plausible teamsheet for a historic game that predates the
-     per-match XI feature. Only the humans (and any scorers) are evidenced in
-     the stat lines; we honour the club's real position rules for the humans,
-     then bot-fill the rest of the shape to a full XI. Display-only — it never
-     writes back and never alters stats. */
-  function reconstructLineup(m) {
+  /* The club's standing positions for the humans, for a given formation shape
+     and the set of humans who played (`has`). Winger shapes (a LW+RW) →
+     Dan LW, Flake RW, Amy ST; two-striker shapes (the diamond) → Amy & Dan the
+     strikers (Flake takes a striker slot only when Amy is absent); Corey is
+     always CAM. One source of truth, shared by reconstruction and the repair
+     pass below and mirrored in the tactics board + match editor auto-pick. */
+  function forcedHumanSlots(formation, has) {
+    var f = window.FORMATIONS[formation];
+    if (!f) return {};
+    var canon = {}; f.slots.forEach(function (s) { var c = U.canonPos(s.pos); canon[c] = (canon[c] || 0) + 1; });
+    var forced = {};
+    if (has.tupci) forced.tupci = "CAM";
+    if (canon.LW && canon.RW) {                 // a formation with wingers
+      if (has.danwhizzy) forced.danwhizzy = "LW";
+      if (has.walker) forced.walker = "RW";
+      if (has.amy) forced.amy = "ST";
+      else if (has.danwhizzy) { forced.danwhizzy = "ST"; if (has.walker) forced.walker = "RW"; }
+    } else if ((canon.ST || 0) >= 2) {          // the diamond — two strikers
+      if (has.amy) forced.amy = "RST"; else if (has.walker) forced.walker = "RST";
+      if (has.danwhizzy) forced.danwhizzy = "LST";
+    } else {                                     // single striker + wide mids
+      if (has.amy) forced.amy = "ST"; else if (has.danwhizzy) forced.danwhizzy = "ST";
+      if (has.walker) forced.walker = "RM";
+    }
+    return forced;
+  }
+
+  /* Pick the formation from who played, per the same rules. */
+  function formationFor(has) {
+    if (has.amy && has.tupci && has.danwhizzy && has.walker) return "4-2-1-3";
+    if (has.tupci && has.danwhizzy && has.walker && !has.amy) return "4-1-2-1-2";
+    if (has.amy && has.danwhizzy) return "4-1-2-1-2";
+    return "4-2-1-3";
+  }
+
+  /* Build a teamsheet that always obeys the human position rules. `hint` may
+     pin a formation (a saved lineup's) and `prefer` a list of ids to slot the
+     outfield from first (the mod's picks). Used both to reconstruct historic
+     games and to REPAIR saved lineups whose XI was auto-filled before the
+     rules existed. Display-only — never writes back, never alters stats. */
+  function planLineup(m, hint) {
     applySquadOverrides();
     var squad = window.SQUAD || [];
     var byId = {}; squad.forEach(function (p) { byId[p.id] = p; });
     var evidenced = (m.players || []).map(function (p) { return p.id; }).filter(function (id) { return byId[id]; });
-    if (!evidenced.length) return null;
-    var has = {}; evidenced.forEach(function (id) { has[id] = 1; });
+    // "Who played" = the stat lines; a saved XI's picks are added as preferences.
+    var present = evidenced.slice();
+    var prefer = (hint && hint.prefer) ? hint.prefer.filter(function (id) { return byId[id]; }) : [];
+    prefer.forEach(function (id) { if (present.indexOf(id) === -1) present.push(id); });
+    if (!present.length) return null;
+    var has = {}; present.forEach(function (id) { has[id] = 1; });
 
-    // The club's standing rules for where the humans line up.
-    var forced = {}, formation = "4-2-1-3";
-    if (has.amy && has.tupci && has.danwhizzy && has.walker) {
-      formation = "4-2-1-3";
-      forced = { danwhizzy: "LW", walker: "RW", amy: "ST", tupci: "CAM" };
-    } else if (has.tupci && has.danwhizzy && has.walker && !has.amy) {
-      formation = "4-1-2-1-2";
-      forced = { walker: "RST", danwhizzy: "LST", tupci: "CAM" };
-    } else if (has.amy && has.danwhizzy) {
-      formation = "4-1-2-1-2";
-      forced = { amy: "RST", danwhizzy: "LST" };
-      if (has.tupci) forced.tupci = "CAM";
-    } else {
-      formation = "4-2-1-3";
-      if (has.tupci) forced.tupci = "CAM";
-      if (has.amy) forced.amy = "ST";      // ST whenever there are wingers
-      if (has.walker) forced.walker = "RW";
-      if (has.danwhizzy) forced.danwhizzy = "ST";
-    }
-
+    var formation = (hint && hint.formation && window.FORMATIONS[hint.formation]) ? hint.formation : formationFor(has);
     var f = window.FORMATIONS[formation];
     if (!f) return null;
+    var forced = forcedHumanSlots(formation, has);
+
     var slots = f.slots.map(function (s) { return { pos: s.pos, id: "" }; });
     var used = {};
     function emptyExact(pos) { return slots.filter(function (s) { return !s.id && s.pos === pos; })[0]; }
     function emptyCanon(pos) { return slots.filter(function (s) { return !s.id && U.canonPos(s.pos) === U.canonPos(pos); })[0]; }
+    function fill(id) {
+      var pl = byId[id]; if (!pl || used[id]) return;
+      var s = slots.filter(function (x) { return !x.id && U.posFit(pl, x.pos) === "exact"; })[0] ||
+              slots.filter(function (x) { return !x.id && U.posFit(pl, x.pos) === "group"; })[0] ||
+              slots.filter(function (x) { return !x.id; })[0];
+      if (s) { s.id = id; used[id] = 1; }
+    }
 
-    // 1) forced human placements
+    // 1) forced human placements (the rules win over everything)
     Object.keys(forced).forEach(function (id) {
       if (!has[id] || used[id]) return;
       var s = emptyExact(forced[id]) || emptyCanon(forced[id]);
       if (s) { s.id = id; used[id] = 1; }
     });
-    // 2) remaining evidenced players → their best-fitting open slot
-    evidenced.filter(function (id) { return !used[id]; }).forEach(function (id) {
-      var pl = byId[id];
-      var s = slots.filter(function (x) { return !x.id && U.posFit(pl, x.pos) === "exact"; })[0] ||
-              slots.filter(function (x) { return !x.id && U.posFit(pl, x.pos) === "group"; })[0] ||
-              slots.filter(function (x) { return !x.id; })[0];
-      if (s) { s.id = id; used[id] = 1; }
-    });
-    // 3) bot-fill the remaining slots to a full XI
+    // 2) the mod's picks first (so a hand-set XI keeps its outfield), then
+    //    anyone else who played, into their best-fitting open slot.
+    prefer.forEach(fill);
+    present.filter(function (id) { return !used[id]; }).forEach(fill);
+    // 3) bot-fill any slots still open to a full XI
     slots.filter(function (s) { return !s.id; }).forEach(function (s) {
       var pick = squad.filter(function (p) { return !used[p.id] && !p.permaBench && !p.retiredAI && U.posFit(p, s.pos) === "exact"; })[0] ||
                  squad.filter(function (p) { return !used[p.id] && !p.permaBench && !p.retiredAI && U.posFit(p, s.pos) === "group"; })[0] ||
@@ -982,14 +1007,29 @@
 
     var xi = slots.filter(function (s) { return s.id; }).map(function (s) { return { id: s.id, pos: s.pos }; });
     if (xi.length < 11) return null;
-    var subs = evidenced.filter(function (id) { return !used[id]; });
-    var captain = has.tupci ? "tupci" :
-      ((xi.filter(function (x) { var p = byId[x.id]; return p && p.isCaptain; })[0] || {}).id || "");
-    return { formation: formation, xi: xi, subs: subs, captain: captain, reconstructed: true };
+    var subs = present.filter(function (id) { return !used[id]; });
+    var captain = (hint && hint.captain && used[hint.captain]) ? hint.captain :
+      (has.tupci ? "tupci" : ((xi.filter(function (x) { var p = byId[x.id]; return p && p.isCaptain; })[0] || {}).id || ""));
+    return { formation: formation, xi: xi, subs: subs, captain: captain };
+  }
+
+  /* The teamsheet to show for a match: repair a saved lineup so the humans
+     always sit in their ruled slots (keeping its formation + the mod's picks),
+     or reconstruct one from scratch when none was saved. */
+  function displayLineup(m) {
+    var saved = m.lineup;
+    if (saved && saved.xi && saved.xi.length && window.FORMATIONS[saved.formation]) {
+      var lu = planLineup(m, { formation: saved.formation, prefer: saved.xi.map(function (x) { return x.id; }), captain: saved.captain });
+      if (lu) return lu;
+      return saved;
+    }
+    var r = planLineup(m, null);
+    if (r) r.reconstructed = true;
+    return r;
   }
 
   function miniPitch(m) {
-    var lu = m.lineup && m.lineup.xi && m.lineup.xi.length ? m.lineup : reconstructLineup(m);
+    var lu = displayLineup(m);
     if (!lu || !lu.xi || !lu.xi.length || !window.FORMATIONS[lu.formation]) {
       return '<p class="mr-nolineup">No teamsheet recorded for this game' + (NET.isMod() ? " — add one in Housekeeping." : ".") + "</p>";
     }
