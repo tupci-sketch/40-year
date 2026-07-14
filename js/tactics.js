@@ -23,6 +23,21 @@
   /* ---- roster-driven fill ---- */
   function roster() { return (window.SQUAD || []).filter(function (p) { return !p.disabled; }); }
 
+  /* The club's standing positions for the human quartet, derived from the
+     formation's shape (does it play wingers, or two strikers?). Mirrors the
+     rules used to reconstruct historic teamsheets, so the live board and the
+     match reports agree on where Amy, Dan, Flake and Corey line up. */
+  function humanRules(f) {
+    var canon = {}; f.slots.forEach(function (s) { var c = U.canonPos(s.pos); canon[c] = (canon[c] || 0) + 1; });
+    if (canon.LW && canon.RW) {
+      return [{ id: "danwhizzy", pos: "LW" }, { id: "walker", pos: "RW" }, { id: "amy", pos: "ST" }, { id: "tupci", pos: "CAM" }];
+    }
+    if ((canon.ST || 0) >= 2) {
+      return [{ id: "amy", pos: "RST" }, { id: "danwhizzy", pos: "LST" }, { id: "tupci", pos: "CAM" }];
+    }
+    return [{ id: "amy", pos: "ST" }, { id: "walker", pos: "RM" }, { id: "tupci", pos: "CAM" }];
+  }
+
   /* Position-aware auto-fill. `seed` (optional {slots}) is honoured first, then
      the captain to CAM, then exact-position fits, then same-area fits, then
      anyone. Perma-bench players stay off the XI. Empty slots stay null. */
@@ -39,6 +54,17 @@
     var camIdx = -1;
     f.slots.forEach(function (s, i) { if (camIdx === -1 && U.canonPos(s.pos) === "CAM") camIdx = i; });
     if (camIdx !== -1 && !slots[camIdx] && byId.tupci && !byId.tupci.permaBench) place(camIdx, "tupci");
+
+    // The club's standing rules for the humans: Corey always CAM (above);
+    // with wingers → Dan LW, Flake RW, Amy ST; in the diamond → Amy & Dan the
+    // two strikers. Seed those before the generic position fits.
+    humanRules(f).forEach(function (fp) {
+      if (used[fp.id] || !byId[fp.id] || byId[fp.id].permaBench) return;
+      var idx = -1;
+      f.slots.forEach(function (s, i) { if (idx === -1 && !slots[i] && s.pos === fp.pos) idx = i; });
+      if (idx === -1) f.slots.forEach(function (s, i) { if (idx === -1 && !slots[i] && U.canonPos(s.pos) === U.canonPos(fp.pos)) idx = i; });
+      if (idx !== -1) place(idx, fp.id);
+    });
 
     var avail = players.filter(function (p) { return !p.permaBench; }).map(function (p) { return p.id; });
     ["exact", "group"].forEach(function (level) {

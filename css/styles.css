@@ -1673,6 +1673,14 @@ textarea { resize: vertical; font-family: var(--font-body); }
 }
 .me-mini input:focus { outline: none; border-color: var(--purple-electric); }
 
+/* GK stat lines: Saves/Conceded to the fore, outfield fields dimmed.
+   For outfield rows the reverse — GK fields dim, everything else normal. */
+.me-mini.gk-stat { opacity: 0.45; }
+.me-mini.gk-stat span { color: var(--gold); }
+.me-player.is-gk .me-mini.gk-stat { opacity: 1; }
+.me-player.is-gk .me-mini.gk-stat input { border-color: rgba(198, 168, 74, 0.55); }
+.me-player.is-gk .me-mini:not(.gk-stat) { opacity: 0.4; }
+
 /* ---- housekeeping: career rows ---- */
 .admin-career-row {
   border-top: 1px dashed rgba(164, 165, 166, 0.25);
@@ -2209,3 +2217,61 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 .league-note { color: var(--silver); font-size: 0.85rem; margin-top: 4px; }
 .news-pinned { border-color: rgba(242, 180, 92, 0.5); }
 .news-card-head .news-pin { margin-left: 4px; }
+
+/* ============================================================
+   CLUBHOUSE — RSVP + predictions + predictor league
+   ============================================================ */
+.ch-card {
+  background: var(--navy-deep, #0c1226); border: 1px solid rgba(164,165,166,0.18);
+  border-radius: 14px; padding: 16px; margin-bottom: 16px;
+}
+.ch-fixture { border-left: 3px solid var(--purple-electric); }
+.ch-fx-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ch-fx-title { flex: 1 1 auto; min-width: 0; }
+.ch-fx-when { font-family: var(--font-sub); color: var(--silver); font-size: 0.85rem; letter-spacing: 0.04em; }
+.ch-fx-note { color: var(--silver); font-size: 0.9rem; margin: 6px 0 0; }
+.ch-session-note { color: var(--silver); font-size: 0.85rem; margin-top: 8px; font-style: italic; }
+.ch-rsvp-row { display: flex; gap: 8px; margin: 12px 0 8px; flex-wrap: wrap; }
+.ch-rsvp {
+  flex: 1 1 auto; min-width: 90px; cursor: pointer;
+  background: var(--navy); color: var(--white);
+  border: 1px solid rgba(164,165,166,0.3); border-radius: 10px;
+  padding: 9px 10px; font-size: 0.92rem; font-family: var(--font-sub);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: border-color .15s, background .15s;
+}
+.ch-rsvp:hover { border-color: var(--purple-electric); }
+.ch-rsvp .ch-count {
+  font-size: 0.78rem; background: rgba(255,255,255,0.1); border-radius: 20px;
+  padding: 1px 7px; min-width: 20px; text-align: center;
+}
+.ch-rsvp-on { font-weight: 700; }
+.ch-rsvp-on.ch-rsvp-yes { border-color: var(--win); background: rgba(60,200,120,0.14); }
+.ch-rsvp-on.ch-rsvp-maybe { border-color: var(--gold, #f2b45c); background: rgba(242,180,92,0.14); }
+.ch-rsvp-on.ch-rsvp-no { border-color: var(--loss, #e05a5a); background: rgba(224,90,90,0.14); }
+.ch-avail-names { font-size: 0.85rem; color: var(--silver); line-height: 1.5; }
+.ch-al { font-family: var(--font-sub); text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.72rem; }
+.ch-al-yes { color: var(--win); } .ch-al-maybe { color: var(--gold, #f2b45c); } .ch-al-no { color: var(--loss, #e05a5a); }
+.ch-predict { margin-top: 14px; border-top: 1px dashed rgba(164,165,166,0.22); padding-top: 10px; }
+.ch-pred-input { display: flex; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+.ch-pred-us { font-family: var(--font-sub); letter-spacing: 0.04em; color: var(--white); }
+.ch-pred-dash { color: var(--silver); }
+.ch-pred-input input {
+  width: 58px; background: var(--navy); color: var(--white); text-align: center;
+  border: 1px solid rgba(164,165,166,0.3); border-radius: 8px; padding: 7px 6px; font-size: 1rem;
+}
+.ch-pred-input input:focus { outline: none; border-color: var(--purple-electric); }
+.ch-pred-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.ch-pred-list li {
+  font-size: 0.85rem; background: var(--navy); border: 1px solid rgba(164,165,166,0.2);
+  border-radius: 20px; padding: 3px 10px; color: var(--silver);
+}
+.ch-pred-list .ch-pred-score { color: var(--white); font-weight: 700; margin-left: 3px; }
+.ch-empty { color: var(--silver); font-size: 0.85rem; font-style: italic; margin: 6px 0 0; }
+
+/* Reconstructed teamsheet note (historic games) */
+.mr-reco {
+  font-family: var(--font-sub); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--navy); background: var(--silver); border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: middle;
+}
+.mr-reco-note { color: var(--silver); font-size: 0.8rem; font-style: italic; margin-top: 6px; text-align: center; }

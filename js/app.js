@@ -156,6 +156,16 @@
         var c = byId[s.id];
         if (c) c.goals += Number(s.goals) || 0;
       });
+      // A recorded teamsheet credits an appearance even with no stat line:
+      // being named in the XI that played is enough to log the game.
+      if (m.lineup && m.lineup.xi) {
+        m.lineup.xi.forEach(function (x) {
+          if (!x || !x.id || counted[x.id]) return;
+          var c = byId[x.id];
+          if (!c) return;
+          c.games++; counted[x.id] = 1;
+        });
+      }
     });
     return byId;
   }
@@ -163,7 +173,7 @@
   /* ========================================================
      ROUTER
      ======================================================== */
-  var ROUTES = ["home", "squad", "tactics", "player", "results", "match", "opponent", "stats", "honours", "gaffer", "funhouse", "about", "news", "social", "forum", "tickets", "book", "chat", "admin"];
+  var ROUTES = ["home", "squad", "tactics", "player", "results", "match", "opponent", "stats", "honours", "gaffer", "funhouse", "about", "news", "social", "clubhouse", "forum", "tickets", "book", "chat", "admin"];
 
   function parseHash() {
     var h = (location.hash || "#home").replace(/^#/, "");
@@ -233,6 +243,7 @@
     U.$("#nav-admin").hidden = !NET.isMod();
     U.$("#nav-chat").hidden = !NET.me;
     U.$("#nav-forum").hidden = !NET.me;
+    U.$("#nav-clubhouse").hidden = !NET.me;
   }
 
   var AUTH_ERR = {
@@ -906,8 +917,79 @@
   };
 
   /* ------------------------------------------------ MATCH REPORT */
+  /* Reconstruct a plausible teamsheet for a historic game that predates the
+     per-match XI feature. Only the humans (and any scorers) are evidenced in
+     the stat lines; we honour the club's real position rules for the humans,
+     then bot-fill the rest of the shape to a full XI. Display-only — it never
+     writes back and never alters stats. */
+  function reconstructLineup(m) {
+    applySquadOverrides();
+    var squad = window.SQUAD || [];
+    var byId = {}; squad.forEach(function (p) { byId[p.id] = p; });
+    var evidenced = (m.players || []).map(function (p) { return p.id; }).filter(function (id) { return byId[id]; });
+    if (!evidenced.length) return null;
+    var has = {}; evidenced.forEach(function (id) { has[id] = 1; });
+
+    // The club's standing rules for where the humans line up.
+    var forced = {}, formation = "4-2-1-3";
+    if (has.amy && has.tupci && has.danwhizzy && has.walker) {
+      formation = "4-2-1-3";
+      forced = { danwhizzy: "LW", walker: "RW", amy: "ST", tupci: "CAM" };
+    } else if (has.tupci && has.danwhizzy && has.walker && !has.amy) {
+      formation = "4-1-2-1-2";
+      forced = { walker: "RST", danwhizzy: "LST", tupci: "CAM" };
+    } else if (has.amy && has.danwhizzy) {
+      formation = "4-1-2-1-2";
+      forced = { amy: "RST", danwhizzy: "LST" };
+      if (has.tupci) forced.tupci = "CAM";
+    } else {
+      formation = "4-2-1-3";
+      if (has.tupci) forced.tupci = "CAM";
+      if (has.amy) forced.amy = "ST";      // ST whenever there are wingers
+      if (has.walker) forced.walker = "RW";
+      if (has.danwhizzy) forced.danwhizzy = "ST";
+    }
+
+    var f = window.FORMATIONS[formation];
+    if (!f) return null;
+    var slots = f.slots.map(function (s) { return { pos: s.pos, id: "" }; });
+    var used = {};
+    function emptyExact(pos) { return slots.filter(function (s) { return !s.id && s.pos === pos; })[0]; }
+    function emptyCanon(pos) { return slots.filter(function (s) { return !s.id && U.canonPos(s.pos) === U.canonPos(pos); })[0]; }
+
+    // 1) forced human placements
+    Object.keys(forced).forEach(function (id) {
+      if (!has[id] || used[id]) return;
+      var s = emptyExact(forced[id]) || emptyCanon(forced[id]);
+      if (s) { s.id = id; used[id] = 1; }
+    });
+    // 2) remaining evidenced players → their best-fitting open slot
+    evidenced.filter(function (id) { return !used[id]; }).forEach(function (id) {
+      var pl = byId[id];
+      var s = slots.filter(function (x) { return !x.id && U.posFit(pl, x.pos) === "exact"; })[0] ||
+              slots.filter(function (x) { return !x.id && U.posFit(pl, x.pos) === "group"; })[0] ||
+              slots.filter(function (x) { return !x.id; })[0];
+      if (s) { s.id = id; used[id] = 1; }
+    });
+    // 3) bot-fill the remaining slots to a full XI
+    slots.filter(function (s) { return !s.id; }).forEach(function (s) {
+      var pick = squad.filter(function (p) { return !used[p.id] && !p.permaBench && !p.retiredAI && U.posFit(p, s.pos) === "exact"; })[0] ||
+                 squad.filter(function (p) { return !used[p.id] && !p.permaBench && !p.retiredAI && U.posFit(p, s.pos) === "group"; })[0] ||
+                 squad.filter(function (p) { return !used[p.id] && !p.permaBench && !p.retiredAI; })[0] ||
+                 squad.filter(function (p) { return !used[p.id] && !p.retiredAI; })[0];
+      if (pick) { s.id = pick.id; used[pick.id] = 1; }
+    });
+
+    var xi = slots.filter(function (s) { return s.id; }).map(function (s) { return { id: s.id, pos: s.pos }; });
+    if (xi.length < 11) return null;
+    var subs = evidenced.filter(function (id) { return !used[id]; });
+    var captain = has.tupci ? "tupci" :
+      ((xi.filter(function (x) { var p = byId[x.id]; return p && p.isCaptain; })[0] || {}).id || "");
+    return { formation: formation, xi: xi, subs: subs, captain: captain, reconstructed: true };
+  }
+
   function miniPitch(m) {
-    var lu = m.lineup;
+    var lu = m.lineup && m.lineup.xi && m.lineup.xi.length ? m.lineup : reconstructLineup(m);
     if (!lu || !lu.xi || !lu.xi.length || !window.FORMATIONS[lu.formation]) {
       return '<p class="mr-nolineup">No teamsheet recorded for this game' + (NET.isMod() ? " — add one in Housekeeping." : ".") + "</p>";
     }
@@ -922,20 +1004,26 @@
         '<span class="mr-shirt">' + num + cap + '</span><span class="mr-name">' + U.esc(nm) + "</span></div>";
     }).join("");
     var subs = (lu.subs || []).map(function (id) { var p = U.playerById(id); return p ? U.esc(U.surname(p)) : U.esc(id); }).join(", ");
-    return '<div class="section-label">The XI · ' + U.esc(lu.formation) + "</div>" +
+    return '<div class="section-label">The XI · ' + U.esc(lu.formation) + (lu.reconstructed ? ' <span class="mr-reco">reconstructed</span>' : "") + "</div>" +
       '<div class="mr-pitch-wrap"><div class="mr-pitch"><div class="pitch-lines"><div class="pl-halfway"></div><div class="pl-centre"></div></div>' + tokens + "</div></div>" +
-      (subs ? '<p class="mr-subs">Subs: ' + subs + "</p>" : "");
+      (subs ? '<p class="mr-subs">Subs: ' + subs + "</p>" : "") +
+      (lu.reconstructed ? '<p class="mr-reco-note">Inferred from the recorded stats — the humans in their usual roles, the shape filled to eleven.</p>' : "");
   }
 
   function statsTable(detailed) {
+    var anyGK = detailed.some(function (t) { return (Number(t.saves) || 0) > 0 || (Number(t.conceded) || 0) > 0; });
     return '<div class="section-label">Player stats</div>' +
-      '<div class="table-scroll"><table class="opp-table opp-table-wide"><thead><tr><th>Player</th><th>G</th><th>A</th><th>R</th><th>Sh</th><th>Tk</th><th>Pass</th></tr></thead><tbody>' +
+      '<div class="table-scroll"><table class="opp-table opp-table-wide"><thead><tr><th>Player</th><th>G</th><th>A</th><th>R</th><th>Sh</th><th>Tk</th><th>Pass</th>' +
+      (anyGK ? "<th>Sv</th><th>GA</th>" : "") + "</tr></thead><tbody>" +
       detailed.map(function (t) {
         var p = U.playerById(t.id);
         var nm = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a>" : U.esc(t.id);
+        var isGK = p && ((p.positions && p.positions[0]) || p.position) === "GK";
         return "<tr><td>" + nm + "</td><td>" + (t.goals !== "" ? t.goals : "—") + "</td><td>" + (t.assists !== "" ? t.assists : "—") +
           "</td><td>" + (t.rating !== "" ? Number(t.rating).toFixed(1) : "—") + "</td><td>" + (t.shots !== "" ? t.shots : "—") +
-          "</td><td>" + (t.tackles !== "" ? t.tackles : "—") + "</td><td>" + (t.passesMade !== "" ? t.passesMade + "/" + t.passAttempts : "—") + "</td></tr>";
+          "</td><td>" + (t.tackles !== "" ? t.tackles : "—") + "</td><td>" + (t.passesMade !== "" ? t.passesMade + "/" + t.passAttempts : "—") + "</td>" +
+          (anyGK ? "<td>" + (isGK && t.saves !== "" ? t.saves : "—") + "</td><td>" + (isGK && t.conceded !== "" ? t.conceded : "—") + "</td>" : "") +
+          "</tr>";
       }).join("") + "</tbody></table></div>";
   }
 
@@ -1654,6 +1742,134 @@
     }
   };
 
+  /* ------------------------------------------------ CLUBHOUSE (members): RSVP + predictions */
+  PAGES.clubhouse = {
+    enter: function () {
+      var mt = U.$("#clubhouse-view");
+      if (!mt) return;
+      if (!NET.me) {
+        mt.innerHTML = U.emptyState("Members only", "Sign in to RSVP for fixtures, predict the scores and see who's about.", "🔑");
+        return;
+      }
+      mt.innerHTML = U.emptyState("Opening the Clubhouse…", "", "🍺");
+      var mine = String((NET.me && NET.me.name) || "").toLowerCase();
+
+      function upcoming(c) {
+        return (c.fixtures || []).filter(function (f) {
+          if (!f.dateISO) return true;
+          var d = new Date(f.dateISO + "T23:59:59");
+          return d >= new Date(new Date().toDateString());
+        });
+      }
+      function names(list) { return list.length ? list.map(U.esc).join(", ") : "—"; }
+
+      function availBlock(f, avail) {
+        var a = avail[f.id] || {};
+        var groups = { yes: [], maybe: [], no: [] }, myStatus = "";
+        Object.keys(a).forEach(function (uk) {
+          var e = a[uk]; if (groups[e.status]) groups[e.status].push(e.display);
+          if (String(e.display || "").toLowerCase() === mine) myStatus = e.status;
+        });
+        var opts = [["yes", "✅ In"], ["maybe", "🤔 Maybe"], ["no", "❌ Out"]];
+        var btns = opts.map(function (o) {
+          return '<button class="ch-rsvp' + (myStatus === o[0] ? " ch-rsvp-on ch-rsvp-" + o[0] : "") +
+            '" data-act="avail" data-fid="' + U.esc(f.id) + '" data-status="' + o[0] + '">' + o[1] +
+            ' <span class="ch-count">' + groups[o[0]].length + "</span></button>";
+        }).join("");
+        return '<div class="ch-rsvp-row">' + btns + "</div>" +
+          '<div class="ch-avail-names">' +
+            '<span class="ch-al ch-al-yes">In:</span> ' + names(groups.yes) + " · " +
+            '<span class="ch-al ch-al-maybe">Maybe:</span> ' + names(groups.maybe) + " · " +
+            '<span class="ch-al ch-al-no">Out:</span> ' + names(groups.no) +
+          "</div>";
+      }
+
+      function predictBlock(f, preds) {
+        var pr = preds[f.id] || {}, myP = null;
+        var rows = Object.keys(pr).map(function (uk) {
+          var e = pr[uk];
+          if (String(e.display || "").toLowerCase() === mine) myP = e;
+          return '<li>' + U.esc(e.display) + ' <span class="ch-pred-score">' + Number(e.our) + "–" + Number(e.their) + "</span></li>";
+        });
+        return '<div class="ch-predict">' +
+          '<div class="section-label">Predict the score</div>' +
+          '<div class="ch-pred-input">' +
+            '<span class="ch-pred-us">Virgil</span>' +
+            '<input type="number" min="0" max="30" class="ch-pred-our" data-fid="' + U.esc(f.id) + '" value="' + (myP ? Number(myP.our) : "") + '" placeholder="0">' +
+            '<span class="ch-pred-dash">–</span>' +
+            '<input type="number" min="0" max="30" class="ch-pred-their" data-fid="' + U.esc(f.id) + '" value="' + (myP ? Number(myP.their) : "") + '" placeholder="0">' +
+            '<button class="btn btn-primary btn-small" data-act="predict" data-fid="' + U.esc(f.id) + '">' + (myP ? "Update" : "Call it") + "</button>" +
+          "</div>" +
+          (rows.length ? '<ul class="ch-pred-list">' + rows.join("") + "</ul>" : '<p class="ch-empty">No calls yet — be the first.</p>') +
+        "</div>";
+      }
+
+      function leaderboard(c) {
+        var s = c.predScores || {};
+        var rows = Object.keys(s).map(function (uk) { return s[uk]; })
+          .filter(function (e) { return e && e.played; })
+          .sort(function (a, b) { return (b.points - a.points) || (b.exact - a.exact); });
+        if (!rows.length) return "";
+        return '<div class="ch-card"><div class="section-label">🏆 Predictor league</div>' +
+          '<div class="table-scroll"><table class="opp-table"><thead><tr><th>#</th><th>Member</th><th>Pts</th><th>Exact</th><th>Right</th><th>Played</th></tr></thead><tbody>' +
+          rows.map(function (e, i) {
+            return "<tr><td>" + (i + 1) + "</td><td>" + U.esc(e.display) + "</td><td><strong>" + e.points + "</strong></td><td>" +
+              (e.exact || 0) + "</td><td>" + (e.correct || 0) + "</td><td>" + e.played + "</td></tr>";
+          }).join("") + "</tbody></table></div></div>";
+      }
+
+      function render() {
+        DATA.config(true).then(function () {
+          var c = cfg();
+          var fx = upcoming(c);
+          var avail = c.availability || {}, preds = c.predictions || {};
+          var body = "";
+          if (!fx.length) {
+            body += '<div class="ch-card">' + U.emptyState("No fixtures on the calendar", "When a game or session is booked in Housekeeping, RSVP and predictions open up here.", "📅") + "</div>";
+          } else {
+            body += fx.map(function (f) {
+              var stage = STAGE_LABEL[f.stage] || "Match";
+              var when = f.dateISO ? U.fmtDate(f.dateISO) : "Date TBC";
+              var isMatch = f.kind !== "session";
+              return '<div class="ch-card ch-fixture">' +
+                '<div class="ch-fx-head">' +
+                  '<span class="fixture-badge">' + (isMatch ? U.esc(stage) : "Session") + "</span>" +
+                  '<div class="ch-fx-title"><strong>The 40Yr Virgil</strong>' + (isMatch && f.opponent ? ' <span class="fixture-vs">vs</span> ' + U.esc(f.opponent) : (f.opponent ? " · " + U.esc(f.opponent) : " · Club session")) + "</div>" +
+                  '<span class="ch-fx-when">' + when + "</span>" +
+                "</div>" +
+                (f.note ? '<p class="ch-fx-note">' + U.esc(f.note) + "</p>" : "") +
+                availBlock(f, avail) +
+                (isMatch ? predictBlock(f, preds) : '<p class="ch-session-note">Casual session — RSVP only, no scoreline to call.</p>') +
+              "</div>";
+            }).join("");
+          }
+          body += leaderboard(c);
+          mt.innerHTML = body;
+        });
+      }
+
+      if (!mt.getAttribute("data-wired")) { mt.setAttribute("data-wired", "1"); mt.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-act]");
+        if (!btn) return;
+        var act = btn.getAttribute("data-act"), fid = btn.getAttribute("data-fid");
+        if (act === "avail") {
+          var status = btn.getAttribute("data-status");
+          if (btn.classList.contains("ch-rsvp-on")) status = ""; // toggle off
+          btn.disabled = true;
+          NET.avail(fid, status).then(function () { render(); });
+        } else if (act === "predict") {
+          var our = U.$('.ch-pred-our[data-fid="' + fid + '"]', mt);
+          var their = U.$('.ch-pred-their[data-fid="' + fid + '"]', mt);
+          if (!our || !their) return;
+          btn.disabled = true;
+          NET.predict(fid, Number(our.value) || 0, Number(their.value) || 0).then(function () { render(); });
+        }
+      }); }
+
+      render();
+    }
+  };
+
   /* ------------------------------------------------ SOCIAL (TikTok creator embed) */
   PAGES.social = {
     enter: function () {
@@ -2098,7 +2314,7 @@
         sessionChecked = true;
         renderAccount();
         var page = parseHash().name;
-        if (page === "chat" || page === "admin") route();
+        if (page === "chat" || page === "admin" || page === "clubhouse" || page === "forum") route();
       });
     } else {
       sessionChecked = true;

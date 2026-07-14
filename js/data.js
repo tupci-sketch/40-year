@@ -295,7 +295,7 @@ window.POSITIONS = ["GK", "RB", "RWB", "CB", "LB", "LWB", "CDM", "CM", "CAM", "R
 (function () {
   var M = {
     yeyu: ["GK"], kubikova: ["RB", "RWB"], alghamdi: ["LB", "LWB"], ferry: ["CB"],
-    moulin: ["CM", "CDM"], pereira: ["CB"], tupci: ["CAM"], amy: ["CM", "CAM"],
+    moulin: ["CM", "CDM"], pereira: ["CB"], tupci: ["CAM"], amy: ["ST", "CAM", "CM"],
     walker: ["RM", "RW", "ST"], danwhizzy: ["ST", "CF"], medina: ["CM", "CDM"],
     donovan: ["CM"], lejeune: ["RW", "RM"], zilkov: ["LM", "LW"], tmidi: ["CDM", "CM"],
     moreira: ["CDM", "CM"], rizzydave: ["ST"]

@@ -125,7 +125,7 @@
     twitchStatus: function () { return this._call("twitch_status"); },
 
     /* ---------- archive writes (server re-checks every level) ---------- */
-    matchSave:   function (match) { return this._auth("match_save", { match: match }); },   // L5+
+    matchSave:   function (match, opts) { return this._auth("match_save", Object.assign({ match: match }, opts || {})); },   // L5+
     matchDelete: function (seq)   { return this._auth("match_delete", { seq: seq }); },     // L9
     careerSave:  function (career, baselineSeq) {
       var p = { career: career };
@@ -166,7 +166,12 @@
     adminNews:     function (payload)  { return this._auth("admin_news", payload || {}); },            // { news:[…] }
     adminLeague:   function (payload)  { return this._auth("admin_league", payload || {}); },          // { league:{…} }
     adminPersonal: function (payload)  { return this._auth("admin_personal", payload || {}); },
-    adminSeason:   function (payload)  { return this._auth("admin_season", payload || {}); }           // { action:"archive"|"get", … }
+    adminSeason:   function (payload)  { return this._auth("admin_season", payload || {}); },          // { action:"archive"|"get", … }
+
+    /* ---------- community (members) ---------- */
+    avail:   function (fixtureId, status)          { return this._auth("avail", { fixtureId: fixtureId, status: status }); },   // status: "yes"|"maybe"|"no"|"" (clear)
+    predict: function (fixtureId, our, their)      { return this._auth("predict", { fixtureId: fixtureId, our: our, their: their }); },
+    react:   function (target, emoji)              { return this._auth("react", { target: target, emoji: emoji }); }            // toggles the reaction
   };
 
   window.G = window.G || {};

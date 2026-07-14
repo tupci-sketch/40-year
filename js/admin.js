@@ -14,6 +14,7 @@
 
   var U = null, NET = null, DATA = null, helpers = {};
   var root = null;
+  var _cfg = {};   // last-loaded config, for the match editor's fixture-settle picker
 
   /* ========================================================
      SHARED SCAFFOLD
@@ -39,6 +40,17 @@
   function field(label, inner, hint) {
     return '<label class="field"><span class="field-label">' + label + "</span>" + inner +
       (hint ? '<span class="field-hint">' + hint + "</span>" : "") + "</label>";
+  }
+
+  /* Optional picker: settle an upcoming match fixture's Clubhouse predictions
+     against this result (and clear the fixture). Sessions carry no predictions. */
+  function settleField() {
+    var fx = (_cfg.fixtures || []).filter(function (f) { return f.kind !== "session"; });
+    if (!fx.length) return "";
+    var opts = '<option value="">— none —</option>' + fx.map(function (f) {
+      return '<option value="' + U.esc(f.id) + '">' + U.esc(f.opponent || "TBC") + (f.dateISO ? " · " + U.esc(f.dateISO) : "") + "</option>";
+    }).join("");
+    return field("Settle predictions for", '<select id="me-settle">' + opts + "</select>", "scores this fixture's Clubhouse predictions, then clears it");
   }
 
   function playerOptions(selected) {
@@ -84,6 +96,20 @@
     var camIdx = -1;
     f.slots.forEach(function (s, i) { if (camIdx === -1 && U.canonPos(s.pos) === "CAM") camIdx = i; });
     if (camIdx !== -1 && byId.tupci) { out[camIdx] = "tupci"; used.tupci = 1; }
+    // Club position rules for the humans (same shape-based logic as the board).
+    var canon = {}; f.slots.forEach(function (s) { var c = U.canonPos(s.pos); canon[c] = (canon[c] || 0) + 1; });
+    var forced = (canon.LW && canon.RW)
+      ? [{ id: "danwhizzy", pos: "LW" }, { id: "walker", pos: "RW" }, { id: "amy", pos: "ST" }]
+      : ((canon.ST || 0) >= 2)
+        ? [{ id: "amy", pos: "RST" }, { id: "danwhizzy", pos: "LST" }]
+        : [{ id: "amy", pos: "ST" }, { id: "walker", pos: "RM" }];
+    forced.forEach(function (fp) {
+      if (used[fp.id] || !byId[fp.id]) return;
+      var idx = -1;
+      f.slots.forEach(function (s, i) { if (idx === -1 && !out[i] && s.pos === fp.pos) idx = i; });
+      if (idx === -1) f.slots.forEach(function (s, i) { if (idx === -1 && !out[i] && U.canonPos(s.pos) === U.canonPos(fp.pos)) idx = i; });
+      if (idx !== -1) { out[idx] = fp.id; used[fp.id] = 1; }
+    });
     var ids = players.map(function (p) { return p.id; });
     ["exact", "group"].forEach(function (level) {
       f.slots.forEach(function (s, i) {
@@ -118,6 +144,7 @@
       var grid = U.$("#admin-grid", root);
       if (!grid) return;
       var c = cfgFrom(rs[0]);
+      _cfg = c;
       var matches = (rs[1] && rs[1].matches) || [];
       var baselineSeq = (rs[1] && rs[1].baselineSeq) || 0;
       var career = (rs[2] && rs[2].career) || [];
@@ -244,6 +271,7 @@
         '<div id="me-players"></div>' +
         '<button class="btn btn-ghost btn-small" id="me-player-add" type="button">+ Add player</button>' +
         field("Match note", '<input type="text" id="me-note" maxlength="200" value="' + U.esc(m.note || "") + '">', "one line for the books") +
+        settleField() +
         '<div class="admin-actions">' +
           '<button class="btn btn-primary btn-small" id="me-save">' + (isNew ? "Add to the ledger" : "Save changes") + "</button>" +
           '<button class="btn btn-ghost btn-small" id="me-cancel" type="button">Cancel</button>' +
@@ -295,7 +323,8 @@
           id: row.querySelector("select").value,
           goals: g("mp-g"), assists: g("mp-a"), rating: g("mp-r"),
           shots: g("mp-sh"), tackles: g("mp-tk"),
-          passesMade: g("mp-pm"), passAttempts: g("mp-pa"), redCards: g("mp-rc")
+          passesMade: g("mp-pm"), passAttempts: g("mp-pa"), redCards: g("mp-rc"),
+          saves: g("mp-sv"), conceded: g("mp-cn")
         };
       }).filter(function (p) { return p.id; });
       // Scorers are DERIVED from the player lines — enter stats once, only.
@@ -326,7 +355,9 @@
       if (!payload.opponent) { msg.textContent = "Opponent needed."; return; }
       btn.disabled = true;
       msg.textContent = "Writing to the ledger…";
-      NET.matchSave(payload).then(function (r) {
+      var settleSel = U.$("#me-settle", box);
+      var opts = settleSel && settleSel.value ? { settleFixture: settleSel.value } : {};
+      NET.matchSave(payload, opts).then(function (r) {
         btn.disabled = false;
         if (r && r.ok) {
           U.toast(isNew ? "Match " + r.seq + " is in the books." : "Match " + r.seq + " updated.");
@@ -356,8 +387,18 @@
           mini("Rating", "mp-r", n(p.rating), "0.1") + mini("Shots", "mp-sh", n(p.shots)) +
           mini("Tackles", "mp-tk", n(p.tackles)) + mini("Passes", "mp-pm", n(p.passesMade)) +
           mini("Attempts", "mp-pa", n(p.passAttempts)) + mini("Reds", "mp-rc", n(p.redCards)) +
+          mini("Saves", "mp-sv gk-stat", n(p.saves)) + mini("Conceded", "mp-cn gk-stat", n(p.conceded)) +
         "</div>";
       row.querySelector(".me-row-del").addEventListener("click", function () { row.remove(); });
+      // GK stat lines get Saves/Conceded to the fore; outfield rows dim them.
+      var sel = row.querySelector("select");
+      function markGK() {
+        var pl = (window.SQUAD || []).filter(function (s) { return s.id === sel.value; })[0];
+        var isGK = pl && ((pl.positions && pl.positions[0]) || pl.position) === "GK";
+        row.classList.toggle("is-gk", !!isGK);
+      }
+      sel.addEventListener("change", markGK);
+      markGK();
       mountP.appendChild(row);
 
       function mini(label, cls, val, step) {
@@ -552,9 +593,12 @@
   function blockFixtures(c) {
     var stages = ["friendly", "league", "playoff", "cup", "international", "other"];
     return block("Fixtures · what's coming up",
-      '<p class="admin-note">Shown in an Upcoming block at the top of Results. Past-dated fixtures drop off on their own.</p>' +
+      '<p class="admin-note">Shown in an Upcoming block at the top of Results, and opened for RSVPs (and predictions) in the <a href="#clubhouse">Clubhouse</a>. Past-dated fixtures drop off on their own.</p>' +
       '<div class="field-row">' +
-        field("Opponent", '<input type="text" id="fx-opp" maxlength="60">') +
+        field("Kind", '<select id="fx-kind"><option value="match">Match — vs a team (predictions on)</option><option value="session">Session — casual club night (RSVP only)</option></select>', "predictions only run on matches") +
+        field("Opponent", '<input type="text" id="fx-opp" maxlength="60">', "or a session label") +
+      "</div>" +
+      '<div class="field-row">' +
         field("Type", '<select id="fx-stage">' + stages.map(function (s) { return '<option value="' + s + '">' + s.charAt(0).toUpperCase() + s.slice(1) + "</option>"; }).join("") + "</select>") +
         field("Date", '<input type="date" id="fx-date">', "optional") +
       "</div>" +
@@ -981,6 +1025,7 @@
       b.disabled = true; msg.textContent = "Adding…";
       NET.adminFixtures({
         action: "add", opponent: opp,
+        fxKind: U.$("#fx-kind", root).value,
         stage: U.$("#fx-stage", root).value,
         dateISO: U.$("#fx-date", root).value,
         compName: U.$("#fx-compname", root).value.trim(),
