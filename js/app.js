@@ -173,7 +173,7 @@
   /* ========================================================
      ROUTER
      ======================================================== */
-  var ROUTES = ["home", "squad", "tactics", "player", "results", "match", "opponent", "stats", "honours", "gaffer", "funhouse", "about", "news", "social", "clubhouse", "forum", "tickets", "book", "chat", "admin"];
+  var ROUTES = ["home", "squad", "tactics", "player", "results", "match", "opponent", "stats", "honours", "gaffer", "funhouse", "about", "news", "social", "search", "clubhouse", "forum", "tickets", "book", "chat", "admin"];
 
   function parseHash() {
     var h = (location.hash || "#home").replace(/^#/, "");
@@ -1027,6 +1027,59 @@
       }).join("") + "</tbody></table></div>";
   }
 
+  /* Draw a square, shareable result card on a <canvas> (no external assets
+     beyond our own crest) and hand it to the native share sheet, or fall back
+     to a download. All same-origin, so the canvas never taints. */
+  function shareCard(m, motmP, msg) {
+    if (msg) msg.textContent = "Drawing…";
+    var W = 1080, C = document.createElement("canvas");
+    C.width = W; C.height = W;
+    var x = C.getContext("2d");
+    var res = m.result || "";
+    var accent = res === "W" ? "#3cc878" : res === "L" ? "#e05a5a" : "#a4a5a6";
+
+    var g = x.createLinearGradient(0, 0, 0, W);
+    g.addColorStop(0, "#140a24"); g.addColorStop(1, "#07030b");
+    x.fillStyle = g; x.fillRect(0, 0, W, W);
+    x.fillStyle = accent; x.fillRect(0, 0, W, 12);
+
+    function centre(text, y, font, colour) {
+      x.font = font; x.fillStyle = colour; x.textAlign = "center"; x.fillText(text, W / 2, y);
+    }
+    function finish() {
+      centre("THE 40YR VIRGIL", 250, "600 46px Oswald, sans-serif", "#ffffff");
+      centre("vs " + (m.opponent || "Unknown"), 320, "500 40px Inter, sans-serif", "#a4a5a6");
+      var score = (m.ourScore !== "" ? m.ourScore : "–") + " – " + (m.theirScore !== "" ? m.theirScore : "–");
+      centre(score, 560, "700 200px Anton, Oswald, sans-serif", "#ffffff");
+      x.fillStyle = accent;
+      var label = res === "W" ? "WIN" : res === "L" ? "LOSS" : res === "D" ? "DRAW" : "RESULT";
+      x.textAlign = "center"; x.font = "600 44px Oswald, sans-serif"; x.fillText(label, W / 2, 650);
+      var sc = U.scorersLine((m.scorers || []).map(function (s) { var p = U.playerById(s.id); return { name: p ? U.surname(p) : s.id, goals: s.goals }; }));
+      if (sc) centre("⚽ " + sc, 760, "500 34px Inter, sans-serif", "#e8e8ea");
+      if (motmP) centre("🌟 MOTM · " + motmP.name, 820, "500 34px Inter, sans-serif", "#f2b45c");
+      centre((m.dateISO ? U.fmtDate(m.dateISO) + " · " : "") + "Match " + m.seq, 1000, "500 30px Inter, sans-serif", "#7a7b7d");
+      C.toBlob(function (blob) {
+        if (!blob) { if (msg) msg.textContent = "Couldn't build the card."; return; }
+        var file = new File([blob], "virgil-match-" + m.seq + ".png", { type: "image/png" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: "The 40Yr Virgil", text: "The 40Yr Virgil " + score + " vs " + (m.opponent || "") })
+            .then(function () { if (msg) msg.textContent = ""; })
+            .catch(function () { if (msg) msg.textContent = ""; });
+        } else {
+          var a = document.createElement("a");
+          a.href = URL.createObjectURL(blob); a.download = file.name;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+          if (msg) msg.textContent = "Saved to your device.";
+        }
+      }, "image/png");
+    }
+    var crest = new Image();
+    crest.onload = function () { try { x.drawImage(crest, W / 2 - 90, 60, 180, 180); } catch (e) { /* fine */ } finish(); };
+    crest.onerror = function () { finish(); };
+    crest.src = "assets/img/crest.png";
+  }
+
   PAGES.match = {
     enter: function (arg) {
       var seq = Number(arg);
@@ -1056,11 +1109,17 @@
             miniPitch(m) +
             (detailed.length ? statsTable(detailed) : "") +
             (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "") +
-            (NET.isMod() ? '<div class="admin-actions"><button class="btn btn-ghost btn-small" id="mr-edit">Edit in Housekeeping →</button></div>' : "") +
+            '<div class="admin-actions">' +
+              '<button class="btn btn-gold btn-small" id="mr-share">📸 Share card</button>' +
+              (NET.isMod() ? '<button class="btn btn-ghost btn-small" id="mr-edit">Edit in Housekeeping →</button>' : "") +
+              '<span class="admin-inline-note" id="mr-share-msg"></span>' +
+            "</div>" +
             '<a class="back-link" href="#results">← All results</a>' +
           "</article>";
         var eb = U.$("#mr-edit", mt);
         if (eb) eb.addEventListener("click", function () { try { sessionStorage.setItem("v40.editseq", String(m.seq)); } catch (e) { /* fine */ } location.hash = "#admin"; });
+        var sb = U.$("#mr-share", mt);
+        if (sb) sb.addEventListener("click", function () { shareCard(m, motmP, U.$("#mr-share-msg", mt)); });
         U.runCountUps(mt);
       });
     }
@@ -1742,6 +1801,58 @@
     }
   };
 
+  /* ------------------------------------------------ GLOBAL SEARCH */
+  PAGES.search = {
+    enter: function () {
+      var input = U.$("#search-input");
+      var view = U.$("#search-view");
+      if (!input || !view) return;
+      applySquadOverrides();
+      DATA.matches().then(function (res) {
+        var matches = (res && res.matches) || [];
+        var opponents = {};
+        matches.forEach(function (m) { if (m.opponent) opponents[m.opponent] = (opponents[m.opponent] || 0) + 1; });
+
+        function run() {
+          var q = String(input.value || "").trim().toLowerCase();
+          if (q.length < 2) { view.innerHTML = '<p class="search-hint">Keep typing…</p>'; return; }
+          var nq = q.replace(/[–—]/g, "-").replace(/\s/g, "");
+          var out = [];
+
+          (window.SQUAD || []).filter(function (p) { return p.name.toLowerCase().indexOf(q) !== -1; })
+            .slice(0, 8).forEach(function (p) {
+              out.push('<a class="search-row" href="#player/' + p.id + '"><span class="search-kind">Player</span>' +
+                '<span class="search-main">' + U.esc(p.name) + "</span><span class=\"search-sub\">#" + p.number + " · " + U.esc((p.positions || [p.position]).join("/")) + "</span></a>");
+            });
+
+          Object.keys(opponents).filter(function (o) { return o.toLowerCase().indexOf(q) !== -1; })
+            .slice(0, 6).forEach(function (o) {
+              out.push('<a class="search-row" href="#opponent/' + encodeURIComponent(o) + '"><span class="search-kind">Opponent</span>' +
+                '<span class="search-main">' + U.esc(o) + "</span><span class=\"search-sub\">" + opponents[o] + " meeting" + (opponents[o] > 1 ? "s" : "") + "</span></a>");
+            });
+
+          matches.filter(function (m) {
+            var score = (m.ourScore + "-" + m.theirScore);
+            return (m.opponent && m.opponent.toLowerCase().indexOf(q) !== -1) || (nq && score.indexOf(nq) !== -1);
+          }).slice(0, 8).forEach(function (m) {
+            out.push('<a class="search-row" href="#match/' + m.seq + '"><span class="search-kind search-kind-' + (m.result || "").toLowerCase() + '">' + (m.result || "·") + "</span>" +
+              '<span class="search-main">' + U.esc(m.opponent || "Unknown") + " " + (m.ourScore !== "" ? m.ourScore : "–") + "–" + (m.theirScore !== "" ? m.theirScore : "–") + "</span>" +
+              '<span class="search-sub">Match ' + m.seq + (m.dateISO ? " · " + U.fmtDate(m.dateISO) : "") + "</span></a>");
+          });
+
+          view.innerHTML = out.length ? '<div class="search-results">' + out.join("") + "</div>" : '<p class="search-hint">Nothing found for “' + U.esc(q) + '”.</p>';
+        }
+
+        if (!input.getAttribute("data-wired")) {
+          input.setAttribute("data-wired", "1");
+          input.addEventListener("input", run);
+        }
+        input.focus();
+        run();
+      });
+    }
+  };
+
   /* ------------------------------------------------ CLUBHOUSE (members): RSVP + predictions */
   PAGES.clubhouse = {
     enter: function () {
@@ -2308,6 +2419,14 @@
 
     pollTwitchLive();
     if (NET.hasBackend()) setInterval(pollTwitchLive, 90000);
+
+    // Installable PWA: register the app-shell service worker (same-origin,
+    // secure contexts only). Never blocks boot; failures are silent.
+    if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js").catch(function () { /* offline shell is a bonus, not required */ });
+      });
+    }
 
     if (NET.hasBackend()) {
       NET.session().then(function () {

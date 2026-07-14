@@ -1,0 +1,15 @@
+{
+  "name": "The 40Yr Virgil",
+  "short_name": "40Yr Virgil",
+  "description": "One Club. One Squad. One Dream. — EA Sports FC Pro Clubs.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07030B",
+  "theme_color": "#07030B",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

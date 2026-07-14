@@ -27,6 +27,10 @@
 
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="40Yr Virgil">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -56,6 +60,7 @@
         <a class="nav-link" data-route="about" href="#about">About</a>
         <a class="nav-link" data-route="news" href="#news">News</a>
         <a class="nav-link" data-route="social" href="#social">Social</a>
+        <a class="nav-link" data-route="search" href="#search">Search</a>
         <a class="nav-link" data-route="clubhouse" href="#clubhouse" id="nav-clubhouse" hidden>Clubhouse</a>
         <a class="nav-link" data-route="chat" href="#chat" id="nav-chat" hidden>Chat</a>
         <a class="nav-link" data-route="forum" href="#forum" id="nav-forum" hidden>Forum</a>
@@ -304,6 +309,17 @@
         <a class="back-link" href="#home">← Hub</a>
       </div>
       <div id="social-view"></div>
+    </section>
+
+    <!-- ======================= SEARCH ======================= -->
+    <section class="screen" id="screen-search">
+      <div class="screen-head">
+        <h1 class="screen-title">Search</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <p class="screen-intro">Find a player, an opponent, or a game. Type a name or a scoreline.</p>
+      <label class="field"><input type="search" id="search-input" placeholder="e.g. Danwhizzy, Rivals FC, 3–1" autocomplete="off"></label>
+      <div id="search-view"></div>
     </section>
 
     <!-- ======================= CLUBHOUSE (members) ======================= -->
