@@ -19,14 +19,15 @@
    --current-from=<seq>  Owner-specified boundary: matches with
                           seq >= this number go in the CURRENT season;
                           everything before goes in a PREVIOUS season.
-                          Omit it and every match stays in one season
-                          (flagged REVIEW) until the owner gives the
-                          exact number.
+                          Can also be given as `currentSeasonStartSeq`
+                          inside --totals instead. Omit both and every
+                          match stays in one season (flagged REVIEW).
    --totals=<file>       The owner's private totals-reconciliation
-                          file (never committed — see README). Used
-                          only to compare against archive-derived
-                          numbers in the validation report; never
-                          required to build the import.
+                          file (never committed — see README and
+                          totals.example.json for the shape). When
+                          given, its overall/season figures become the
+                          actual verified baselines written to the
+                          import (not just a comparison).
    ============================================================ */
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -47,6 +48,7 @@ if (!inputPath) {
 
 const data = JSON.parse(readFileSync(inputPath, "utf8"));
 const totals = totalsPath ? JSON.parse(readFileSync(totalsPath, "utf8")) : null;
+const SEASON_BOUNDARY = CURRENT_FROM_SEQ != null ? CURRENT_FROM_SEQ : (totals && totals.currentSeasonStartSeq != null ? Number(totals.currentSeasonStartSeq) : null);
 
 function cfgMap(rows) { const m = {}; (rows || []).forEach((r) => { m[r.key] = r.value; }); return m; }
 function parseJSON(v, fallback) { try { return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } }
@@ -80,14 +82,21 @@ sql.push("-- Additive: safe to run once against a schema-only database.");
 sql.push("-- ============================================================");
 sql.push("");
 
-if (CURRENT_FROM_SEQ != null) {
-  sql.push(`INSERT OR IGNORE INTO seasons (id,label,game,started_iso,ended_iso,archived,sort) VALUES ('${PREV_SEASON_ID}','Previous season','EA Sports FC 26','','',1,10);`);
-  PASS(`Season split applied at seq ${CURRENT_FROM_SEQ}: matches < ${CURRENT_FROM_SEQ} → '${PREV_SEASON_ID}', >= ${CURRENT_FROM_SEQ} → '${currentSeasonId}'.`);
+const prevLabel = (totals && totals.previousSeasonLabel) || "Previous season";
+const currentLabelOverride = totals && totals.currentSeasonLabel;
+
+if (SEASON_BOUNDARY != null) {
+  sql.push(`INSERT OR IGNORE INTO seasons (id,label,game,started_iso,ended_iso,archived,sort) VALUES ('${PREV_SEASON_ID}',${sqlStr(prevLabel)},'EA Sports FC 26','','',1,10);`);
+  PASS(`Season split applied at seq ${SEASON_BOUNDARY}: matches < ${SEASON_BOUNDARY} → '${PREV_SEASON_ID}' (${prevLabel}), >= ${SEASON_BOUNDARY} → '${currentSeasonId}'${currentLabelOverride ? " (" + currentLabelOverride + ")" : ""}.`);
 } else {
-  REVIEW(`No --current-from boundary given: all ${data.matches.length} matches will import into a single season ('${currentSeasonId}'). Provide the exact match number where the current season starts to split Season 2 (previous) from Season 3 (current) — see the plan's season-correction step.`);
+  REVIEW(`No season boundary given: all ${data.matches.length} matches will import into a single season ('${currentSeasonId}'). Provide the exact match number where the current season starts to split Season 2 (previous) from Season 3 (current) — see the plan's season-correction step.`);
 }
 (seasonsCfg.length ? seasonsCfg : [{ id: currentSeasonId, label: "Season · FC26", game: "EA Sports FC 26", startedISO: "", endedISO: "", archived: false }]).forEach((s) => {
-  sql.push(`INSERT OR IGNORE INTO seasons (id,label,game,started_iso,ended_iso,archived,sort) VALUES (${sqlStr(s.id)},${sqlStr(s.label)},${sqlStr(s.game)},${sqlStr(s.startedISO)},${sqlStr(s.endedISO)},${sqlBool(s.archived)},20);`);
+  var label = (s.id === currentSeasonId && currentLabelOverride) ? currentLabelOverride : s.label;
+  sql.push(`INSERT OR IGNORE INTO seasons (id,label,game,started_iso,ended_iso,archived,sort) VALUES (${sqlStr(s.id)},${sqlStr(label)},${sqlStr(s.game)},${sqlStr(s.startedISO)},${sqlStr(s.endedISO)},${sqlBool(s.archived)},20);`);
+  if (s.id === currentSeasonId && currentLabelOverride) {
+    sql.push(`UPDATE seasons SET label=${sqlStr(currentLabelOverride)} WHERE id=${sqlStr(s.id)};`);
+  }
 });
 sql.push(`INSERT INTO site_settings (key,value) VALUES ('current_season',${sqlStr(currentSeasonId)}) ON CONFLICT(key) DO UPDATE SET value=excluded.value;`);
 sql.push("");
@@ -124,13 +133,55 @@ if (junkPlayerIds.size) {
 }
 sql.push("");
 
-/* ---------- career baselines ---------- */
+/* ---------- career baselines ----------
+   Start from the sheet's own `career` rows (as-of the old baseline seq),
+   then let the owner's totals file OVERRIDE apps/goals/assists/avg_rating
+   for any player it names — those are verified-as-of-today figures, so
+   they're stamped with as_of_seq = the last match in this export. Any
+   passing/tackling figures already on the sheet are preserved unless the
+   totals file also corrects them. Amy gets a fresh row here even though
+   she has no legacy `career` sheet entry (she's not in the EA-era data). */
+const maxMatchSeq = (data.matches || []).reduce((mx, m) => Math.max(mx, n(m.seq, 0)), 0);
+const careerRows = new Map();
 (data.career || []).forEach((c) => {
   const id = pid(c.playerId);
-  sql.push(`INSERT OR REPLACE INTO player_career_baselines (player_id,as_of_seq,apps,goals,assists,avg_rating,passes,tackles,clean_sheets,win_pct,source,note,updated_iso) VALUES (` +
-    `${sqlStr(id)},${sqlNum(baselineSeq)},${sqlNum(c.games, 0)},${sqlNum(c.goals, 0)},${sqlNum(c.assists, 0)},NULL,${sqlNum(c.passesMade, 0)},${sqlNum(c.tackles, 0)},${sqlNum(c.cleanSheets, 0)},${sqlNum(c.winPct)},'EA archive import',NULL,'${new Date().toISOString()}');`);
+  careerRows.set(id, {
+    as_of_seq: baselineSeq, apps: n(c.games, 0), goals: n(c.goals, 0), assists: n(c.assists, 0), avg_rating: null,
+    passes: n(c.passesMade, 0), tackles: n(c.tackles, 0), clean_sheets: n(c.cleanSheets, 0), win_pct: n(c.winPct),
+    source: "EA archive import", note: null
+  });
 });
-PASS(`${(data.career || []).length} verified career baselines imported (as-of match seq ${baselineSeq}).`);
+if (totals && Array.isArray(totals.players)) {
+  totals.players.forEach((t) => {
+    const id = pid(t.player_id);
+    const prior = careerRows.get(id) || { passes: 0, tackles: 0, clean_sheets: 0, win_pct: null };
+    careerRows.set(id, {
+      as_of_seq: maxMatchSeq,
+      apps: n(t.overall_apps, prior.apps || 0), goals: n(t.overall_goals, prior.goals || 0), assists: n(t.overall_assists, prior.assists || 0),
+      avg_rating: t.overall_avg_rating != null ? n(t.overall_avg_rating) : (prior.avg_rating || null),
+      passes: prior.passes || 0, tackles: prior.tackles || 0, clean_sheets: prior.clean_sheets || 0, win_pct: prior.win_pct,
+      source: "Owner-verified totals", note: t.note || null
+    });
+  });
+  PASS(`${totals.players.length} player(s) got owner-verified overall totals (apps/goals/assists), stamped as-of match ${maxMatchSeq} — the archive's own recorded contributions only add on top from match ${maxMatchSeq + 1} onward, so nothing double-counts.`);
+}
+careerRows.forEach((c, id) => {
+  sql.push(`INSERT OR REPLACE INTO player_career_baselines (player_id,as_of_seq,apps,goals,assists,avg_rating,passes,tackles,clean_sheets,win_pct,source,note,updated_iso) VALUES (` +
+    `${sqlStr(id)},${sqlNum(c.as_of_seq)},${sqlNum(c.apps)},${sqlNum(c.goals)},${sqlNum(c.assists)},${sqlNum(c.avg_rating)},${sqlNum(c.passes)},${sqlNum(c.tackles)},${sqlNum(c.clean_sheets)},${sqlNum(c.win_pct)},${sqlStr(c.source)},${sqlStr(c.note)},'${new Date().toISOString()}');`);
+});
+PASS(`${careerRows.size} verified career baselines imported in total.`);
+sql.push("");
+
+/* ---------- season baselines (from the owner's totals, if given) ---------- */
+if (totals && Array.isArray(totals.players)) {
+  totals.players.forEach((t) => {
+    const id = pid(t.player_id);
+    if (t.season_apps == null && t.season_goals == null && t.season_assists == null) return;
+    sql.push(`INSERT OR REPLACE INTO player_season_baselines (player_id,season_id,apps,goals,assists,avg_rating,note) VALUES (` +
+      `${sqlStr(id)},${sqlStr(currentSeasonId)},${sqlNum(t.season_apps, 0)},${sqlNum(t.season_goals, 0)},${sqlNum(t.season_assists, 0)},${sqlNum(t.season_avg_rating)},${sqlStr(t.note)});`);
+  });
+  PASS(`Current-season (${currentSeasonId}) verified baselines imported for ${totals.players.length} player(s).`);
+}
 sql.push("");
 
 /* ---------- club record baseline ---------- */
@@ -144,7 +195,7 @@ let matchCount = 0;
 (data.matches || []).forEach((m) => {
   const seq = n(m.seq); if (seq == null) return;
   matchCount++;
-  const seasonId = CURRENT_FROM_SEQ != null ? (seq < CURRENT_FROM_SEQ ? PREV_SEASON_ID : currentSeasonId) : currentSeasonId;
+  const seasonId = SEASON_BOUNDARY != null ? (seq < SEASON_BOUNDARY ? PREV_SEASON_ID : currentSeasonId) : currentSeasonId;
   sql.push(`INSERT OR REPLACE INTO matches (id,season_id,stage,date_iso,opponent,our_score,their_score,result,note,comp_name,venue,motm_player_id,captain_player_id,formation,updated_by,updated_iso) VALUES (` +
     `${seq},${sqlStr(seasonId)},${sqlStr(m.stage || "league")},${sqlStr(m.dateISO)},${sqlStr(m.opponent)},${sqlNum(m.ourScore, 0)},${sqlNum(m.theirScore, 0)},${sqlStr(m.result)},` +
     `${sqlStr(m.note)},${sqlStr(m.compName)},${sqlStr(m.venue)},NULL,NULL,NULL,${sqlStr(m.updatedBy)},${sqlStr(m.updatedISO)});`);
@@ -167,6 +218,29 @@ let statCount = 0;
     `${seq},${sqlStr(spid)},${sqlNum(s.goals, 0)},${sqlNum(s.assists, 0)},${sqlNum(s.rating)},${sqlNum(s.shots, 0)},${sqlNum(s.tackles, 0)},${sqlNum(s.passesMade, 0)},${sqlNum(s.passAttempts, 0)},${sqlNum(s.redCards, 0)},${sqlNum(s.saves, 0)},${sqlNum(s.conceded, 0)});`);
 });
 PASS(`${statCount} per-player match stat lines imported.`);
+sql.push("");
+
+/* ---------- cross-check the owner's Season 3 totals against the archive's
+   own stat lines for matches >= the boundary. If they match exactly, the
+   detailed archive for the current season is complete and self-consistent
+   with what the owner independently verified — the strongest possible
+   confirmation this import is correct. ---------- */
+if (totals && Array.isArray(totals.players) && SEASON_BOUNDARY != null) {
+  const seasonAgg = {};
+  (data.match_stats || []).forEach((s) => {
+    const seq = n(s.seq); if (seq == null || seq < SEASON_BOUNDARY) return;
+    const spid = pid(s.playerId);
+    const agg = seasonAgg[spid] || (seasonAgg[spid] = { apps: 0, goals: 0, assists: 0 });
+    agg.apps++; agg.goals += n(s.goals, 0); agg.assists += n(s.assists, 0);
+  });
+  totals.players.forEach((t) => {
+    const id = pid(t.player_id);
+    const agg = seasonAgg[id] || { apps: 0, goals: 0, assists: 0 };
+    const match = agg.apps === n(t.season_apps) && agg.goals === n(t.season_goals) && agg.assists === n(t.season_assists);
+    if (match) PASS(`${id}: archive-derived Season ${currentSeasonId} stats (apps ${agg.apps}, goals ${agg.goals}, assists ${agg.assists}) exactly match the owner's verified totals.`);
+    else REVIEW(`${id}: archive-derived Season ${currentSeasonId} stats show apps ${agg.apps}/goals ${agg.goals}/assists ${agg.assists} vs the owner's verified apps ${t.season_apps}/goals ${t.season_goals}/assists ${t.season_assists} — the season baseline above uses the owner's verified figures regardless, so the site will show the right numbers either way; this is just flagging the archive has a gap somewhere for a human to look at if they want to.`);
+  });
+}
 sql.push("");
 
 /* ---------- accounts → users (hashes preserved as-is; legacy scheme) ---------- */
@@ -195,13 +269,8 @@ if (recBy.played != null && matchCount) {
   else if (gap < 0) ERROR(`Detailed match count (${matchCount}) exceeds the club_record baseline (${recBy.played}) — investigate before import.`);
 }
 
-/* ---------- owner totals comparison (only if supplied) ---------- */
-if (totals) {
-  (totals.players || []).forEach((t) => {
-    REVIEW(`Owner-supplied total for ${t.player_id}: apps=${t.overall_apps}, goals=${t.overall_goals} — compare against the baseline above once loaded; update via /api/admin/players/:id/baseline if different.`);
-  });
-} else {
-  REVIEW("No owner totals-reconciliation file supplied yet — this import uses only the archive's own numbers. Re-run with --totals=<file> once you have verified overall + current-season figures, to cross-check before the real production import.");
+if (!totals) {
+  REVIEW("No owner totals-reconciliation file supplied yet — this import uses only the archive's own numbers. Re-run with --totals=<file> once you have verified overall + current-season figures.");
 }
 
 /* ---------- print report ---------- */
