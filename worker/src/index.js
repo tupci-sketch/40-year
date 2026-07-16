@@ -32,7 +32,7 @@ app.use("*", cors({
 
 /* Friendly root + health check. */
 app.get("/", (c) => c.json({ ok: true, service: "virgil-api" }));
-app.get("/api/health", (c) => c.json({ ok: true, service: "virgil-api", ts: new Date().toISOString() }));
+app.get("/api/health", (c) => c.json({ ok: true, service: "virgil-api", build: "v3-skeleton-1", ts: new Date().toISOString() }));
 
 /* Proves the D1 binding + schema are live. Returns the row counts of a
    few core tables — a green result here means the whole stack works. */
