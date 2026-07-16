@@ -991,15 +991,22 @@ body.nav-open #site-nav { display: block; }
 }
 
 /* ---------- RESULTS ---------- */
-#results-list { display: flex; flex-direction: column; gap: 10px; }
+#results-list, #archive-list { display: flex; flex-direction: column; gap: 10px; }
 .result-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   background: var(--panel-grad);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
   padding: 13px 14px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
   animation: viewIn 0.4s ease backwards;
+  text-decoration: none;
 }
+.result-opp { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--white); }
+.result-opp:hover { color: var(--gold-bright); }
+.result-meta { font-size: 0.74rem; color: var(--silver); white-space: nowrap; flex: none; }
 .result-main {
   display: flex;
   align-items: center;
@@ -2394,3 +2401,38 @@ input, select, textarea, button {
    must never scroll sideways on a narrow viewport. */
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 body { overflow-x: hidden; }
+
+/* ============================================================
+   v3 LAYOUT FIXES — container grids the rebuilt JS relies on.
+   Individual items (.card-tile, .stat-tile, .pill…) were already
+   styled; these are the missing wrappers that were collapsing to
+   full-width block flow. Mirrors the original site's grids.
+   ============================================================ */
+
+/* Squad + any player-card grid: responsive columns, card aspect kept by .card-tile. */
+#squad-grid, .card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (min-width: 560px) { #squad-grid, .card-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 860px) { #squad-grid, .card-grid { grid-template-columns: repeat(4, 1fr); } }
+
+/* Home record tiles need the same grid the archive/match/player tiles use. */
+#home-live { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 640px) { #home-live { grid-template-columns: repeat(4, 1fr); } }
+/* Wide tiles (recent form, next up) span the full row. */
+.stat-tile-wide { grid-column: 1 / -1; }
+/* The home league strip is a full-width panel, not a tile. */
+#home-live .league-strip { grid-column: 1 / -1; }
+
+/* Recent-form pill strip. */
+.form-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+
+/* Clubhouse availability + prediction inputs. */
+.ch-avail-slot { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.ch-pred-our, .ch-pred-their { width: 60px; text-align: center; }
+
+/* Account menu profile link. */
+.account-link { display: inline-block; color: var(--gold-bright); text-decoration: none; }
+.account-link:hover { text-decoration: underline; }

@@ -621,26 +621,66 @@
     }
   };
 
+  var chatTimer = null;
+  function fetchChatMessages() {
+    var list = U.$("#chat-list");
+    if (!list) { clearInterval(chatTimer); chatTimer = null; return; }
+    NET.chatFetch({ limit: 60 }).then(function (res) {
+      if (!res || !res.ok) return;
+      var msgs = (res.messages || []).slice().reverse(); // oldest → newest
+      var stick = list.scrollTop + list.clientHeight >= list.scrollHeight - 40;
+      list.innerHTML = msgs.length
+        ? msgs.map(function (m) {
+            var lvl = Number(m.level) >= 9 ? '<span class="level-chip level-admin">ADMIN</span>'
+                    : Number(m.level) >= 5 ? '<span class="level-chip level-mod">MOD</span>' : "";
+            var del = NET.isMod() ? '<button class="chat-del" data-id="' + U.esc(m.id) + '" title="Remove message">×</button>' : "";
+            var mine = NET.me && m.display === NET.me.name;
+            return '<div class="chat-msg' + (mine ? " chat-mine" : "") + '">' +
+              '<div class="chat-meta"><span class="chat-name">' + U.esc(m.display) + "</span>" + lvl +
+                '<span class="chat-ts">' + U.fmtDateTime(m.created_iso) + "</span>" + del + "</div>" +
+              '<div class="chat-text">' + U.esc(m.body) + "</div>" +
+            "</div>";
+          }).join("")
+        : U.emptyState("Quiet in here", "First word wins the moral high ground.", "💬");
+      U.$$(".chat-del", list).forEach(function (b) {
+        b.addEventListener("click", function () {
+          NET.chatDelete(b.getAttribute("data-id")).then(function (r) {
+            if (r && r.ok) { U.toast("Message removed."); fetchChatMessages(); }
+            else U.toast("Couldn't remove that.");
+          });
+        });
+      });
+      if (stick) list.scrollTop = list.scrollHeight;
+    });
+  }
+
   function renderChat() {
     var mt = U.$("#clubhouse-view");
+    clearInterval(chatTimer); chatTimer = null;
     if (!NET.me) { mt.innerHTML = U.emptyState("Members only", "Sign in to read and post in club chat.", "🔒"); return; }
-    mt.innerHTML = U.emptyState("Loading chat…", "", "💬");
-    NET.chatFetch({ limit: 40 }).then(function (res) {
-      var block = liveBlock(res, "chat");
-      if (block) { mt.innerHTML = block; return; }
-      var msgs = (res.messages || []).slice().reverse();
-      mt.innerHTML = '<div class="chat-list">' + msgs.map(function (m) {
-        return '<div class="chat-msg"><strong>' + U.esc(m.display) + ":</strong> " + U.esc(m.body) + '<span class="admin-inline-note"> · ' + U.fmtDateTime(m.created_iso) + "</span></div>";
-      }).join("") + "</div>" +
-      '<div class="field-row"><input type="text" id="ch-input" maxlength="500" placeholder="Say it like you mean it…"><button class="btn btn-primary btn-small" id="ch-send">Send</button></div>';
-      var send = U.$("#ch-send");
-      send.addEventListener("click", function () {
-        var v = U.$("#ch-input").value.trim();
-        if (!v) return;
-        send.disabled = true;
-        NET.chatPost(v).then(function (r) { send.disabled = false; if (r && r.ok) renderChat(); });
+    mt.innerHTML =
+      '<div class="chat-list" id="chat-list">' + U.emptyState("Loading chat…", "", "💬") + "</div>" +
+      '<form class="chat-form" id="chat-form">' +
+        '<input type="text" id="chat-input" maxlength="280" placeholder="Say it like you mean it…" autocomplete="off">' +
+        '<button class="btn btn-primary btn-small" id="chat-send" type="submit">Send</button>' +
+        '<span class="chat-count" id="chat-count">280</span>' +
+      "</form>";
+    var input = U.$("#chat-input"), counter = U.$("#chat-count");
+    input.oninput = function () { counter.textContent = (280 - input.value.length) + ""; };
+    U.$("#chat-form").onsubmit = function (e) {
+      e.preventDefault();
+      var text = input.value.trim();
+      if (!text) return;
+      var send = U.$("#chat-send"); send.disabled = true;
+      NET.chatPost(text).then(function (r) {
+        send.disabled = false;
+        if (r && r.ok) { input.value = ""; counter.textContent = "280"; fetchChatMessages(); }
+        else if (r && (r.code === "language" || r.error === "language")) U.toast("Mind the language — the stewards are watching.");
+        else U.toast("Couldn't send. Try again.");
       });
-    });
+    };
+    fetchChatMessages();
+    chatTimer = setInterval(fetchChatMessages, 15000);
   }
 
   function renderDirectory() {
@@ -823,8 +863,46 @@
   PAGES.social = {
     enter: function () {
       var mt = U.$("#social-view");
-      mt.innerHTML = '<p class="screen-intro">Find the club on socials.</p>' +
-        '<div class="twitch-card twitch-card-slim"><span class="twitch-card-handle">40yrvirgil</span><a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.twitch.tv/40yrvirgil">Open on Twitch →</a></div>';
+      if (!mt) return;
+      var handle = "danwhizzy";
+      var twitch = "40yrvirgil";
+      var parent = location.hostname || "40yrvirgil.co.uk";
+      var twitchSrc = "https://player.twitch.tv/?channel=" + encodeURIComponent(twitch) +
+        "&parent=" + encodeURIComponent(parent) + "&muted=true&autoplay=true";
+
+      mt.innerHTML =
+        '<div class="section-label">@' + handle + " on TikTok</div>" +
+        '<p class="screen-intro">The golden boot moonlights as a content machine. Latest uploads, straight from the source — this updates itself every time he posts.</p>' +
+        '<div class="social-embed">' +
+          '<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@' + handle + '" data-unique-id="' + handle + '" data-embed-type="creator" style="max-width:780px;min-width:288px;">' +
+            '<section class="tiktok-card">' +
+              '<span class="tiktok-card-avatar">' + handle.charAt(0).toUpperCase() + "</span>" +
+              '<span class="tiktok-card-handle">@' + handle + "</span>" +
+              '<span class="tiktok-card-sub">The 40Yr Virgil on TikTok</span>' +
+              '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.tiktok.com/@' + handle + '?refer=creator_embed">Open profile →</a>' +
+            "</section>" +
+          "</blockquote>" +
+        "</div>" +
+        '<p class="social-fallback">Feed not loading? TikTok’s profile widget can be temperamental — <a href="https://www.tiktok.com/@' + handle + '" target="_blank" rel="noopener">open @' + handle + " on TikTok →</a></p>" +
+        '<div class="section-label">' + twitch + " on Twitch</div>" +
+        '<p class="screen-intro">When the club’s live, the stream plays right here. When it’s not, Twitch shows the offline screen — hit follow so you don’t miss kickoff.</p>' +
+        '<div class="twitch-embed-wrap">' +
+          '<iframe class="twitch-player" src="' + twitchSrc + '" title="' + twitch + ' on Twitch" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen scrolling="no" frameborder="0"></iframe>' +
+        "</div>" +
+        '<div class="twitch-card twitch-card-slim">' +
+          '<span class="twitch-card-handle">' + twitch + "</span>" +
+          '<span class="twitch-card-sub">Live from the Betfred Arena (the sofa).</span>' +
+          '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.twitch.tv/' + twitch + '">Open on Twitch →</a>' +
+        "</div>";
+
+      // (Re)load TikTok's creator-embed widget so the blockquote hydrates.
+      var old = document.getElementById("tiktok-embed-script");
+      if (old) old.parentNode.removeChild(old);
+      var s = document.createElement("script");
+      s.id = "tiktok-embed-script";
+      s.async = true;
+      s.src = "https://www.tiktok.com/embed.js";
+      document.body.appendChild(s);
     }
   };
 
