@@ -13,6 +13,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import auth from "./routes/auth.js";
+import pub from "./routes/public.js";
 
 const app = new Hono();
 
@@ -52,6 +53,7 @@ app.get("/api/db-check", async (c) => {
 
 /* ---- routes ---- */
 app.route("/api/auth", auth);
+app.route("/api", pub);
 
 /* Predictable JSON for anything unmatched. */
 app.notFound((c) => c.json({ ok: false, error: "not_found", code: 404 }, 404));

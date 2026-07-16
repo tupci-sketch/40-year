@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "test": "node --experimental-sqlite test/auth.test.mjs && node --experimental-sqlite test/public.test.mjs"
   },
   "dependencies": {
     "hono": "^4.6.14"
