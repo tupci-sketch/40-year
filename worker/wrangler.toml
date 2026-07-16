@@ -1,0 +1,24 @@
+# ============================================================
+#  The 40Yr Virgil — API Worker (Cloudflare) config
+#  Deployed by Cloudflare's GitHub integration (Workers Builds).
+#  Secrets (PEPPER, TURNSTILE_SECRET) are NOT here — they are set
+#  in the dashboard: Worker → Settings → Variables and Secrets.
+# ============================================================
+name = "virgil-api"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# The database (Cloudflare D1). database_id is your real "virgil" DB.
+[[d1_databases]]
+binding = "DB"
+database_name = "virgil"
+database_id = "040a69f4-2115-471f-8daf-4eec2a2057c0"
+
+# Player-card image storage (Cloudflare R2).
+[[r2_buckets]]
+binding = "CARDS"
+bucket_name = "virgil-cards"
+
+# Non-secret config. The allowed browser origin for CORS.
+[vars]
+ALLOWED_ORIGIN = "https://40yrvirgil.co.uk"
