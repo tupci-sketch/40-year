@@ -24,11 +24,31 @@ class D1Mock {
   async batch(stmts) { const out = []; for (const s of stmts) out.push(await s.run()); return out; }
 }
 
+/* Minimal in-memory R2 mock — enough of the API surface for our routes:
+   put(key, body, opts), get(key) -> { body, httpEtag, writeHttpMetadata }. */
+class R2Mock {
+  constructor() { this.store = new Map(); }
+  async put(key, body, opts = {}) {
+    const bytes = body instanceof ArrayBuffer ? new Uint8Array(body) : body;
+    this.store.set(key, { bytes, contentType: (opts.httpMetadata && opts.httpMetadata.contentType) || "application/octet-stream" });
+    return { key };
+  }
+  async get(key) {
+    const entry = this.store.get(key);
+    if (!entry) return null;
+    return {
+      body: entry.bytes,
+      httpEtag: '"mock-etag"',
+      writeHttpMetadata(headers) { headers.set("Content-Type", entry.contentType); }
+    };
+  }
+}
+
 export function makeEnv(extra = {}) {
   const db = new DatabaseSync(":memory:");
   const schema = readFileSync(join(__dir, "..", "schema.sql"), "utf8");
   db.exec(schema);
-  return Object.assign({ DB: new D1Mock(db), PEPPER: "test-pepper", ALLOWED_ORIGIN: "https://40yrvirgil.co.uk" }, extra);
+  return Object.assign({ DB: new D1Mock(db), CARDS: new R2Mock(), PEPPER: "test-pepper", ALLOWED_ORIGIN: "https://40yrvirgil.co.uk" }, extra);
 }
 
 /* tiny assert */
@@ -50,5 +70,19 @@ export async function post(app, env, path, body, headers = {}) {
 
 export async function get(app, env, path, headers = {}) {
   const res = await app.request(path, { method: "GET", headers }, env);
+  return { status: res.status, json: await res.json().catch(() => ({})) };
+}
+
+export async function put(app, env, path, bytes, headers = {}) {
+  const res = await app.request(path, { method: "PUT", headers, body: bytes }, env);
+  return { status: res.status, json: await res.json().catch(() => ({})) };
+}
+
+export async function patchReq(app, env, path, body, headers = {}) {
+  const res = await app.request(path, {
+    method: "PATCH",
+    headers: Object.assign({ "Content-Type": "application/json" }, headers),
+    body: JSON.stringify(body || {})
+  }, env);
   return { status: res.status, json: await res.json().catch(() => ({})) };
 }

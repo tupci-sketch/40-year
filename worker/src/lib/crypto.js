@@ -25,6 +25,12 @@ export async function sha256Hex(str) {
   return toHex(d);
 }
 
+/* Hash raw bytes (ArrayBuffer/Uint8Array) — used for uploaded file checksums. */
+export async function sha256HexBytes(bytes) {
+  const d = await crypto.subtle.digest("SHA-256", bytes);
+  return toHex(d);
+}
+
 export async function pbkdf2Hex(pass, salt, iterations = PBKDF2_ITER) {
   const key = await crypto.subtle.importKey("raw", enc.encode(String(pass)), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
