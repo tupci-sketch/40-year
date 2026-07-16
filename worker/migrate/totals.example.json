@@ -1,0 +1,10 @@
+{
+  "_comment": "Template only — fake sample data. Copy this shape into a private totals.json (never committed; see .gitignore) with the real verified figures once you have them.",
+  "currentSeasonStartSeq": 150,
+  "currentSeasonLabel": "Season 3 · FC26",
+  "previousSeasonLabel": "Season 2 · FC26",
+  "players": [
+    { "player_id": "tupci", "overall_apps": 392, "overall_goals": 351, "overall_assists": 435, "overall_avg_rating": 7.4,
+      "season_apps": 40, "season_goals": 22, "season_assists": 15, "season_avg_rating": 7.6, "note": "" }
+  ]
+}

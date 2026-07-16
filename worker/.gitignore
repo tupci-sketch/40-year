@@ -2,3 +2,9 @@ node_modules/
 .wrangler/
 .dev.vars
 *.log
+
+# Migration outputs / inputs are generated locally and may contain real
+# password hashes or the owner's private totals — never commit these.
+migrate/import.sql
+migrate/totals.json
+migrate/*.report.txt
