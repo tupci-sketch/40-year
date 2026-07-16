@@ -106,7 +106,7 @@ pub.get("/club-record", async (c) => {
   const baseRows = rows(await c.env.DB.prepare("SELECT key,value FROM club_record_baselines").all());
   const baseline = {}; for (const r of baseRows) baseline[r.key] = r.value;
   const derived = await c.env.DB.prepare(
-    `SELECT COUNT(*) played, SUM(result='W') wins, SUM(result='D') draws, SUM(result='L') losses,
+    `SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses,
             COALESCE(SUM(our_score),0) goalsFor, COALESCE(SUM(their_score),0) goalsAgainst FROM matches`
   ).first();
   return c.json({ ok: true, baseline, derived });
@@ -158,7 +158,7 @@ pub.get("/home", async (c) => {
   ).bind(today).first();
   const form = rows(await c.env.DB.prepare("SELECT result FROM matches ORDER BY id DESC LIMIT 5").all()).map((r) => r.result);
   const record = await c.env.DB.prepare(
-    "SELECT COUNT(*) played, SUM(result='W') wins, SUM(result='D') draws, SUM(result='L') losses FROM matches"
+    "SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses FROM matches"
   ).first();
   const news = rows(await c.env.DB.prepare(
     "SELECT id,tag,date_iso,title FROM news_posts WHERE status='published' ORDER BY pinned DESC, date_iso DESC LIMIT 3"
