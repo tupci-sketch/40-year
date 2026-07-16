@@ -147,6 +147,12 @@ pub.get("/leaderboards", async (c) => {
   return c.json({ ok: true, metric, leaderboard: list });
 });
 
+/* ---- gaffers (active) ---- */
+pub.get("/gaffers", async (c) => {
+  const list = rows(await c.env.DB.prepare("SELECT id,name,active FROM gaffers WHERE active=1 ORDER BY name ASC").all());
+  return c.json({ ok: true, gaffers: list });
+});
+
 /* ---- home summary ---- */
 pub.get("/home", async (c) => {
   const today = new Date().toISOString().slice(0, 10);

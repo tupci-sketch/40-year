@@ -70,6 +70,15 @@ export async function currentUser(c) {
   return row;
 }
 
+/* Guard: resolve the user and enforce a minimum level.
+   Returns { user } on success, or { err, status } to return. */
+export async function requireLevel(c, n) {
+  const u = await currentUser(c);
+  if (!u) return { err: "auth", status: 401 };
+  if (Number(u.level) < n) return { err: "denied", status: 403 };
+  return { user: u };
+}
+
 /* Public shape of a user (never leak hashes). */
 export function publicUser(u) {
   return u ? { name: u.display, username: u.username, level: Number(u.level) || 1 } : null;

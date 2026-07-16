@@ -15,6 +15,7 @@ import { cors } from "hono/cors";
 import auth from "./routes/auth.js";
 import pub from "./routes/public.js";
 import com from "./routes/community.js";
+import admin from "./routes/admin.js";
 
 const app = new Hono();
 
@@ -56,6 +57,7 @@ app.get("/api/db-check", async (c) => {
 app.route("/api/auth", auth);
 app.route("/api", pub);
 app.route("/api", com);
+app.route("/api/admin", admin);
 
 /* Predictable JSON for anything unmatched. */
 app.notFound((c) => c.json({ ok: false, error: "not_found", code: 404 }, 404));
