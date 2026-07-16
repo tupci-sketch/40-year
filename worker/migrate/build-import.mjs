@@ -118,20 +118,13 @@ const donovan = squad.find((p) => pid(p.id) === "donovan");
 if (amy && donovan) PASS("Amy and Donovan both present as separate player records (never merged).");
 else if (amy && !donovan) REVIEW("Amy present but no separate Donovan record found in this export — confirm this is expected.");
 
-/* Pre-scan every player id referenced by scorers/stats and create a
-   "Guest" placeholder row for any that aren't in the squad — BEFORE any
-   match/stat rows are emitted, so the FK on player_id is always satisfied
-   regardless of statement order in the final SQL file. */
-const junkPlayerIds = new Set();
-(data.matches || []).forEach((m) => { parseJSON(m.scorersJson, []).forEach((s) => { const spid = pid(s.id); if (spid && !playerIds.has(spid)) junkPlayerIds.add(spid); }); });
-(data.match_stats || []).forEach((s) => { const spid = pid(s.playerId); if (spid && !playerIds.has(spid)) junkPlayerIds.add(spid); });
-if (junkPlayerIds.size) {
-  junkPlayerIds.forEach((jid) => {
-    sql.push(`INSERT OR IGNORE INTO players (id,number,name,slug,controlled_by,is_human,active) VALUES (${sqlStr(jid)},0,${sqlStr("Guest · " + jid)},${sqlStr(jid)},'human',1,0);`);
-  });
-  REVIEW(`${junkPlayerIds.size} player id(s) appear in match stats/scorers but have no squad record: ${[...junkPlayerIds].join(", ")}. Auto-created as inactive "Guest" placeholders so their recorded stats aren't lost — confirm with the owner whether to keep as guests, rename, or merge before the real production import.`);
-}
-sql.push("");
+/* Any player id referenced by scorers/stats but missing from the squad
+   is dropped entirely — no guest placeholders, per the owner's explicit
+   call (e.g. 'sway', removed from the squad earlier). The scoreline
+   itself (our_score/their_score) is untouched — only the individual
+   scorer/stat-line attribution for that id is left out, tracked here
+   for full transparency in the report. */
+const droppedPlayerIds = new Set();
 
 /* ---------- career baselines ----------
    Start from the sheet's own `career` rows (as-of the old baseline seq),
@@ -202,6 +195,7 @@ let matchCount = 0;
   const scorers = parseJSON(m.scorersJson, []);
   scorers.forEach((s, i) => {
     const spid = pid(s.id);
+    if (!playerIds.has(spid)) { droppedPlayerIds.add(spid); return; }
     sql.push(`INSERT OR REPLACE INTO match_scorers (match_id,player_id,goals,ord) VALUES (${seq},${sqlStr(spid)},${sqlNum(s.goals, 1)},${i});`);
   });
 });
@@ -209,15 +203,19 @@ PASS(`${matchCount} matches imported, preserving seq order.`);
 sql.push("");
 
 /* ---------- match_player_stats ---------- */
-let statCount = 0;
+let statCount = 0, statDropCount = 0;
 (data.match_stats || []).forEach((s) => {
   const seq = n(s.seq); const spid = pid(s.playerId);
   if (seq == null || !spid) return;
+  if (!playerIds.has(spid)) { droppedPlayerIds.add(spid); statDropCount++; return; }
   statCount++;
   sql.push(`INSERT OR REPLACE INTO match_player_stats (match_id,player_id,goals,assists,rating,shots,tackles,passes_made,pass_attempts,red_cards,saves,conceded) VALUES (` +
     `${seq},${sqlStr(spid)},${sqlNum(s.goals, 0)},${sqlNum(s.assists, 0)},${sqlNum(s.rating)},${sqlNum(s.shots, 0)},${sqlNum(s.tackles, 0)},${sqlNum(s.passesMade, 0)},${sqlNum(s.passAttempts, 0)},${sqlNum(s.redCards, 0)},${sqlNum(s.saves, 0)},${sqlNum(s.conceded, 0)});`);
 });
 PASS(`${statCount} per-player match stat lines imported.`);
+if (droppedPlayerIds.size) {
+  REVIEW(`Dropped entirely (not imported, no placeholder created) — player id(s) with no squad record: ${[...droppedPlayerIds].join(", ")}. Scorer/stat-line attributions for these ids were left out; each match's own scoreline (our_score/their_score) is untouched.${statDropCount ? ` ${statDropCount} stat line(s) dropped.` : ""}`);
+}
 sql.push("");
 
 /* ---------- cross-check the owner's Season 3 totals against the archive's

@@ -66,9 +66,23 @@ ok((await post(app, env, "/api/admin/seasons", { id: "fc26s3", label: "dup" }, H
 ok((await patch("/api/admin/seasons/fc26s2", adminTok, { archived: true })).json.ok, "season archived");
 ok((await get(app, env, "/api/seasons")).json.seasons.find((s) => s.id === "fc26s2").archived === 1, "archived flag visible");
 
-// ---- match season correction ----
+// ---- new matches auto-default to the current season (no seasonId sent) ----
 await post(app, env, "/api/admin/matches", { opponent: "Old Foe", ourScore: 1, theirScore: 0, players: [] }, H(modTok)); // id=1
 await post(app, env, "/api/admin/matches", { opponent: "New Foe", ourScore: 2, theirScore: 0, players: [] }, H(modTok)); // id=2
+ok((await get(app, env, "/api/matches/1")).json.match.season_id === "fc26s3", "new match with no seasonId auto-defaults to the current season");
+ok((await get(app, env, "/api/matches/2")).json.match.season_id === "fc26s3", "second new match also auto-defaults to current season");
+
+// ---- editing a match WITHOUT resending seasonId preserves it (doesn't null it out) ----
+await post(app, env, "/api/admin/matches/1/season", { seasonId: "fc26s2" }, H(adminTok)); // move match 1 to fc26s2 via the dedicated endpoint
+await post(app, env, "/api/admin/matches", { id: 1, opponent: "Old Foe (edited)", ourScore: 1, theirScore: 1, players: [] }, H(modTok)); // edit stats only, no seasonId sent
+ok((await get(app, env, "/api/matches/1")).json.match.season_id === "fc26s2", "editing a match without seasonId does NOT wipe its existing season");
+ok((await get(app, env, "/api/matches/1")).json.match.opponent === "Old Foe (edited)", "the edit itself still applied");
+
+// ---- editing a match WITH an explicit seasonId still moves it via the general save route ----
+await post(app, env, "/api/admin/matches", { id: 1, opponent: "Old Foe (edited)", ourScore: 1, theirScore: 1, seasonId: "fc26s3", players: [] }, H(modTok));
+ok((await get(app, env, "/api/matches/1")).json.match.season_id === "fc26s3", "explicit seasonId on save still moves the match");
+
+// ---- match season correction ----
 ok((await post(app, env, "/api/admin/matches/1/season", { seasonId: "fc26s2" }, H(modTok))).status === 403, "L5 cannot reseason a match");
 ok((await post(app, env, "/api/admin/matches/1/season", { seasonId: "fc26s2" }, H(adminTok))).json.ok, "L9 moves match to a season");
 ok((await get(app, env, "/api/matches/1")).json.match.season_id === "fc26s2", "match season_id updated");

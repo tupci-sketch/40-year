@@ -65,7 +65,20 @@ admin.post("/matches", async (c) => {
   if (seasonId) {
     const seasonExists = await c.env.DB.prepare("SELECT id FROM seasons WHERE id=?").bind(seasonId).first();
     if (!seasonExists) return c.json({ ok: false, error: "season_not_found", code: "season_not_found" }, 400);
+  } else if (isNew) {
+    // A brand-new match with no explicit season defaults to whatever's
+    // current, so ongoing logging auto-tracks the running season without
+    // the mod having to remember to set it every time. Only applies if
+    // that season actually exists yet — e.g. a fresh site can have
+    // current_season seeded before any season row is created.
+    const cur = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='current_season'").first();
+    if (cur && cur.value) {
+      const curSeasonExists = await c.env.DB.prepare("SELECT id FROM seasons WHERE id=?").bind(cur.value).first();
+      if (curSeasonExists) seasonId = cur.value;
+    }
   }
+  // On an EDIT with no season_id sent, COALESCE below preserves whatever
+  // the match already had — editing stats never silently un-seasons it.
   const motm = b.motm ? pid(b.motm) : null;
   const captain = (b.lineup && b.lineup.captain) ? pid(b.lineup.captain) : (b.captain ? pid(b.captain) : null);
   const formation = clean((b.lineup && b.lineup.formation) || b.formation || "", 20).replace(/[^0-9\-]/g, "") || null;
@@ -100,7 +113,7 @@ admin.post("/matches", async (c) => {
   await c.env.DB.prepare(
     `INSERT INTO matches (id,season_id,stage,date_iso,opponent,our_score,their_score,result,note,comp_name,venue,motm_player_id,captain_player_id,formation,updated_by,updated_iso)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-     ON CONFLICT(id) DO UPDATE SET season_id=excluded.season_id, stage=excluded.stage, date_iso=excluded.date_iso,
+     ON CONFLICT(id) DO UPDATE SET season_id=COALESCE(excluded.season_id, matches.season_id), stage=excluded.stage, date_iso=excluded.date_iso,
        opponent=excluded.opponent, our_score=excluded.our_score, their_score=excluded.their_score, result=excluded.result,
        note=excluded.note, comp_name=excluded.comp_name, venue=excluded.venue, motm_player_id=excluded.motm_player_id,
        captain_player_id=excluded.captain_player_id, formation=excluded.formation, updated_by=excluded.updated_by, updated_iso=excluded.updated_iso`
