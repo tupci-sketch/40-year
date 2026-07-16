@@ -6,7 +6,7 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "test": "node --experimental-sqlite test/auth.test.mjs && node --experimental-sqlite test/public.test.mjs && node --experimental-sqlite test/community.test.mjs && node --experimental-sqlite test/admin.test.mjs"
+    "test": "node --experimental-sqlite test/auth.test.mjs && node --experimental-sqlite test/public.test.mjs && node --experimental-sqlite test/community.test.mjs && node --experimental-sqlite test/admin.test.mjs && node --experimental-sqlite test/admin2.test.mjs"
   },
   "dependencies": {
     "hono": "^4.6.14"

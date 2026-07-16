@@ -61,11 +61,35 @@ admin.post("/matches", async (c) => {
     if (!ex) return c.json({ ok: false, error: "missing", code: "missing" }, 404);
   }
 
-  const seasonId = b.seasonId ? clean(b.seasonId, 24) : null;
+  let seasonId = b.seasonId ? clean(b.seasonId, 24) : null;
+  if (seasonId) {
+    const seasonExists = await c.env.DB.prepare("SELECT id FROM seasons WHERE id=?").bind(seasonId).first();
+    if (!seasonExists) return c.json({ ok: false, error: "season_not_found", code: "season_not_found" }, 400);
+  }
   const motm = b.motm ? pid(b.motm) : null;
   const captain = (b.lineup && b.lineup.captain) ? pid(b.lineup.captain) : (b.captain ? pid(b.captain) : null);
   const formation = clean((b.lineup && b.lineup.formation) || b.formation || "", 20).replace(/[^0-9\-]/g, "") || null;
   const venue = String(b.venue || "").toUpperCase().replace(/[^HAN]/g, "").slice(0, 1) || null;
+
+  // Validate every referenced player id exists up front, so a typo in the
+  // admin form fails cleanly (400) instead of a raw FK error mid-write.
+  const refIds = new Set();
+  if (motm) refIds.add(motm);
+  if (captain) refIds.add(captain);
+  for (const p of (Array.isArray(b.players) ? b.players : [])) { const i = pid(p && p.id); if (i) refIds.add(i); }
+  for (const s of (Array.isArray(b.scorers) ? b.scorers : [])) { const i = pid(s && s.id); if (i) refIds.add(i); }
+  if (b.lineup) {
+    for (const x of (b.lineup.xi || [])) { const i = pid(x && x.id); if (i) refIds.add(i); }
+    for (const s of (b.lineup.subs || [])) { const i = pid(s); if (i) refIds.add(i); }
+  }
+  if (refIds.size) {
+    const found = rows(await c.env.DB.prepare(
+      `SELECT id FROM players WHERE id IN (${[...refIds].map(() => "?").join(",")})`
+    ).bind(...refIds).all());
+    const foundSet = new Set(found.map((r) => r.id));
+    const missing = [...refIds].filter((i) => !foundSet.has(i));
+    if (missing.length) return c.json({ ok: false, error: "unknown_player", code: "unknown_player", players: missing }, 400);
+  }
 
   const rec = {
     id, season_id: seasonId, stage, date_iso: clean(b.dateISO, 10), opponent,
@@ -165,9 +189,14 @@ admin.post("/fixtures", async (c) => {
   const kind = b.kind === "session" ? "session" : "match";
   let stage = String(b.stage || "friendly").toLowerCase();
   if (!["league", "playoff", "cup", "friendly", "international", "other"].includes(stage)) stage = "friendly";
+  const seasonId = b.seasonId ? clean(b.seasonId, 24) : null;
+  if (seasonId) {
+    const seasonExists = await c.env.DB.prepare("SELECT id FROM seasons WHERE id=?").bind(seasonId).first();
+    if (!seasonExists) return c.json({ ok: false, error: "season_not_found", code: "season_not_found" }, 400);
+  }
   await c.env.DB.prepare(
     "INSERT INTO fixtures (id,kind,season_id,stage,date_iso,opponent,comp_name,note,settled) VALUES (?,?,?,?,?,?,?,?,0)"
-  ).bind(id, kind, b.seasonId ? clean(b.seasonId, 24) : null, stage, clean(b.dateISO, 10), clean(b.opponent, 60), clean(b.compName, 50), clean(b.note, 140)).run();
+  ).bind(id, kind, seasonId, stage, clean(b.dateISO, 10), clean(b.opponent, 60), clean(b.compName, 50), clean(b.note, 140)).run();
   await audit(c.env, g.user.id, "fixture_add", "fixture", id, null);
   return c.json({ ok: true, id });
 });
@@ -239,6 +268,171 @@ admin.delete("/news/:id", async (c) => {
   const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
   await c.env.DB.prepare("DELETE FROM news_posts WHERE id=?").bind(intOr(c.req.param("id"), 0)).run();
   return c.json({ ok: true });
+});
+
+/* ---------------- SQUAD / PLAYERS (L5 identity, L9 baselines) ---------------- */
+const POS_WL = ["GK", "RB", "RWB", "CB", "LB", "LWB", "CDM", "CM", "CAM", "RM", "LM", "RW", "LW", "CF", "ST"];
+function cleanPositions(arr) {
+  const out = [];
+  for (const x of (Array.isArray(arr) ? arr : [])) {
+    const p = String(x == null ? "" : x).toUpperCase().replace(/[^A-Z]/g, "");
+    if (POS_WL.includes(p) && !out.includes(p)) out.push(p);
+  }
+  return out.slice(0, 3);
+}
+
+admin.post("/players", async (c) => {
+  const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const b = await c.req.json().catch(() => ({}));
+  const id = pid(b.id || b.name);
+  const name = clean(b.name, 40);
+  if (!id || !name) return c.json({ ok: false, error: "name", code: "name" }, 400);
+  const positions = cleanPositions(b.positions);
+  const rec = {
+    id, number: clampInt(b.number, 0, 99), name, slug: id,
+    controlled_by: b.controlledBy === "human" ? "human" : "bot",
+    is_human: b.controlledBy === "human" ? 1 : 0,
+    perma_bench: b.permaBench ? 1 : 0, retired_ai: b.retiredAI ? 1 : 0,
+    linked_to: b.linkedTo ? pid(b.linkedTo) : null,
+    positions_json: JSON.stringify(positions), flavour: clean(b.flavour, 400), active: 1
+  };
+  await c.env.DB.prepare(
+    `INSERT INTO players (id,number,name,slug,controlled_by,is_human,perma_bench,retired_ai,linked_to,positions_json,flavour,active)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,1)
+     ON CONFLICT(id) DO UPDATE SET number=excluded.number, name=excluded.name, controlled_by=excluded.controlled_by,
+       is_human=excluded.is_human, perma_bench=excluded.perma_bench, retired_ai=excluded.retired_ai,
+       linked_to=excluded.linked_to, positions_json=excluded.positions_json, flavour=excluded.flavour`
+  ).bind(rec.id, rec.number, rec.name, rec.slug, rec.controlled_by, rec.is_human, rec.perma_bench,
+    rec.retired_ai, rec.linked_to, rec.positions_json, rec.flavour).run();
+  await audit(c.env, g.user.id, "player_save", "player", id, { name });
+  return c.json({ ok: true, id });
+});
+
+admin.delete("/players/:id", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const id = pid(c.req.param("id"));
+  await c.env.DB.prepare("UPDATE players SET active=0 WHERE id=?").bind(id).run();
+  await audit(c.env, g.user.id, "player_deactivate", "player", id, null);
+  return c.json({ ok: true });
+});
+
+/* ---- career baseline (verified overall totals; L9 only) ---- */
+admin.post("/players/:id/baseline", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const id = pid(c.req.param("id"));
+  const player = await c.env.DB.prepare("SELECT id FROM players WHERE id=?").bind(id).first();
+  if (!player) return c.json({ ok: false, error: "not_found", code: 404 }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  await c.env.DB.prepare(
+    `INSERT INTO player_career_baselines (player_id,as_of_seq,apps,goals,assists,avg_rating,passes,tackles,clean_sheets,win_pct,source,note,updated_by,updated_iso)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(player_id) DO UPDATE SET as_of_seq=excluded.as_of_seq, apps=excluded.apps, goals=excluded.goals,
+       assists=excluded.assists, avg_rating=excluded.avg_rating, passes=excluded.passes, tackles=excluded.tackles,
+       clean_sheets=excluded.clean_sheets, win_pct=excluded.win_pct, source=excluded.source, note=excluded.note,
+       updated_by=excluded.updated_by, updated_iso=excluded.updated_iso`
+  ).bind(id, intOr(b.asOfSeq, 0), clampInt(b.apps, 0, 9999), clampInt(b.goals, 0, 9999), clampInt(b.assists, 0, 9999),
+    (b.avgRating == null || b.avgRating === "") ? null : Number(b.avgRating), clampInt(b.passes, 0, 999999),
+    clampInt(b.tackles, 0, 99999), clampInt(b.cleanSheets, 0, 9999), (b.winPct == null || b.winPct === "") ? null : Number(b.winPct),
+    clean(b.source, 60), clean(b.note, 300), g.user.id, nowISO()).run();
+  await audit(c.env, g.user.id, "baseline_update", "player", id, { source: b.source });
+  return c.json({ ok: true });
+});
+
+admin.post("/players/:id/season-baseline", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const id = pid(c.req.param("id"));
+  const b = await c.req.json().catch(() => ({}));
+  const seasonId = clean(b.seasonId, 24);
+  if (!seasonId) return c.json({ ok: false, error: "season", code: "season" }, 400);
+  const seasonExists = await c.env.DB.prepare("SELECT id FROM seasons WHERE id=?").bind(seasonId).first();
+  if (!seasonExists) return c.json({ ok: false, error: "season_not_found", code: "season_not_found" }, 400);
+  await c.env.DB.prepare(
+    `INSERT INTO player_season_baselines (player_id,season_id,apps,goals,assists,avg_rating,note)
+     VALUES (?,?,?,?,?,?,?)
+     ON CONFLICT(player_id,season_id) DO UPDATE SET apps=excluded.apps, goals=excluded.goals, assists=excluded.assists,
+       avg_rating=excluded.avg_rating, note=excluded.note`
+  ).bind(id, seasonId, clampInt(b.apps, 0, 9999), clampInt(b.goals, 0, 9999), clampInt(b.assists, 0, 9999),
+    (b.avgRating == null || b.avgRating === "") ? null : Number(b.avgRating), clean(b.note, 300)).run();
+  await audit(c.env, g.user.id, "season_baseline_update", "player", id, { seasonId });
+  return c.json({ ok: true });
+});
+
+/* ---- club record baselines (verified overall club totals; L9) ---- */
+admin.post("/club-record", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const b = await c.req.json().catch(() => ({}));
+  const entries = Object.entries(b.values || {});
+  for (const [key, value] of entries) {
+    await c.env.DB.prepare(
+      "INSERT INTO club_record_baselines (key,value,note) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, note=excluded.note"
+    ).bind(clean(key, 40), clean(String(value), 40), clean(b.note, 200)).run();
+  }
+  await audit(c.env, g.user.id, "club_record_update", "club_record", null, b.values);
+  return c.json({ ok: true });
+});
+
+/* ---------------- SEASONS ---------------- */
+admin.post("/seasons", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const b = await c.req.json().catch(() => ({}));
+  const id = clean(b.id, 24).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!id) return c.json({ ok: false, error: "id", code: "id" }, 400);
+  const existing = await c.env.DB.prepare("SELECT id FROM seasons WHERE id=?").bind(id).first();
+  if (existing) return c.json({ ok: false, error: "exists", code: "exists" }, 409);
+  await c.env.DB.prepare(
+    "INSERT INTO seasons (id,label,game,started_iso,ended_iso,archived,sort) VALUES (?,?,?,?,?,0,?)"
+  ).bind(id, clean(b.label, 60) || id, clean(b.game, 40), clean(b.startedISO, 10) || nowISO().slice(0, 10), null, intOr(b.sort, 0)).run();
+  if (b.makeCurrent) {
+    await c.env.DB.prepare("INSERT INTO site_settings (key,value) VALUES ('current_season',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(id).run();
+  }
+  await audit(c.env, g.user.id, "season_add", "season", id, { label: b.label });
+  return c.json({ ok: true, id });
+});
+
+admin.patch("/seasons/:id", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const id = clean(c.req.param("id"), 24);
+  const b = await c.req.json().catch(() => ({}));
+  const sets = [], args = [];
+  if (b.label != null) { sets.push("label=?"); args.push(clean(b.label, 60)); }
+  if (b.archived != null) { sets.push("archived=?"); args.push(b.archived ? 1 : 0); if (b.archived) { sets.push("ended_iso=?"); args.push(nowISO()); } }
+  if (b.sort != null) { sets.push("sort=?"); args.push(intOr(b.sort, 0)); }
+  if (sets.length) await c.env.DB.prepare(`UPDATE seasons SET ${sets.join(", ")} WHERE id=?`).bind(...args, id).run();
+  if (b.makeCurrent) {
+    await c.env.DB.prepare("INSERT INTO site_settings (key,value) VALUES ('current_season',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(id).run();
+  }
+  await audit(c.env, g.user.id, "season_update", "season", id, b);
+  return c.json({ ok: true });
+});
+
+/* Move a match to a different season (Housekeeping correction tool). */
+admin.post("/matches/:id/season", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const matchId = intOr(c.req.param("id"), 0);
+  const b = await c.req.json().catch(() => ({}));
+  const seasonId = clean(b.seasonId, 24);
+  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE id=?").bind(seasonId).first();
+  if (!season) return c.json({ ok: false, error: "season", code: "season" }, 400);
+  const match = await c.env.DB.prepare("SELECT id FROM matches WHERE id=?").bind(matchId).first();
+  if (!match) return c.json({ ok: false, error: "not_found", code: 404 }, 404);
+  await c.env.DB.prepare("UPDATE matches SET season_id=? WHERE id=?").bind(seasonId, matchId).run();
+  await audit(c.env, g.user.id, "match_reseason", "match", matchId, { seasonId });
+  return c.json({ ok: true });
+});
+
+/* Bulk-assign a range of match ids to a season — used once at the final
+   data import to fix the "final X matches belong to the current season"
+   allocation (owner-specified seq boundary). */
+admin.post("/seasons/:id/assign-range", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const seasonId = clean(c.req.param("id"), 24);
+  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE id=?").bind(seasonId).first();
+  if (!season) return c.json({ ok: false, error: "season", code: "season" }, 400);
+  const b = await c.req.json().catch(() => ({}));
+  const fromSeq = intOr(b.fromSeq, 0), toSeq = intOr(b.toSeq, 999999);
+  const res = await c.env.DB.prepare("UPDATE matches SET season_id=? WHERE id >= ? AND id <= ?").bind(seasonId, fromSeq, toSeq).run();
+  await audit(c.env, g.user.id, "season_assign_range", "season", seasonId, { fromSeq, toSeq });
+  return c.json({ ok: true, changed: res.meta.changes });
 });
 
 /* ---------------- BANNER / SETTINGS ---------------- */

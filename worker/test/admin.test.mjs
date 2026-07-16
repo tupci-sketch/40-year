@@ -64,6 +64,12 @@ const ps = await DB.prepare("SELECT points, exact, played FROM prediction_scores
 ok(ps && ps.points === 3 && ps.exact === 1 && ps.played === 1, "exact prediction scored 3");
 ok((await DB.prepare("SELECT settled FROM fixtures WHERE id='fxp'").first()).settled === 1, "fixture marked settled");
 
+// ---- unknown player id fails cleanly (not a raw FK 500) ----
+const badPlayer = await post(app, env, "/api/admin/matches", { opponent: "Ghost FC", ourScore: 1, theirScore: 0, players: [{ id: "no-such-player", goals: 1 }] }, H(modTok));
+ok(badPlayer.status === 400 && badPlayer.json.code === "unknown_player" && badPlayer.json.players.includes("no-such-player"), "unknown player id in stats rejected cleanly");
+const badMotm = await post(app, env, "/api/admin/matches", { opponent: "Ghost FC", ourScore: 1, theirScore: 0, players: [], motm: "no-such-player" }, H(modTok));
+ok(badMotm.status === 400 && badMotm.json.code === "unknown_player", "unknown MOTM id rejected cleanly");
+
 // ---- match delete (L9 only) ----
 ok((await del("/api/admin/matches/1", modTok)).status === 403, "L5 cannot delete match");
 ok((await del("/api/admin/matches/1", adminTok)).status === 200, "L9 deletes match");
