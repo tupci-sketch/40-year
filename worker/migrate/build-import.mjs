@@ -257,6 +257,28 @@ sql.push("-- chat/forum import resolves user_id via a subselect on username, so 
 });
 sql.push("");
 
+/* ---------- forum threads + posts (category resolved by key, user_id by username) ---------- */
+(data.forum_threads || []).forEach((t) => {
+  if (!t.title || !t.body) return;
+  sql.push(
+    `INSERT INTO forum_threads (category_id,user_id,title,body,created_iso,last_iso,replies,pinned) ` +
+    `SELECT (SELECT id FROM forum_categories WHERE key=${sqlStr(t.category)}), u.id, ${sqlStr(t.title)}, ${sqlStr(t.body)}, ${sqlStr(t.ts_iso)}, ${sqlStr(t.lastISO || t.ts_iso)}, ${sqlNum(t.replies, 0)}, 0 ` +
+    `FROM users u WHERE u.username=${sqlStr(String(t.userKey).toLowerCase())} ` +
+    `AND NOT EXISTS (SELECT 1 FROM forum_threads ft WHERE ft.title=${sqlStr(t.title)} AND ft.created_iso=${sqlStr(t.ts_iso)});`
+  );
+});
+(data.forum_posts || []).forEach((p) => {
+  if (!p.body || !p.threadId) return;
+  sql.push(
+    `INSERT INTO forum_posts (thread_id,user_id,body,created_iso,deleted_iso) ` +
+    `SELECT ft.id, u.id, ${sqlStr(p.body)}, ${sqlStr(p.ts_iso)}, ${p.deleted ? sqlStr(p.ts_iso) : "NULL"} ` +
+    `FROM forum_threads ft, users u WHERE ft.title=${sqlStr(p.threadTitle || "")} AND u.username=${sqlStr(String(p.userKey).toLowerCase())} ` +
+    `AND NOT EXISTS (SELECT 1 FROM forum_posts fp WHERE fp.body=${sqlStr(p.body)} AND fp.created_iso=${sqlStr(p.ts_iso)});`
+  );
+});
+if ((data.forum_threads || []).length) PASS(`${data.forum_threads.length} forum thread(s) imported (with any posts) — resolved by category key + username, idempotent on re-run.`);
+sql.push("");
+
 writeFileSync(join(__dir, "import.sql"), sql.join("\n") + "\n");
 
 /* ---------- cross-check against club_record baseline (if present) ---------- */
