@@ -553,10 +553,31 @@
         field("Text", '<input type="text" id="st-banner-text" maxlength="200">') +
         '<label class="pers-toggle"><input type="checkbox" id="st-banner-active"><span class="pers-toggle-track"><span class="pers-toggle-dot"></span></span><span class="pers-toggle-label">Active</span></label>' +
         '<div class="admin-actions"><button class="btn btn-gold btn-small" id="st-banner-save">Save banner</button><span class="admin-inline-note" id="st-msg"></span></div>' +
+      "</div>" +
+      '<div class="panel">' +
+        '<div class="section-label">League standing</div>' +
+        '<p class="admin-inline-note">Division/Position/Points are set here manually — they don’t follow predictably from win/loss counts (promotion, playoff seeding, points deductions). Played and Form on the home card auto-track the current season’s recorded matches and need no input.</p>' +
+        field("Division", '<input type="text" id="st-league-division" maxlength="60" placeholder="e.g. Division 2">') +
+        field("Position", '<input type="text" id="st-league-position" maxlength="60" placeholder="e.g. 1 Chance Rem">') +
+        field("Points", '<input type="text" id="st-league-points" maxlength="30" placeholder="e.g. 12/16">') +
+        '<div class="admin-actions"><button class="btn btn-gold btn-small" id="st-league-save">Save league standing</button><span class="admin-inline-note" id="st-league-msg"></span></div>' +
       "</div>";
     U.$("#st-banner-save", body).addEventListener("click", function () {
       NET.adminBanner(U.$("#st-banner-text", body).value.trim(), U.$("#st-banner-active", body).checked)
         .then(function (r) { if (r && r.ok) U.toast("Banner saved."); else U.$("#st-msg", body).textContent = "✗ failed"; });
+    });
+    NET.home().then(function (res) {
+      var ls = res && res.leagueStatus || {};
+      U.$("#st-league-division", body).value = ls.division || "";
+      U.$("#st-league-position", body).value = ls.position || "";
+      U.$("#st-league-points", body).value = ls.points || "";
+    });
+    U.$("#st-league-save", body).addEventListener("click", function () {
+      NET.adminLeagueStatus(
+        U.$("#st-league-division", body).value.trim(),
+        U.$("#st-league-position", body).value.trim(),
+        U.$("#st-league-points", body).value.trim()
+      ).then(function (r) { if (r && r.ok) U.toast("League standing saved."); else U.$("#st-league-msg", body).textContent = "✗ failed"; });
     });
   }
 

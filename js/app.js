@@ -202,7 +202,17 @@
         var rec = res.record || {};
         var form = (res.form || []).map(function (r) { return U.pill(r); }).join("");
         var next = res.nextFixture;
-        mt.innerHTML =
+        var ls = res.leagueStatus || {};
+        function cell(v, lab) { return v ? '<div class="league-cell"><span class="league-val">' + U.esc(v) + '</span><span class="league-lab">' + lab + "</span></div>" : ""; }
+        var strip = (ls.division || ls.position || ls.points)
+          ? '<div class="league-strip panel">' +
+              '<div class="league-row">' +
+                cell(ls.division, "Division") + cell(ls.position, "Position") + cell(ls.points, "Points") + cell(U.num(rec.played), "Played") +
+                (form ? '<div class="league-cell league-form"><span class="league-form-pills">' + form + '</span><span class="league-lab">Form</span></div>' : "") +
+              "</div>" +
+            "</div>"
+          : "";
+        mt.innerHTML = strip +
           U.statTile("Played", U.num(rec.played)) +
           U.statTile("Wins", U.num(rec.wins), { accent: "win" }) +
           U.statTile("Draws", U.num(rec.draws)) +

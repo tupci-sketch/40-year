@@ -91,6 +91,12 @@ ok((await del("/api/admin/news/" + nw.json.id, modTok)).status === 200, "news de
 ok((await post(app, env, "/api/admin/banner", { text: "We're live", active: true }, H(modTok))).json.ok, "banner set");
 ok((await get(app, env, "/api/home")).json.banner.text === "We're live", "banner shows on home");
 
+// ---- league status (manual: division/position/points; NOT derived from matches) ----
+ok((await get(app, env, "/api/home")).json.leagueStatus === null, "no league status set yet → null");
+ok((await post(app, env, "/api/admin/league-status", { division: "Division 2", position: "1 Chance Rem", points: "12/16" }, H(modTok))).json.ok, "league status set (L5)");
+const homeLs = (await get(app, env, "/api/home")).json;
+ok(homeLs.leagueStatus.division === "Division 2" && homeLs.leagueStatus.position === "1 Chance Rem" && homeLs.leagueStatus.points === "12/16", "home: league status round-trips exactly");
+
 // ---- users (L9) ----
 ok((await get(app, env, "/api/admin/users", H(modTok))).json.users.length === 3, "L5 can view users");
 const memberId = (await DB.prepare("SELECT id FROM users WHERE username='member1'").first()).id;

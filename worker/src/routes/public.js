@@ -162,16 +162,32 @@ pub.get("/home", async (c) => {
   const nextFixture = await c.env.DB.prepare(
     "SELECT id,kind,stage,date_iso,opponent,comp_name FROM fixtures WHERE date_iso IS NULL OR date_iso >= ? ORDER BY date_iso ASC LIMIT 1"
   ).bind(today).first();
-  const form = rows(await c.env.DB.prepare("SELECT result FROM matches ORDER BY id DESC LIMIT 5").all()).map((r) => r.result);
+
+  const curRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='current_season'").first();
+  const curSeason = curRow ? curRow.value : null;
+  const seasonWhere = curSeason ? "WHERE season_id=?" : "";
+  const seasonArgs = curSeason ? [curSeason] : [];
+
+  // "Played" and "Form" auto-track the running season's own recorded results —
+  // Division/Position/Points don't follow from win/loss counts alone (promotion,
+  // playoff seeding, points deductions etc.), so those stay a separate manual
+  // setting below rather than being derived here.
+  const form = rows(await c.env.DB.prepare(
+    `SELECT result FROM matches ${seasonWhere} ORDER BY id DESC LIMIT 6`
+  ).bind(...seasonArgs).all()).map((r) => r.result);
   const record = await c.env.DB.prepare(
-    "SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses FROM matches"
-  ).first();
+    `SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses FROM matches ${seasonWhere}`
+  ).bind(...seasonArgs).first();
+
+  const leagueRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='league_status'").first();
+  let leagueStatus = null; try { leagueStatus = leagueRow ? JSON.parse(leagueRow.value || "null") : null; } catch (e) {}
+
   const news = rows(await c.env.DB.prepare(
     "SELECT id,tag,date_iso,title FROM news_posts WHERE status='published' ORDER BY pinned DESC, date_iso DESC LIMIT 3"
   ).all());
   const bannerRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='banner'").first();
   let banner = null; try { banner = bannerRow ? JSON.parse(bannerRow.value || "null") : null; } catch (e) {}
-  return c.json({ ok: true, latestResult: latest, nextFixture, form, record, news, banner });
+  return c.json({ ok: true, latestResult: latest, nextFixture, form, record, leagueStatus, news, banner });
 });
 
 export default pub;

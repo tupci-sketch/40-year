@@ -457,6 +457,23 @@ admin.post("/banner", async (c) => {
   return c.json({ ok: true });
 });
 
+/* League standing (division/position/points) is owner-set and independent of
+   recorded match results — it doesn't reset or step predictably from win/loss
+   counts (promotion, playoff seeding, points deductions), unlike Played/Form
+   on the home card, which the /home route derives from matches directly. */
+admin.post("/league-status", async (c) => {
+  const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const b = await c.req.json().catch(() => ({}));
+  const val = JSON.stringify({
+    division: clean(b.division, 60),
+    position: clean(b.position, 60),
+    points: clean(b.points, 30),
+  });
+  await c.env.DB.prepare("INSERT INTO site_settings (key,value) VALUES ('league_status',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(val).run();
+  await audit(c.env, g.user.id, "league_status", "setting", "league_status", null);
+  return c.json({ ok: true });
+});
+
 admin.post("/settings", async (c) => {
   const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
   const b = await c.req.json().catch(() => ({}));

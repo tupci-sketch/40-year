@@ -156,6 +156,7 @@
     adminNewsPatch:   function (id, b) { return this.patch("/admin/news/" + id, b); },
     adminNewsDel:     function (id) { return this.del("/admin/news/" + id); },
     adminBanner:      function (text, active) { return this.post("/admin/banner", { text: text, active: !!active }); },
+    adminLeagueStatus: function (division, position, points) { return this.post("/admin/league-status", { division: division, position: position, points: points }); },
     adminSettings:    function (key, value) { return this.post("/admin/settings", { key: key, value: value }); },
     adminPlayerSave:  function (p) { return this.post("/admin/players", p); },
     adminPlayerDeactivate: function (id) { return this.del("/admin/players/" + id); },
