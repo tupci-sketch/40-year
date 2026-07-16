@@ -7,19 +7,16 @@
   <meta name="description" content="The official home of The 40Yr Virgil — EA Sports FC Pro Clubs. Est. 2024. Live results, the squad, the tactics board, and the legend in progress.">
   <meta name="theme-color" content="#07030B">
 
-  <!-- Security: lock down what the page may load. Scripts only from us,
-       Cloudflare Turnstile and TikTok's embed; data only to/from the
-       Apps Script backend, Turnstile and TikTok. Inline scripts are
-       forbidden. (frame-ancestors / X-Frame-Options / HSTS are set at
-       the Cloudflare edge — they're ignored in a <meta> tag.) -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://*.tiktok.com https://*.ttwstatic.com https://*.tiktokcdn.com https://*.tiktokcdn-us.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://challenges.cloudflare.com https://*.tiktok.com https://*.ttwstatic.com https://*.tiktokcdn.com https://*.tiktokcdn-us.com; frame-src https://challenges.cloudflare.com https://*.tiktok.com https://*.ttwstatic.com https://player.twitch.tv https://*.twitch.tv; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <!-- Security: lock down what the page may load. Scripts only from us and
+       Cloudflare Turnstile; data only to/from our Worker API, R2 (same
+       Worker origin), Turnstile and TikTok. Inline scripts are forbidden.
+       (frame-ancestors / X-Frame-Options / HSTS are set at the Cloudflare
+       edge — they're ignored in a <meta> tag.) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://*.tiktok.com https://*.ttwstatic.com https://*.tiktokcdn.com https://*.tiktokcdn-us.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://*.workers.dev https://api.40yrvirgil.co.uk https://challenges.cloudflare.com https://*.tiktok.com https://*.ttwstatic.com https://*.tiktokcdn.com https://*.tiktokcdn-us.com; frame-src https://challenges.cloudflare.com https://*.tiktok.com https://*.ttwstatic.com https://player.twitch.tv https://*.twitch.tv; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
 
   <link rel="preload" as="image" href="assets/img/crest.png">
-  <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 
-  <!-- Open Graph · after deploying, swap these two for your full
-       GitHub Pages URLs (e.g. https://YOURNAME.github.io/40yr-virgil/assets/img/crest.png) -->
   <meta property="og:title" content="The 40Yr Virgil">
   <meta property="og:description" content="One Club. One Squad. One Dream. Est. 2024 — EA Sports FC Pro Clubs.">
   <meta property="og:type" content="website">
@@ -36,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/styles.css?v=3">
+  <link rel="stylesheet" href="css/styles.css?v=4">
 </head>
 <body>
 
@@ -49,21 +46,14 @@
       </a>
       <button id="nav-toggle" aria-label="Open menu">☰</button>
       <nav id="site-nav" aria-label="Main">
-        <a class="nav-link" data-route="home" href="#home">Hub</a>
+        <a class="nav-link" data-route="home" href="#home">Home</a>
+        <a class="nav-link" data-route="archive" href="#archive">Archive</a>
         <a class="nav-link" data-route="squad" href="#squad">Squad</a>
-        <a class="nav-link" data-route="tactics" href="#tactics">Tactics</a>
-        <a class="nav-link" data-route="results" href="#results">Results</a>
-        <a class="nav-link" data-route="stats" href="#stats">Stats</a>
-        <a class="nav-link" data-route="honours" href="#honours">Honours</a>
-        <a class="nav-link" data-route="gaffer" href="#gaffer">Gaffer</a>
+        <a class="nav-link" data-route="matchday" href="#matchday">Matchday</a>
+        <a class="nav-link" data-route="clubhouse" href="#clubhouse">Clubhouse</a>
         <a class="nav-link" data-route="funhouse" href="#funhouse">Funhouse</a>
-        <a class="nav-link" data-route="about" href="#about">About</a>
-        <a class="nav-link" data-route="news" href="#news">News</a>
-        <a class="nav-link" data-route="social" href="#social">Social</a>
-        <a class="nav-link" data-route="search" href="#search">Search</a>
-        <a class="nav-link" data-route="clubhouse" href="#clubhouse" id="nav-clubhouse" hidden>Clubhouse</a>
-        <a class="nav-link" data-route="chat" href="#chat" id="nav-chat" hidden>Chat</a>
-        <a class="nav-link" data-route="forum" href="#forum" id="nav-forum" hidden>Forum</a>
+        <a class="nav-link" data-route="more" href="#more">More</a>
+        <a class="nav-link" data-route="inbox" href="#inbox" id="nav-inbox" hidden>Inbox<span class="nav-badge" id="inbox-badge" hidden></span></a>
         <a class="nav-link" data-route="admin" href="#admin" id="nav-admin" hidden>Housekeeping</a>
         <div id="account-bar"></div>
       </nav>
@@ -84,15 +74,24 @@
         <h1 class="hero-name">THE <span class="accent">40YR</span> VIRGIL</h1>
         <span class="hero-est">EST. 2024</span>
         <p class="hero-tagline">One Club. One Squad. One Dream.</p>
-        <p class="hero-game">EA Sports FC 26 · Pro Clubs · Season 2</p>
+        <p class="hero-game">EA Sports FC 26 · Pro Clubs</p>
         <div class="hero-ctas">
           <a class="btn btn-primary" href="#squad">Meet the squad</a>
-          <a class="btn btn-gold" href="#tactics">The tactics board</a>
+          <a class="btn btn-gold" href="#matchday">Matchday</a>
         </div>
       </div>
 
       <div class="section-label">The record, live <span class="live-dot" title="From the club's own archive"></span></div>
       <div id="home-live"></div>
+
+      <div class="section-label">Around the club</div>
+      <div class="tile-row">
+        <a class="stat-tile" href="#archive"><span class="stat-tile-value">📋</span><span class="stat-tile-label">Archive</span></a>
+        <a class="stat-tile" href="#matchday"><span class="stat-tile-value">🗓️</span><span class="stat-tile-label">Matchday</span></a>
+        <a class="stat-tile" href="#clubhouse"><span class="stat-tile-value">🍺</span><span class="stat-tile-label">Clubhouse</span></a>
+        <a class="stat-tile" href="#funhouse"><span class="stat-tile-value">🎡</span><span class="stat-tile-label">Funhouse</span></a>
+        <a class="stat-tile" href="#more"><span class="stat-tile-value">📚</span><span class="stat-tile-label">More</span></a>
+      </div>
 
       <div class="section-label">What we stand for</div>
       <div class="values-grid">
@@ -113,15 +112,6 @@
         </div>
       </div>
 
-      <div class="section-label">Around the club</div>
-      <div class="tile-row">
-        <a class="stat-tile" href="#results"><span class="stat-tile-value">📋</span><span class="stat-tile-label">Results</span></a>
-        <a class="stat-tile" href="#stats"><span class="stat-tile-value">📊</span><span class="stat-tile-label">Stats</span></a>
-        <a class="stat-tile" href="#honours"><span class="stat-tile-value">🏆</span><span class="stat-tile-label">Honours</span></a>
-        <a class="stat-tile" href="#gaffer"><span class="stat-tile-value">🎩</span><span class="stat-tile-label">The Gaffer</span></a>
-        <a class="stat-tile" href="#funhouse"><span class="stat-tile-value">🎡</span><span class="stat-tile-label">Funhouse</span></a>
-      </div>
-
       <div class="section-label">Our sponsor</div>
       <div class="sponsor-strip">
         <div class="sponsor-badge">
@@ -132,13 +122,41 @@
       </div>
     </section>
 
+    <!-- ======================= ARCHIVE ======================= -->
+    <section class="screen" id="screen-archive">
+      <div class="screen-head">
+        <h1 class="screen-title">The Archive</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <div id="archive-filters"></div>
+      <div id="archive-list"></div>
+    </section>
+
+    <!-- ======================= MATCH REPORT ======================= -->
+    <section class="screen" id="screen-match">
+      <div class="screen-head">
+        <h1 class="screen-title">Match Report</h1>
+        <a class="back-link" href="#archive">← Archive</a>
+      </div>
+      <div id="match-view"></div>
+    </section>
+
+    <!-- ======================= OPPONENT ======================= -->
+    <section class="screen" id="screen-opponent">
+      <div class="screen-head">
+        <h1 class="screen-title">Head to Head</h1>
+        <a class="back-link" href="#archive">← Archive</a>
+      </div>
+      <div id="opponent-view"></div>
+    </section>
+
     <!-- ======================= SQUAD ======================= -->
     <section class="screen" id="screen-squad">
       <div class="screen-head">
         <h1 class="screen-title">The Squad</h1>
         <a class="back-link" href="#home">← Hub</a>
       </div>
-      <div id="squad-filters"></div>
+      <div class="admin-actions"><a class="btn btn-ghost btn-small" href="#tactics">🧩 Tactics board →</a></div>
       <div id="squad-grid"></div>
     </section>
 
@@ -155,68 +173,69 @@
     <section class="screen" id="screen-tactics">
       <div class="screen-head">
         <h1 class="screen-title">Tactics Board</h1>
-        <a class="back-link" href="#home">← Hub</a>
+        <a class="back-link" href="#squad">← Squad</a>
       </div>
       <div id="tactics-view"></div>
     </section>
 
-    <!-- ======================= RESULTS ======================= -->
-    <section class="screen" id="screen-results">
+    <!-- ======================= MATCHDAY (fixtures, availability, predictions) ======================= -->
+    <section class="screen" id="screen-matchday">
       <div class="screen-head">
-        <h1 class="screen-title">Results</h1>
+        <h1 class="screen-title">Matchday</h1>
         <a class="back-link" href="#home">← Hub</a>
       </div>
-      <div id="results-list"></div>
+      <p class="screen-intro">Who's about, who fancies what, and who called the score. Sign in to join in — everyone can see the counts.</p>
+      <div id="matchday-view"></div>
     </section>
 
-    <!-- ======================= MATCH REPORT ======================= -->
-    <section class="screen" id="screen-match">
+    <!-- ======================= CLUBHOUSE (forum · chat · directory) ======================= -->
+    <section class="screen" id="screen-clubhouse">
       <div class="screen-head">
-        <h1 class="screen-title">Match Report</h1>
-        <a class="back-link" href="#results">← Results</a>
-      </div>
-      <div id="match-view"></div>
-    </section>
-
-    <!-- ======================= OPPONENT ======================= -->
-    <section class="screen" id="screen-opponent">
-      <div class="screen-head">
-        <h1 class="screen-title">Head to Head</h1>
-        <a class="back-link" href="#stats">← Stats</a>
-      </div>
-      <div id="opponent-view"></div>
-    </section>
-
-    <!-- ======================= STATS ======================= -->
-    <section class="screen" id="screen-stats">
-      <div class="screen-head">
-        <h1 class="screen-title">Stats Centre</h1>
+        <h1 class="screen-title">The Clubhouse</h1>
         <a class="back-link" href="#home">← Hub</a>
       </div>
-      <div class="section-label">Club <span class="live-dot"></span></div>
-      <div id="stats-club"></div>
-      <div class="section-label">Leaderboards <span class="live-dot"></span></div>
-      <div id="stats-leaders"></div>
-      <div id="stats-opposition"></div>
+      <div class="tabbar" id="clubhouse-tabs">
+        <button class="tab active" data-tab="forum">Dressing Room</button>
+        <button class="tab" data-tab="chat">Chat</button>
+        <button class="tab" data-tab="directory">Members</button>
+      </div>
+      <div id="clubhouse-view"></div>
     </section>
 
-    <!-- ======================= HONOURS ======================= -->
-    <section class="screen" id="screen-honours">
+    <!-- ======================= FORUM THREAD ======================= -->
+    <section class="screen" id="screen-thread">
       <div class="screen-head">
-        <h1 class="screen-title">Honours</h1>
-        <a class="back-link" href="#home">← Hub</a>
+        <h1 class="screen-title">Thread</h1>
+        <a class="back-link" href="#clubhouse">← Clubhouse</a>
       </div>
-      <div id="honours-cabinet"></div>
-      <div id="honours-timeline"></div>
+      <div id="thread-view"></div>
     </section>
 
-    <!-- ======================= GAFFER ======================= -->
-    <section class="screen" id="screen-gaffer">
+    <!-- ======================= INBOX (DMs, members) ======================= -->
+    <section class="screen" id="screen-inbox">
       <div class="screen-head">
-        <h1 class="screen-title">The Gaffer</h1>
+        <h1 class="screen-title">Inbox</h1>
         <a class="back-link" href="#home">← Hub</a>
       </div>
-      <div id="gaffer-box"></div>
+      <div id="inbox-view"></div>
+    </section>
+
+    <!-- ======================= DM CONVERSATION ======================= -->
+    <section class="screen" id="screen-conversation">
+      <div class="screen-head">
+        <h1 class="screen-title" id="conversation-title">Conversation</h1>
+        <a class="back-link" href="#inbox">← Inbox</a>
+      </div>
+      <div id="conversation-view"></div>
+    </section>
+
+    <!-- ======================= PROFILE ======================= -->
+    <section class="screen" id="screen-profile">
+      <div class="screen-head">
+        <h1 class="screen-title" id="profile-title">Member Profile</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <div id="profile-view"></div>
     </section>
 
     <!-- ======================= FUNHOUSE ======================= -->
@@ -233,11 +252,90 @@
       <div id="book-view"></div>
     </section>
 
+    <!-- ======================= MORE (hub for the smaller pages) ======================= -->
+    <section class="screen" id="screen-more">
+      <div class="screen-head">
+        <h1 class="screen-title">More</h1>
+        <a class="back-link" href="#home">← Hub</a>
+      </div>
+      <div class="tile-row">
+        <a class="stat-tile" href="#stats"><span class="stat-tile-value">📊</span><span class="stat-tile-label">Stats</span></a>
+        <a class="stat-tile" href="#honours"><span class="stat-tile-value">🏆</span><span class="stat-tile-label">Honours</span></a>
+        <a class="stat-tile" href="#gaffer"><span class="stat-tile-value">🎩</span><span class="stat-tile-label">Gaffer</span></a>
+        <a class="stat-tile" href="#news"><span class="stat-tile-value">📰</span><span class="stat-tile-label">News</span></a>
+        <a class="stat-tile" href="#social"><span class="stat-tile-value">📱</span><span class="stat-tile-label">Social</span></a>
+        <a class="stat-tile" href="#search"><span class="stat-tile-value">🔎</span><span class="stat-tile-label">Search</span></a>
+        <a class="stat-tile" href="#about"><span class="stat-tile-value">ℹ️</span><span class="stat-tile-label">About</span></a>
+        <a class="stat-tile" href="#tickets"><span class="stat-tile-value">🎟️</span><span class="stat-tile-label">Tickets</span></a>
+      </div>
+    </section>
+
+    <!-- ======================= STATS ======================= -->
+    <section class="screen" id="screen-stats">
+      <div class="screen-head">
+        <h1 class="screen-title">Stats Centre</h1>
+        <a class="back-link" href="#more">← More</a>
+      </div>
+      <div class="section-label">Club <span class="live-dot"></span></div>
+      <div id="stats-club"></div>
+      <div class="section-label">Leaderboards <span class="live-dot"></span></div>
+      <div id="stats-leaders"></div>
+    </section>
+
+    <!-- ======================= HONOURS ======================= -->
+    <section class="screen" id="screen-honours">
+      <div class="screen-head">
+        <h1 class="screen-title">Honours</h1>
+        <a class="back-link" href="#more">← More</a>
+      </div>
+      <div id="honours-cabinet"></div>
+      <div id="honours-timeline"></div>
+    </section>
+
+    <!-- ======================= GAFFER ======================= -->
+    <section class="screen" id="screen-gaffer">
+      <div class="screen-head">
+        <h1 class="screen-title">The Gaffer</h1>
+        <a class="back-link" href="#more">← More</a>
+      </div>
+      <div id="gaffer-box"></div>
+    </section>
+
+    <!-- ======================= NEWS ======================= -->
+    <section class="screen" id="screen-news">
+      <div class="screen-head">
+        <h1 class="screen-title">The Gazette</h1>
+        <a class="back-link" href="#more">← More</a>
+      </div>
+      <p class="screen-intro">Club news, official communiqués and unverified dressing-room rumour. Mostly the last one.</p>
+      <div id="news-view"></div>
+    </section>
+
+    <!-- ======================= SOCIAL ======================= -->
+    <section class="screen" id="screen-social">
+      <div class="screen-head">
+        <h1 class="screen-title">Socials</h1>
+        <a class="back-link" href="#more">← More</a>
+      </div>
+      <div id="social-view"></div>
+    </section>
+
+    <!-- ======================= SEARCH ======================= -->
+    <section class="screen" id="screen-search">
+      <div class="screen-head">
+        <h1 class="screen-title">Search</h1>
+        <a class="back-link" href="#more">← More</a>
+      </div>
+      <p class="screen-intro">Find a player, an opponent, or a member. Type a name.</p>
+      <label class="field"><input type="search" id="search-input" placeholder="e.g. Danwhizzy, Rivals FC, Amy" autocomplete="off"></label>
+      <div id="search-view"></div>
+    </section>
+
     <!-- ======================= ABOUT ======================= -->
     <section class="screen" id="screen-about">
       <div class="screen-head">
         <h1 class="screen-title">About the Club</h1>
-        <a class="back-link" href="#home">← Hub</a>
+        <a class="back-link" href="#more">← More</a>
       </div>
 
       <div class="section-label">Mission statement</div>
@@ -253,104 +351,30 @@
       </div>
 
       <div id="about-lore" hidden></div>
-      <div id="about-personal"></div>
 
       <div class="section-label">Club facts</div>
       <div class="panel about-block">
         <ul class="about-facts">
           <li><strong>Founded</strong> 2024 — and never looked back, mostly because the rear-view mirror is unlicensed DLC.</li>
-          <li><strong>Competition</strong> EA Sports FC 26 · Pro Clubs · Season 2.</li>
+          <li><strong>Competition</strong> EA Sports FC 26 · Pro Clubs.</li>
           <li><strong>Home</strong> We play at the Betfred Arena — capacity: whatever the lobby allows.</li>
           <li><strong>Sponsor</strong> We're backed by Betfred. We liked them so much we named the stadium after them.</li>
-          <li><strong>Personnel</strong> Three humans. Twelve algorithms. One badge.</li>
           <li><strong>Captain</strong> Tupci. Always CAM. Non-negotiable.</li>
-          <li><strong>Super-sub</strong> Rizzy Dave. Not starting. Still dangerous.</li>
           <li><strong>Motto</strong> One Club. One Squad. One Dream.</li>
         </ul>
       </div>
-    </section>
-
-    <!-- ======================= CHAT ======================= -->
-    <section class="screen" id="screen-chat">
-      <div class="screen-head">
-        <h1 class="screen-title">Club Chat</h1>
-        <a class="back-link" href="#home">← Hub</a>
-      </div>
-
-      <div class="panel" id="chat-gate" hidden>
-        <p class="chat-gate-line">Sign in to join the chat</p>
-        <p class="chat-gate-sub">Reading is free. Talking takes a name on the team sheet.</p>
-        <button class="btn btn-primary" id="chat-gate-btn">Sign in · Register</button>
-      </div>
-
-      <div id="chat-list"></div>
-
-      <form id="chat-form" autocomplete="off">
-        <input type="text" id="chat-input" maxlength="280" placeholder="Say it like you mean it…" aria-label="Chat message">
-        <span id="chat-count">280</span>
-        <button type="submit" class="btn btn-primary btn-small" id="chat-send">Send</button>
-      </form>
-    </section>
-
-    <!-- ======================= NEWS ======================= -->
-    <section class="screen" id="screen-news">
-      <div class="screen-head">
-        <h1 class="screen-title">The Gazette</h1>
-        <a class="back-link" href="#home">← Hub</a>
-      </div>
-      <p class="screen-intro">Club news, official communiqués and unverified dressing-room rumour. Mostly the last one.</p>
-      <div id="news-view"></div>
-    </section>
-
-    <!-- ======================= SOCIAL ======================= -->
-    <section class="screen" id="screen-social">
-      <div class="screen-head">
-        <h1 class="screen-title">Socials</h1>
-        <a class="back-link" href="#home">← Hub</a>
-      </div>
-      <div id="social-view"></div>
-    </section>
-
-    <!-- ======================= SEARCH ======================= -->
-    <section class="screen" id="screen-search">
-      <div class="screen-head">
-        <h1 class="screen-title">Search</h1>
-        <a class="back-link" href="#home">← Hub</a>
-      </div>
-      <p class="screen-intro">Find a player, an opponent, or a game. Type a name or a scoreline.</p>
-      <label class="field"><input type="search" id="search-input" placeholder="e.g. Danwhizzy, Rivals FC, 3–1" autocomplete="off"></label>
-      <div id="search-view"></div>
-    </section>
-
-    <!-- ======================= CLUBHOUSE (members) ======================= -->
-    <section class="screen" id="screen-clubhouse">
-      <div class="screen-head">
-        <h1 class="screen-title">The Clubhouse</h1>
-        <a class="back-link" href="#home">← Hub</a>
-      </div>
-      <p class="screen-intro">Who's about, who fancies what, and who called the score. Sign in to join in — everyone can see the counts.</p>
-      <div id="clubhouse-view"></div>
-    </section>
-
-    <!-- ======================= FORUM (members) ======================= -->
-    <section class="screen" id="screen-forum">
-      <div class="screen-head">
-        <h1 class="screen-title">The Dressing Room</h1>
-        <a class="back-link" href="#home">← Hub</a>
-      </div>
-      <div id="forum-view"></div>
     </section>
 
     <!-- ======================= TICKETS ======================= -->
     <section class="screen" id="screen-tickets">
       <div class="screen-head">
         <h1 class="screen-title">Tickets</h1>
-        <a class="back-link" href="#home">← Hub</a>
+        <a class="back-link" href="#more">← More</a>
       </div>
       <div id="tickets-view"></div>
     </section>
 
-    <!-- ======================= ADMIN ======================= -->
+    <!-- ======================= HOUSEKEEPING ======================= -->
     <section class="screen" id="screen-admin">
       <div class="screen-head">
         <h1 class="screen-title">Housekeeping</h1>
@@ -404,14 +428,14 @@
 
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <!-- script order matters: config → data → net → ui → tactics → admin → app -->
+  <!-- script order matters: config → data → api → ui → tactics → admin → app -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit" async defer></script>
-  <script defer src="js/config.js?v=2"></script>
-  <script defer src="js/data.js?v=2"></script>
-  <script defer src="js/net.js?v=2"></script>
-  <script defer src="js/ui.js?v=2"></script>
-  <script defer src="js/tactics.js?v=2"></script>
-  <script defer src="js/admin.js?v=2"></script>
-  <script defer src="js/app.js?v=2"></script>
+  <script defer src="js/config.js?v=3"></script>
+  <script defer src="js/data.js?v=3"></script>
+  <script defer src="js/api.js?v=3"></script>
+  <script defer src="js/ui.js?v=3"></script>
+  <script defer src="js/tactics.js?v=3"></script>
+  <script defer src="js/admin.js?v=3"></script>
+  <script defer src="js/app.js?v=3"></script>
 </body>
 </html>

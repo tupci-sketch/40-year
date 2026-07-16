@@ -1,7 +1,7 @@
 /* ============================================================
    The 40Yr Virgil — shared UI helpers
-   Cards, pills, tiles, badges, empty states, count-ups, and the
-   squad ↔ EA-persona matcher. Pure render logic; no fetching.
+   Cards, pills, tiles, badges, empty states, count-ups. Pure
+   render logic; no fetching.
    ============================================================ */
 (function () {
   "use strict";
@@ -104,47 +104,6 @@
     return bits[bits.length - 1];
   }
 
-  /* ---------- EA persona ↔ squad matcher ---------- */
-  function normName(s) {
-    return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  }
-
-  /* Find the saved EA member record for a squad player.
-     Priority: explicit eaPersona → exact normalised match →
-     containment either way (min 4 chars to avoid noise). */
-  function findMemberFor(player, members) {
-    if (!members || !members.length) return null;
-    var want = normName(player.eaPersona) || null;
-    var pid = normName(player.id);
-    var pname = normName(player.name);
-    var i, m, mn;
-
-    if (want) {
-      for (i = 0; i < members.length; i++) {
-        if (normName(members[i].persona) === want) return members[i];
-      }
-    }
-    for (i = 0; i < members.length; i++) {
-      mn = normName(members[i].persona);
-      if (mn && (mn === pid || mn === pname)) return members[i];
-    }
-    for (i = 0; i < members.length; i++) {
-      m = members[i]; mn = normName(m.persona);
-      if (mn.length >= 4 && (mn.indexOf(pid) !== -1 || pid.indexOf(mn) !== -1 ||
-          mn.indexOf(pname) !== -1 || pname.indexOf(mn) !== -1)) return m;
-    }
-    return null;
-  }
-
-  /* Which squad player does an EA persona belong to (for leaderboards)? */
-  function squadFor(persona) {
-    for (var i = 0; i < window.SQUAD.length; i++) {
-      var hit = findMemberFor(window.SQUAD[i], [{ persona: persona }]);
-      if (hit) return window.SQUAD[i];
-    }
-    return null;
-  }
-
   /* ---------- badges & pills ---------- */
   function controlBadge(p) {
     return p.controlledBy === "human"
@@ -152,13 +111,14 @@
       : '<span class="badge badge-ai" title="AI-controlled">AI</span>';
   }
 
-  function captainBadge(p) {
-    return p.isCaptain ? '<span class="badge badge-captain" title="Club captain">C</span>' : "";
+  /* isCaptain is per-match (matches.captain_player_id), not a squad-wide
+     flag — pass a truthy value in match-report contexts only. */
+  function captainBadge(isCaptain) {
+    return isCaptain ? '<span class="badge badge-captain" title="Captain">C</span>' : "";
   }
 
   function chips(p) {
-    var out = controlBadge(p) + captainBadge(p);
-    if (p.goldenBoot) out += '<span class="badge badge-gold" title="Top scorer — tally is live">GOLDEN BOOT</span>';
+    var out = controlBadge(p);
     if (p.retiredAI) out += '<span class="badge badge-retired" title="Retired EA-AI original">RETIRED · AI</span>';
     else if (p.permaBench) out += '<span class="badge badge-bench" title="Perma-bench">SUB</span>';
     return out;
@@ -172,14 +132,24 @@
     return '<span class="pill">·</span>';
   }
 
+  /* Card images are served from the Worker (R2), as an absolute path like
+     "/api/media/player-cards/file/...". Resolve against the API's origin;
+     no card on file yet → the club crest placeholder (shipped with Pages). */
+  function cardSrc(p) {
+    if (!p.card) return "assets/img/crest.png";
+    var origin = String(window.API_URL || "").replace(/\/api\/?$/, "");
+    return origin + p.card;
+  }
+
   /* ---------- components ---------- */
   function cardTile(p) {
+    var pos = (p.positions && p.positions[0]) || "—";
     return '<a class="card-tile" href="#player/' + p.id + '" data-id="' + p.id + '">' +
-      '<img src="assets/img/' + p.card + '" alt="' + esc(p.name) + ' — #' + p.number + ' — ' + esc(p.position) + ' player card" loading="lazy" decoding="async">' +
+      '<img src="' + esc(cardSrc(p)) + '" alt="' + esc(p.name) + ' — #' + p.number + ' — ' + esc(pos) + ' player card" loading="lazy" decoding="async">' +
       '<span class="card-tile-overlay">' +
         '<span class="card-tile-num">#' + p.number + '</span>' +
         '<span class="card-tile-name">' + esc(p.name) + '</span>' +
-        '<span class="card-tile-meta"><span class="card-tile-pos">' + esc(p.position) + '</span>' + controlBadge(p) + captainBadge(p) +
+        '<span class="card-tile-meta"><span class="card-tile-pos">' + esc(pos) + '</span>' + controlBadge(p) +
           (p.retiredAI ? '<span class="badge badge-retired">RETIRED</span>' : "") + '</span>' +
       '</span>' +
     '</a>';
@@ -233,13 +203,13 @@
     if (!window.NET.hasBackend()) {
       return emptyState(
         "Backend not connected",
-        "Deploy backend.gs and set APP_URL in js/config.js — " + (kind || "live data") + " appears after the first sync.",
+        "Set API_URL in js/config.js — " + (kind || "live data") + " appears once it's pointed at the Worker.",
         "⛓"
       );
     }
     return emptyState(
-      "The ledger is warming up",
-      "No " + (kind || "data") + " has loaded yet. The backend seeds the full archive on its first request — give it a few seconds and refresh.",
+      "Nothing here yet",
+      "No " + (kind || "data") + " has been recorded yet — check back once Housekeeping's added some.",
       "⏱"
     );
   }
@@ -272,9 +242,8 @@
     num: num, pick: pick, divisionLabel: divisionLabel, winPct: winPct,
     playerById: playerById, posGroup: posGroup, surname: surname,
     canonPos: canonPos, positionsOf: positionsOf, posFit: posFit,
-    normName: normName, findMemberFor: findMemberFor, squadFor: squadFor,
     controlBadge: controlBadge, captainBadge: captainBadge, chips: chips,
-    pill: pill, cardTile: cardTile, statTile: statTile, runCountUps: runCountUps,
+    pill: pill, cardTile: cardTile, cardSrc: cardSrc, statTile: statTile, runCountUps: runCountUps,
     emptyState: emptyState, waitingState: waitingState, offlineState: offlineState,
     scorersLine: scorersLine, toast: toast
   };

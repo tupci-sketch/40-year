@@ -2,19 +2,20 @@
    The 40Yr Virgil — service worker
    ------------------------------------------------------------
    App-shell cache-first for our own static files (instant loads,
-   offline identity/squad/tactics/the Book). The backend is NEVER
-   cached: anything to Apps Script goes straight to the network so
-   the archive is always live. Bump CACHE to ship a new shell.
+   offline identity/squad/tactics/the Book). The backend (Cloudflare
+   Worker API) is NEVER cached: every /api request goes straight to
+   the network so the archive is always live. Bump CACHE to ship a
+   new shell (also evicts any stale v1/Apps-Script-era cache).
    ============================================================ */
-var CACHE = "v40-shell-v1";
+var CACHE = "v40-shell-v3";
 var SHELL = [
   "./",
   "./index.html",
-  "./css/styles.css?v=3",
+  "./css/styles.css?v=4",
   "./js/config.js",
   "./js/ui.js",
   "./js/data.js",
-  "./js/net.js",
+  "./js/api.js",
   "./js/tactics.js",
   "./js/admin.js",
   "./js/app.js",
@@ -43,9 +44,9 @@ self.addEventListener("fetch", function (e) {
   if (req.method !== "GET") return;
   var url = new URL(req.url);
 
-  // Never cache the backend or any third party — always hit the network.
+  // Never cache the backend (a different origin — the Worker) or any
+  // third party — always hit the network.
   if (url.origin !== self.location.origin) return;
-  if (/script\.google|googleusercontent/.test(url.href)) return;
 
   // Navigation requests → app shell (SPA: index.html), falling back to cache.
   if (req.mode === "navigate") {

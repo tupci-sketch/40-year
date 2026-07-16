@@ -1,22 +1,14 @@
 /* ============================================================
-   The 40Yr Virgil — site configuration
+   The 40Yr Virgil — site configuration (v3: Cloudflare backend)
    ============================================================
-   ONE setting lives here. After you deploy your own copy of
-   backend.gs as a Google Apps Script Web App (Execute as: Me,
-   Access: Anyone), paste the /exec URL between the quotes.
-
-   Example:
-   window.APP_URL = "https://script.google.com/macros/s/AKfycb.../exec";
-
-   Until it is set, the site runs in offline mode: identity,
-   squad and the tactics board all work; live stats, results,
-   accounts and chat show their waiting states.
+   ONE setting to change environments. Production points at the
+   live Worker; switch to a local `wrangler dev` URL or
+   http://localhost:8787 for local API development.
    ============================================================ */
 
-window.APP_URL = "https://script.google.com/macros/s/AKfycbx0QNSt17VHVlxX-cpSTQZZlwjeYpf5czvlJd8QM1d4GIf4qm2iQsF_KnBpylqeMUrM1Q/exec";
+window.API_URL = "https://40-year.26z7trnd5z.workers.dev/api";
 
 /* Cloudflare Turnstile public site key — safe to live here in the page.
-   The matching SECRET key goes in your Apps Script Script Properties as
-   TURNSTILE_SECRET. If the secret is unset, the bot check is skipped and
-   the site keeps working. Leave this blank to hide the widget entirely. */
+   The matching SECRET key lives only as a Worker secret. If the site key
+   is blank, the bot-check widget is skipped and the site keeps working. */
 window.TURNSTILE_SITEKEY = "0x4AAAAAADjpdJp9aDobcinD";

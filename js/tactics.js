@@ -82,10 +82,6 @@
     return { slots: slots, bench: pinRizzy(bench) };
   }
 
-  function officialXI(fkey) {
-    var L = (window.OFFICIAL_LINEUPS || {})[fkey];
-    return (L && L.slots && L.slots.length) ? { slots: L.slots.slice(), bench: (L.bench || []).slice() } : null;
-  }
   function lineupKey(fkey) { return "v40.lineup." + fkey; }
   function loadLocal(fkey) {
     try { var v = JSON.parse(localStorage.getItem(lineupKey(fkey)) || "null"); return (v && v.slots) ? v : null; } catch (e) { return null; }
@@ -94,7 +90,7 @@
     try { localStorage.setItem(lineupKey(fkey), JSON.stringify({ slots: a.slots, bench: a.bench })); } catch (e) { /* private mode */ }
   }
 
-  function defaults(fkey) { return autoFill(fkey, officialXI(fkey) || loadLocal(fkey)); }
+  function defaults(fkey) { return autoFill(fkey, loadLocal(fkey)); }
 
   /* Keep an arrangement consistent with the current roster: drop players who've
      left, and slide any new signings onto the bench so they appear at once. */
@@ -121,8 +117,6 @@
     if (i !== -1) { bench.splice(i, 1); bench.push("rizzydave"); }
     return bench;
   }
-
-  function canSave() { return !!(window.NET && window.NET.isMod && window.NET.isMod()); }
 
   function shuffleT(a) {
     a = a.slice();
@@ -180,7 +174,6 @@
         '<div class="tactics-actions">' +
           '<button class="btn btn-gold btn-small" id="tactics-random" title="Let the wheel pick the XI">🎲 Gaffer’s XI</button>' +
           '<button class="btn btn-ghost btn-small" id="tactics-reset">Reset XI</button>' +
-          (canSave() ? '<button class="btn btn-primary btn-small" id="tactics-save" title="Set the club\'s official XI for this shape">Save club XI</button>' : "") +
         '</div>' +
       '</div>' +
       '<p class="tactics-note" id="tactics-note"></p>' +
@@ -208,28 +201,15 @@
     });
     U.$("#tactics-reset", root).addEventListener("click", function () {
       try { localStorage.removeItem(lineupKey(state.current)); } catch (e) { /* fine */ }
-      state.arrangements[state.current] = autoFill(state.current, officialXI(state.current));
+      state.arrangements[state.current] = autoFill(state.current, null);
       render();
-      U.toast(officialXI(state.current) ? "Back to the club's XI." : "Back to the gaffer's whiteboard.");
+      U.toast("Back to the gaffer's whiteboard.");
     });
     U.$("#tactics-random", root).addEventListener("click", function () {
       state.arrangements[state.current] = randomEleven(state.current);
       saveLocal(state.current, state.arrangements[state.current]);
       render();
       U.toast("The wheel has spoken. Rizzy Dave remains, as ever, seated.");
-    });
-    var saveBtn = U.$("#tactics-save", root);
-    if (saveBtn) saveBtn.addEventListener("click", function () {
-      var a = arr();
-      saveBtn.disabled = true;
-      window.NET.adminLineup({ formation: state.current, slots: a.slots, bench: a.bench }).then(function (r) {
-        saveBtn.disabled = false;
-        if (r && r.ok) {
-          window.OFFICIAL_LINEUPS = window.OFFICIAL_LINEUPS || {};
-          window.OFFICIAL_LINEUPS[state.current] = { slots: a.slots.slice(), bench: a.bench.slice() };
-          U.toast("Saved as the club's " + state.current + " XI.");
-        } else U.toast("Couldn't save that — mods only.");
-      });
     });
 
     document.addEventListener("click", function (e) {
