@@ -1472,7 +1472,6 @@
         // awards ceremony, a running rumour feed, a hero pick — not six
         // identical spin buttons.
         mt.innerHTML =
-          '<p class="screen-intro">Six little corners of the club, each its own thing. Some you play with here; two have rooms of their own.</p>' +
           '<div class="fun-features">' +
             '<a class="fun-feature" href="#gaffer"><span class="fun-feature-ic">🎩</span><span class="fun-feature-t">The Gaffer Wheel</span><span class="fun-feature-s">Spin up a manager on the full stage — animation, quote and all.</span><span class="fun-feature-go">Open the dugout →</span></a>' +
             '<a class="fun-feature" href="#book"><span class="fun-feature-ic">📖</span><span class="fun-feature-t">The Book of Tüpci</span><span class="fun-feature-s">Ten commandments, the prayers, the scripture of the system.</span><span class="fun-feature-go">Read the scripture →</span></a>' +

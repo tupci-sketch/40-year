@@ -18,11 +18,33 @@
   var currentTab = "matches";
   var cache = {}; // last-loaded lists, for cross-references (fixtures for settle picker, etc.)
 
-  var TABS = [
-    ["matches", "Matches", 5], ["fixtures", "Fixtures", 5], ["squad", "Squad & Cards", 5],
-    ["gaffers", "Gaffers", 5], ["news", "News", 5], ["seasons", "Seasons", 9],
-    ["users", "Users", 5], ["titles", "Titles", 9], ["moderation", "Moderation", 9], ["settings", "Settings", 9]
+  // Housekeeping is a real admin panel: a grouped sidebar of sub-menus + a
+  // content pane, not a side-to-side wheel of buttons. [key, label, icon,
+  // minLevel, blurb].
+  var GROUPS = [
+    { name: "Matchday", items: [
+      ["matches", "Matches", "⚽", 5, "Results, teamsheets & MOTM"],
+      ["fixtures", "Fixtures", "📅", 5, "Upcoming games & sessions"],
+      ["gaffers", "Gaffers", "🎩", 5, "Manage the dugout"]
+    ] },
+    { name: "The Club", items: [
+      ["squad", "Squad & Cards", "👕", 5, "Players, positions & card uploads"],
+      ["seasons", "Seasons", "🗓️", 9, "Labels, current & archived"],
+      ["news", "News", "📰", 5, "Publish to the Gazette"]
+    ] },
+    { name: "Community", items: [
+      ["users", "Users", "👥", 5, "Levels, bans & player links"],
+      ["titles", "Titles", "🏷️", 9, "Create & assign titles"],
+      ["moderation", "Moderation", "🛡️", 9, "Reported content"]
+    ] },
+    { name: "System", items: [
+      ["settings", "Settings", "⚙️", 9, "Banner, league & socials"]
+    ] }
   ];
+  function tabMeta(key) {
+    for (var g = 0; g < GROUPS.length; g++) { for (var i = 0; i < GROUPS[g].items.length; i++) { if (GROUPS[g].items[i][0] === key) return GROUPS[g].items[i]; } }
+    return null;
+  }
 
   function field(label, inner, hint) {
     return '<label class="field"><span class="field-label">' + label + "</span>" + inner + (hint ? '<span class="field-hint">' + hint + "</span>" : "") + "</label>";
@@ -34,19 +56,52 @@
     U = window.UI; NET = window.NET; helpers = h || helpers;
     root = container;
     if (!NET.isMod()) { root.innerHTML = '<div class="panel admin-gate"><p>Checking access…</p></div>'; return; }
+    var lvl = NET.isAdmin() ? 9 : 5;
 
-    var admin9 = NET.isAdmin();
-    var tabsHtml = TABS.filter(function (t) { return t[2] <= (admin9 ? 9 : 5); }).map(function (t) {
-      return '<button class="tab' + (t[0] === currentTab ? " active" : "") + '" data-tab="' + t[0] + '">' + t[1] + "</button>";
+    // Grouped sidebar of sub-menus.
+    var navHtml = GROUPS.map(function (grp) {
+      var items = grp.items.filter(function (t) { return t[3] <= lvl; });
+      if (!items.length) return "";
+      return '<div class="admin-nav-group"><span class="admin-nav-glabel">' + esc(grp.name) + "</span>" +
+        items.map(function (t) {
+          return '<button class="admin-nav-item' + (t[0] === currentTab ? " active" : "") + '" data-tab="' + t[0] + '">' +
+            '<span class="admin-nav-ic">' + t[2] + '</span><span class="admin-nav-text"><span class="admin-nav-name">' + esc(t[1]) +
+            '</span><span class="admin-nav-blurb">' + esc(t[4]) + "</span></span></button>";
+        }).join("") + "</div>";
     }).join("");
-    root.innerHTML = '<div class="admin-shell">' +
-      '<div class="tabbar admin-tabbar">' + tabsHtml + "</div>" +
-      '<div id="admin-body" class="admin-body"></div>' +
+
+    root.innerHTML = '<div class="admin-panel">' +
+      '<aside class="admin-nav" id="admin-nav"><div class="admin-nav-head">🗝 Housekeeping</div>' + navHtml + "</aside>" +
+      '<section class="admin-content" id="admin-content">' +
+        '<div class="admin-content-head"><button class="btn btn-ghost btn-small admin-back" id="admin-back">☰ Menu</button>' +
+          '<h2 class="admin-content-title" id="admin-content-title"></h2></div>' +
+        '<div id="admin-body" class="admin-body"></div>' +
+      "</section>" +
     "</div>";
-    U.$$(".admin-tabbar .tab", root).forEach(function (b) {
-      b.addEventListener("click", function () { currentTab = b.getAttribute("data-tab"); enter(container, h); });
+
+    U.$$(".admin-nav-item", root).forEach(function (b) {
+      b.addEventListener("click", function () { selectTab(b.getAttribute("data-tab")); });
     });
-    renderTab(currentTab);
+    U.$("#admin-back", root).addEventListener("click", function () {
+      root.querySelector(".admin-panel").setAttribute("data-view", "menu");
+    });
+    // Prep the current section, but land on the menu first (matters on mobile;
+    // desktop shows the sidebar + content side by side regardless).
+    selectTab(currentTab, true);
+    root.querySelector(".admin-panel").setAttribute("data-view", "menu");
+  }
+
+  /* Switch section without a full re-render: update the active nav item, the
+     content title, and the body. On narrow screens, slide from menu to content. */
+  function selectTab(tab, initial) {
+    currentTab = tab;
+    var meta = tabMeta(tab) || ["", tab, "", 5, ""];
+    U.$$(".admin-nav-item", root).forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-tab") === tab); });
+    var titleEl = U.$("#admin-content-title", root);
+    if (titleEl) titleEl.innerHTML = '<span class="admin-title-ic">' + meta[2] + "</span> " + esc(meta[1]);
+    root.querySelector(".admin-panel").setAttribute("data-view", "content");
+    if (!initial) { var c = U.$("#admin-content", root); if (c && c.scrollIntoView) c.scrollIntoView({ block: "start", behavior: "smooth" }); }
+    renderTab(tab);
   }
 
   function renderTab(tab) {

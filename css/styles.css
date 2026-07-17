@@ -2478,13 +2478,44 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 .tab.active { background: var(--purple-electric, #6916cc); color: #fff; border-color: transparent; }
 
 /* ---- Housekeeping v2 shell ---- */
-.admin-shell { display: flex; flex-direction: column; gap: 10px; }
-.admin-tabbar {
-  position: sticky; top: 0; z-index: 5; background: var(--navy-deep, #07030b);
-  padding: 8px 0; margin: -8px 0 0; overflow-x: auto; flex-wrap: nowrap;
-  padding-top: calc(8px + env(safe-area-inset-top, 0px));
+/* ---- Housekeeping admin panel: grouped sidebar + content ---- */
+.admin-panel { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+.admin-nav {
+  background: var(--panel-grad); border: 1px solid var(--panel-border); border-radius: var(--radius);
+  padding: 14px 12px; display: flex; flex-direction: column; gap: 14px;
 }
+.admin-nav-head { font-family: var(--font-display); font-size: 1.15rem; color: var(--white); padding: 2px 6px 4px; }
+.admin-nav-group { display: flex; flex-direction: column; gap: 4px; }
+.admin-nav-glabel { font-family: var(--font-sub); font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--silver); padding: 2px 6px; }
+.admin-nav-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+  background: transparent; border: 1px solid transparent; border-radius: 10px; padding: 9px 10px; color: var(--white);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.admin-nav-item:hover { background: rgba(105, 22, 204, 0.14); }
+.admin-nav-item.active { background: rgba(105, 22, 204, 0.28); border-color: rgba(105, 22, 204, 0.55); }
+.admin-nav-ic { font-size: 1.15rem; flex: none; width: 22px; text-align: center; }
+.admin-nav-text { display: flex; flex-direction: column; min-width: 0; }
+.admin-nav-name { font-family: var(--font-sub); font-weight: 600; font-size: 0.9rem; letter-spacing: 0.02em; }
+.admin-nav-blurb { font-size: 0.7rem; color: var(--silver); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-content { min-width: 0; }
+.admin-content-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.admin-content-title { font-family: var(--font-display); font-size: 1.4rem; color: var(--white); margin: 0; display: flex; align-items: center; gap: 8px; }
+.admin-title-ic { font-size: 1.1rem; }
 .admin-body { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+
+/* Mobile: menu-first, drill into a section (back button returns to the menu). */
+@media (max-width: 819px) {
+  .admin-panel[data-view="content"] .admin-nav { display: none; }
+  .admin-panel[data-view="menu"] .admin-content { display: none; }
+}
+/* Desktop: real two-pane admin panel — sidebar + content side by side. */
+@media (min-width: 820px) {
+  .admin-panel { grid-template-columns: 250px 1fr; }
+  .admin-nav { position: sticky; top: 12px; }
+  .admin-back { display: none; }
+  .admin-panel .admin-nav, .admin-panel .admin-content { display: block; }
+}
 .admin-savebar {
   position: sticky; bottom: 0; background: var(--navy-deep, #07030b);
   padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 10px;
