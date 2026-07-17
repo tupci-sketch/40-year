@@ -49,14 +49,18 @@ pub.get("/players/:id", async (c) => {
   const p = await c.env.DB.prepare("SELECT * FROM players WHERE id=?").bind(id).first();
   if (!p) return c.json({ ok: false, error: "not_found", code: 404 }, 404);
   const base = await c.env.DB.prepare("SELECT * FROM player_career_baselines WHERE player_id=?").bind(id).first();
-  const asOf = base ? Number(base.as_of_seq) : 0;
+  // "Recorded" = every game this club has a stat line for (the same set the
+  // match-by-match log lists). The verified baseline is the complete career
+  // total on its own, so recorded totals must NOT be sliced by the baseline
+  // seq — otherwise a baseline captured "as of the latest match" leaves the
+  // recorded tab reading 0 while the log clearly shows dozens of games.
   const rec = await c.env.DB.prepare(
     `SELECT COUNT(*) apps, COALESCE(SUM(goals),0) goals, COALESCE(SUM(assists),0) assists,
             AVG(rating) avg_rating, COALESCE(SUM(tackles),0) tackles, COALESCE(SUM(passes_made),0) passes,
             COALESCE(SUM(saves),0) saves, COALESCE(SUM(conceded),0) conceded
      FROM match_player_stats mps JOIN matches m ON m.id=mps.match_id
-     WHERE mps.player_id=? AND m.id > ?`
-  ).bind(id, asOf).first();
+     WHERE mps.player_id=?`
+  ).bind(id).first();
   // Per-game log: every recorded appearance with that game's own stat line,
   // so a player's individual match-by-match record is visible, newest first.
   const games = rows(await c.env.DB.prepare(
@@ -141,12 +145,24 @@ pub.get("/club-record", async (c) => {
   return c.json({ ok: true, baseline, derived });
 });
 
-/* ---- fixtures (upcoming) ---- */
+/* ---- fixtures (upcoming) + their RSVP lists so Matchday can show who's in ---- */
 pub.get("/fixtures", async (c) => {
   const today = new Date().toISOString().slice(0, 10);
   const list = rows(await c.env.DB.prepare(
     "SELECT id,kind,season_id,stage,date_iso,opponent,comp_name,note,settled FROM fixtures WHERE date_iso IS NULL OR date_iso >= ? ORDER BY date_iso ASC"
   ).bind(today).all());
+  if (list.length) {
+    const ids = list.map((f) => f.id);
+    const ph = ids.map(() => "?").join(",");
+    const av = rows(await c.env.DB.prepare(
+      `SELECT a.fixture_id, a.status, u.id AS user_id, u.display
+       FROM availability a JOIN users u ON u.id=a.user_id
+       WHERE a.fixture_id IN (${ph})`
+    ).bind(...ids).all());
+    const byFx = {};
+    for (const r of av) (byFx[r.fixture_id] = byFx[r.fixture_id] || []).push({ user_id: r.user_id, display: r.display, status: r.status });
+    for (const f of list) f.availability = byFx[f.id] || [];
+  }
   return c.json({ ok: true, fixtures: list });
 });
 

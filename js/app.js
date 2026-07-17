@@ -204,20 +204,25 @@
         var next = res.nextFixture;
         var ls = res.leagueStatus || {};
         function cell(v, lab) { return v ? '<div class="league-cell"><span class="league-val">' + U.esc(v) + '</span><span class="league-lab">' + lab + "</span></div>" : ""; }
+        // League standing (manual) sits on its own; the W/D/L record + form
+        // below are the current season's own recorded games — labelled as such
+        // and the form is shown exactly once, centred.
         var strip = (ls.division || ls.position || ls.points)
           ? '<div class="league-strip panel">' +
               '<div class="league-row">' +
-                cell(ls.division, "Division") + cell(ls.position, "Position") + cell(ls.points, "Points") + cell(U.num(rec.played), "Played") +
-                (form ? '<div class="league-cell league-form"><span class="league-form-pills">' + form + '</span><span class="league-lab">Form</span></div>' : "") +
+                cell(ls.division, "Division") + cell(ls.position, "Position") + cell(ls.points, "Points") +
               "</div>" +
             "</div>"
           : "";
         mt.innerHTML = strip +
-          U.statTile("Played", U.num(rec.played)) +
-          U.statTile("Wins", U.num(rec.wins), { accent: "win" }) +
-          U.statTile("Draws", U.num(rec.draws)) +
-          U.statTile("Losses", U.num(rec.losses), { accent: "loss" }) +
-          '<div class="stat-tile stat-tile-wide"><span class="stat-tile-label">Recent form</span><div class="form-pills">' + (form || "—") + "</div></div>" +
+          '<div class="section-label home-season-label">This season</div>' +
+          '<div class="tile-row">' +
+            U.statTile("Played", U.num(rec.played)) +
+            U.statTile("Wins", U.num(rec.wins), { accent: "win" }) +
+            U.statTile("Draws", U.num(rec.draws)) +
+            U.statTile("Losses", U.num(rec.losses), { accent: "loss" }) +
+          "</div>" +
+          '<div class="stat-tile stat-tile-wide home-form-tile"><span class="stat-tile-label">Recent form</span><div class="form-pills form-pills-center">' + (form || "—") + "</div></div>" +
           (next ? '<a class="stat-tile stat-tile-wide" href="#matchday"><span class="stat-tile-label">Next up</span><span class="stat-tile-value" style="font-size:1.1rem">' +
             (next.opponent ? U.esc(next.opponent) : "Club session") + (next.date_iso ? " · " + U.fmtDate(next.date_iso) : "") + "</span></a>" : "");
         U.runCountUps(mt);
@@ -472,7 +477,7 @@
             return '<div class="tile-row">' + U.statTile("Apps", U.num(base.apps)) + U.statTile("Goals", U.num(base.goals)) +
               U.statTile("Assists", U.num(base.assists)) + U.statTile("Avg rating", base.avg_rating != null ? Number(base.avg_rating).toFixed(1) : "—") + "</div>" +
               '<p class="screen-intro">Full verified career total' + (base.source ? " (" + U.esc(base.source) + ")" : "") +
-              " — includes the pre-recording era" + (base.as_of_seq ? "; match-by-match data below is tracked from match " + base.as_of_seq + " on" : "") + ".</p>";
+              " — includes the pre-recording era" + (games.length ? ". The " + games.length + " games with full match detail are listed below" : "") + ".</p>";
           }
           return '<div class="tile-row">' + U.statTile("Apps", U.num(rec.apps) || 0) + U.statTile("Goals", U.num(rec.goals) || 0) +
             U.statTile("Assists", U.num(rec.assists) || 0) + U.statTile("Avg rating", rec.avg_rating != null ? Number(rec.avg_rating).toFixed(1) : "—") +
@@ -571,15 +576,11 @@
                 '<div class="ch-fx-title"><strong>The 40Yr Virgil</strong>' + (isMatch && f.opponent ? ' <span class="fixture-vs">vs</span> ' + U.esc(f.opponent) : (f.opponent ? " · " + U.esc(f.opponent) : " · Club session")) + "</div>" +
                 '<span class="ch-fx-when">' + when + "</span></div>" +
               (f.note ? '<p class="ch-fx-note">' + U.esc(f.note) + "</p>" : "") +
-              '<div class="ch-avail-slot" data-fid="' + U.esc(f.id) + '">' + U.emptyState("Loading…", "", "") + "</div>" +
+              '<div class="ch-avail-slot" data-fid="' + U.esc(f.id) + '">' + availBlock(f, f.availability || []) + "</div>" +
               (isMatch && NET.me ? predictBlock(f) : "") +
               (!isMatch ? '<p class="ch-session-note">Casual session — RSVP only, no scoreline to call.</p>' : "") +
             "</div>";
           }).join("");
-          fx.forEach(function () { /* availability counts loaded per-fixture below via a lightweight follow-up */ });
-          U.$$(".ch-avail-slot", mt).forEach(function (slot) {
-            slot.innerHTML = availBlock({ id: slot.getAttribute("data-fid") }, []);
-          });
         });
       }
 
@@ -593,15 +594,10 @@
           if (act === "avail") {
             var status = btn.getAttribute("data-status");
             if (btn.classList.contains("ch-rsvp-on")) status = "";
-            btn.disabled = true;
+            U.$$('.ch-rsvp[data-fid="' + fid + '"]', mt).forEach(function (b) { b.disabled = true; });
             NET.avail(fid, status).then(function (r) {
-              btn.disabled = false;
-              if (r && r.ok) {
-                var slot = mt.querySelector('.ch-avail-slot[data-fid="' + fid + '"]');
-                var groups = { yes: [], maybe: [], no: [] };
-                (r.counts || []).forEach(function (c) { groups[c.status] = new Array(c.n).fill("member"); });
-                if (slot) slot.innerHTML = availBlock({ id: fid }, []);
-              }
+              if (r && r.ok) { U.toast(status ? "RSVP saved." : "RSVP cleared."); render(); }
+              else { U.$$('.ch-rsvp[data-fid="' + fid + '"]', mt).forEach(function (b) { b.disabled = false; }); U.toast("✗ RSVP failed"); }
             });
           } else if (act === "predict") {
             var our = mt.querySelector('.ch-pred-our[data-fid="' + fid + '"]');

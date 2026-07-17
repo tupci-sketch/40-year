@@ -54,6 +54,10 @@ ok(av.json.ok && av.json.counts.find((x) => x.status === "yes").n === 1, "availa
 const av2 = await post(app, env, "/api/fixtures/fxm/availability", { status: "no" }, H(tokA));
 ok(av2.json.counts.find((x) => x.status === "no").n === 1 && !av2.json.counts.find((x) => x.status === "yes"), "availability updates (no double)");
 ok((await post(app, env, "/api/fixtures/nope/availability", { status: "yes" }, H(tokA))).status === 404, "availability unknown fixture 404");
+// /fixtures now carries each fixture's RSVP list so Matchday can render who's in
+const fxList = await get(app, env, "/api/fixtures");
+const fxm = fxList.json.fixtures.find((f) => f.id === "fxm");
+ok(fxm && Array.isArray(fxm.availability) && fxm.availability.length === 1 && fxm.availability[0].status === "no", "fixtures include availability list");
 
 const pr = await post(app, env, "/api/fixtures/fxm/predictions", { our: 3, their: 1 }, H(tokA));
 ok(pr.json.ok, "prediction on match fixture");
