@@ -32,7 +32,7 @@ app.use("*", cors({
     ];
     return allowed.includes(origin) ? origin : allowed[0];
   },
-  allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"],
   maxAge: 86400
 }));

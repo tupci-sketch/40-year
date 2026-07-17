@@ -239,27 +239,37 @@
     enter: function () {
       archiveState.cursor = null;
       var fbox = U.$("#archive-filters");
-      fbox.innerHTML =
-        '<div class="field-row">' +
-          '<label class="field"><span class="field-label">Result</span><select id="af-result"><option value="">Any</option><option value="W">Win</option><option value="D">Draw</option><option value="L">Loss</option></select></label>' +
-          '<label class="field"><span class="field-label">Stage</span><select id="af-stage"><option value="">Any</option><option value="league">League</option><option value="playoff">Playoff</option><option value="cup">Cup</option><option value="friendly">Friendly</option></select></label>' +
-        "</div>";
-      ["af-result", "af-stage"].forEach(function (id) {
-        U.$("#" + id).addEventListener("change", function () {
-          archiveState.filters.result = U.$("#af-result").value;
-          archiveState.filters.stage = U.$("#af-stage").value;
-          archiveState.cursor = null;
-          renderList(true);
+      // Seasons drive the archive so previous/archived campaigns (S2, and any
+      // future S4+) stay fully browseable — not just the running season.
+      NET.seasons().then(function (sres) {
+        var seasons = (sres && sres.seasons) || [];
+        var seasonOpts = '<option value="">All seasons</option>' + seasons.map(function (s) {
+          return '<option value="' + U.esc(s.id) + '">' + U.esc(s.label) + (s.archived ? " · archived" : "") + "</option>";
+        }).join("");
+        fbox.innerHTML =
+          '<div class="field-row">' +
+            '<label class="field"><span class="field-label">Season</span><select id="af-season">' + seasonOpts + "</select></label>" +
+            '<label class="field"><span class="field-label">Result</span><select id="af-result"><option value="">Any</option><option value="W">Win</option><option value="D">Draw</option><option value="L">Loss</option></select></label>' +
+            '<label class="field"><span class="field-label">Stage</span><select id="af-stage"><option value="">Any</option><option value="league">League</option><option value="playoff">Playoff</option><option value="cup">Cup</option><option value="friendly">Friendly</option></select></label>' +
+          "</div>";
+        ["af-season", "af-result", "af-stage"].forEach(function (id) {
+          U.$("#" + id).addEventListener("change", function () {
+            archiveState.filters.season = U.$("#af-season").value;
+            archiveState.filters.result = U.$("#af-result").value;
+            archiveState.filters.stage = U.$("#af-stage").value;
+            archiveState.cursor = null;
+            renderList(true);
+          });
         });
+        renderList(true);
       });
-      renderList(true);
     }
   };
 
   function renderList(reset) {
     var list = U.$("#archive-list");
     if (reset) list.innerHTML = "";
-    var q = { limit: 20, cursor: archiveState.cursor, result: archiveState.filters.result, stage: archiveState.filters.stage };
+    var q = { limit: 20, cursor: archiveState.cursor, season: archiveState.filters.season, result: archiveState.filters.result, stage: archiveState.filters.stage };
     var loading = document.createElement("div");
     loading.innerHTML = U.emptyState("Loading…", "", "⏱");
     list.appendChild(loading);
@@ -417,27 +427,57 @@
       Promise.all([NET.player(arg), loadSquad()]).then(function (results) {
         var res = results[0];
         if (!res || !res.ok) { mt.innerHTML = U.emptyState("No such player", "", "—"); return; }
-        var p = res.player, base = res.baseline, rec = res.recorded || {};
+        var p = res.player, base = res.baseline, rec = res.recorded || {}, games = res.games || [];
         var pos = (p.positions || []).join(" / ") || "—";
+
+        function totalsTiles(which) {
+          if (which === "full" && base) {
+            return '<div class="tile-row">' + U.statTile("Apps", U.num(base.apps)) + U.statTile("Goals", U.num(base.goals)) +
+              U.statTile("Assists", U.num(base.assists)) + U.statTile("Avg rating", base.avg_rating != null ? Number(base.avg_rating).toFixed(1) : "—") + "</div>" +
+              '<p class="screen-intro">Full verified career total' + (base.source ? " (" + U.esc(base.source) + ")" : "") +
+              " — includes the pre-recording era" + (base.as_of_seq ? "; match-by-match data below is tracked from match " + base.as_of_seq + " on" : "") + ".</p>";
+          }
+          return '<div class="tile-row">' + U.statTile("Apps", U.num(rec.apps) || 0) + U.statTile("Goals", U.num(rec.goals) || 0) +
+            U.statTile("Assists", U.num(rec.assists) || 0) + U.statTile("Avg rating", rec.avg_rating != null ? Number(rec.avg_rating).toFixed(1) : "—") +
+            (rec.saves > 0 || rec.conceded > 0 ? U.statTile("Saves", U.num(rec.saves) || 0) + U.statTile("Conceded", U.num(rec.conceded) || 0) : "") + "</div>" +
+            '<p class="screen-intro">Only the games this club has recorded — every one of them listed below.</p>';
+        }
+
+        var anyGK = games.some(function (g) { return (Number(g.saves) || 0) > 0 || (Number(g.conceded) || 0) > 0; });
+        var gameLog = games.length
+          ? '<div class="section-label">Match-by-match · ' + games.length + " recorded</div>" +
+            '<div class="table-scroll"><table class="opp-table opp-table-wide"><thead><tr><th>#</th><th>Opponent</th><th>Res</th><th>G</th><th>A</th><th>R</th>' +
+            (anyGK ? "<th>Sv</th><th>GA</th>" : "") + "</tr></thead><tbody>" +
+            games.map(function (g) {
+              return '<tr><td><a href="#match/' + g.id + '">' + g.id + "</a></td>" +
+                '<td><a href="#match/' + g.id + '">' + U.esc(g.opponent || "—") + "</a></td>" +
+                "<td>" + U.pill(g.result) + "</td>" +
+                "<td>" + (g.goals != null ? g.goals : "—") + "</td><td>" + (g.assists != null ? g.assists : "—") + "</td>" +
+                "<td>" + (g.rating != null ? Number(g.rating).toFixed(1) : "—") + "</td>" +
+                (anyGK ? "<td>" + (g.saves != null ? g.saves : "—") + "</td><td>" + (g.conceded != null ? g.conceded : "—") + "</td>" : "") +
+                "</tr>";
+            }).join("") + "</tbody></table></div>"
+          : '<p class="screen-intro">No individual match stats recorded for ' + U.esc(p.name) + " yet.</p>";
+
         mt.innerHTML =
           '<div class="player-dossier">' +
-            '<img class="player-portrait" src="' + U.esc(U.cardSrc(p)) + '" alt="' + U.esc(p.name) + '">' +
+            '<img class="player-portrait" src="' + U.esc(U.cardSrc(p)) + '" alt="' + U.esc(p.name) + '" onerror="this.onerror=null;this.src=\'assets/img/crest.png\'">' +
             "<h2>" + U.esc(p.name) + " <span class=\"player-num\">#" + p.number + "</span></h2>" +
             '<p class="player-meta">' + U.esc(pos) + " · " + U.chips(p) + "</p>" +
             (p.flavour ? '<p class="player-flavour">' + U.esc(p.flavour) + "</p>" : "") +
-            (base ?
-              '<div class="section-label">Career (verified)</div>' +
-              '<div class="tile-row">' + U.statTile("Apps", U.num(base.apps)) + U.statTile("Goals", U.num(base.goals)) + U.statTile("Assists", U.num(base.assists)) +
-                U.statTile("Avg rating", base.avg_rating != null ? Number(base.avg_rating).toFixed(1) : "—") + "</div>" +
-              '<p class="screen-intro">Verified club totals' + (base.source ? " (" + U.esc(base.source) + ")" : "") + '. Detailed match data below is shown where recorded' +
-              (base.as_of_seq ? " since match " + base.as_of_seq : "") + ".</p>"
-              : '<p class="screen-intro">Local archive record — recording began at this club\'s first tracked match. No external baseline has been set for ' + U.esc(p.name) + " yet.</p>") +
-            '<div class="section-label">Recorded contributions</div>' +
-            '<div class="tile-row">' + U.statTile("Apps", U.num(rec.apps) || 0) + U.statTile("Goals", U.num(rec.goals) || 0) + U.statTile("Assists", U.num(rec.assists) || 0) +
-              U.statTile("Avg rating", rec.avg_rating != null ? Number(rec.avg_rating).toFixed(1) : "—") +
-              (rec.saves > 0 || rec.conceded > 0 ? U.statTile("Saves", U.num(rec.saves) || 0) + U.statTile("Conceded", U.num(rec.conceded) || 0) : "") + "</div>" +
+            (base ? '<div class="stat-toggle"><button class="tab active" data-view="full">Full career</button><button class="tab" data-view="recorded">Recorded only</button></div>' : "") +
+            '<div id="player-totals">' + totalsTiles(base ? "full" : "recorded") + "</div>" +
+            gameLog +
             '<a class="back-link" href="#squad">← Squad</a>' +
           "</div>";
+        U.$$(".stat-toggle .tab", mt).forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            U.$$(".stat-toggle .tab", mt).forEach(function (b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            U.$("#player-totals", mt).innerHTML = totalsTiles(btn.getAttribute("data-view"));
+            U.runCountUps(U.$("#player-totals", mt));
+          });
+        });
         U.runCountUps(mt);
       });
     }
@@ -561,25 +601,38 @@
     }
   };
 
+  var forumCat = "";
   function renderForumList() {
     var mt = U.$("#clubhouse-view");
     mt.innerHTML = U.emptyState("Loading…", "", "⏱");
-    Promise.all([NET.forumCategories(), NET.forumThreads({ limit: 30 })]).then(function (rs) {
+    var q = { limit: 30 };
+    if (forumCat) q.category = forumCat;
+    Promise.all([NET.forumCategories(), NET.forumThreads(q)]).then(function (rs) {
       var cats = (rs[0] && rs[0].categories) || [];
       var res = rs[1];
       var block = liveBlock(res, "the forum");
       if (block) { mt.innerHTML = block; return; }
+      // Category chips — browse every board, not just one merged list.
+      var chips = '<div class="forum-cats">' +
+        '<button class="forum-cat' + (forumCat === "" ? " active" : "") + '" data-cat="">All</button>' +
+        cats.map(function (c) {
+          return '<button class="forum-cat' + (forumCat === c.key ? " active" : "") + '" data-cat="' + U.esc(c.key) + '">' + U.esc(c.name) + "</button>";
+        }).join("") + "</div>";
       var newBox = NET.me ? '<div class="panel"><div class="field-row">' +
-        '<label class="field"><span class="field-label">Category</span><select id="fc-cat">' + cats.map(function (c) { return '<option value="' + U.esc(c.key) + '">' + U.esc(c.name) + "</option>"; }).join("") + "</select></label>" +
+        '<label class="field"><span class="field-label">Category</span><select id="fc-cat">' + cats.map(function (c) { return '<option value="' + U.esc(c.key) + '"' + (c.key === forumCat ? " selected" : "") + ">" + U.esc(c.name) + "</option>"; }).join("") + "</select></label>" +
         '<label class="field"><span class="field-label">Title</span><input type="text" id="fc-title" maxlength="120"></label></div>' +
         '<textarea id="fc-body" rows="3" placeholder="Say your piece…" maxlength="4000"></textarea>' +
         '<div class="admin-actions"><button class="btn btn-primary btn-small" id="fc-post">Post thread</button><span class="admin-inline-note" id="fc-msg"></span></div></div>' : "";
-      mt.innerHTML = newBox + (res.threads || []).map(function (t) {
+      var threadsHtml = (res.threads || []).length ? (res.threads).map(function (t) {
         return '<a class="result-row forum-thread-row" href="#thread/' + t.id + '">' +
           (t.pinned ? '<span class="news-pin">📌</span>' : "") +
           '<span class="result-opp">' + U.esc(t.title) + "</span>" +
-          '<span class="result-meta">' + U.esc(t.category_name) + " · " + t.replies + " replies · " + U.fmtDate(t.last_iso) + "</span></a>";
-      }).join("");
+          '<span class="result-meta">' + U.esc(t.category_name || "") + " · " + t.replies + " replies · " + U.fmtDate(t.last_iso) + "</span></a>";
+      }).join("") : U.emptyState("No threads here yet", "Be the first to post in this board.", "🗨");
+      mt.innerHTML = chips + newBox + threadsHtml;
+      U.$$(".forum-cat", mt).forEach(function (b) {
+        b.addEventListener("click", function () { forumCat = b.getAttribute("data-cat"); renderForumList(); });
+      });
       var pb = U.$("#fc-post");
       if (pb) pb.addEventListener("click", function () {
         var cat = U.$("#fc-cat").value, title = U.$("#fc-title").value.trim(), body = U.$("#fc-body").value.trim();
@@ -832,14 +885,65 @@
     }
   };
 
+  var gafferPick = null;
+  function randOf(a) { return (a && a.length) ? a[Math.floor(Math.random() * a.length)] : ""; }
+
   PAGES.gaffer = {
     enter: function () {
-      var box = U.$("#gaffer-box");
-      var fun = window.FUN_DEFAULTS.gaffer;
-      var name = fun.pinned || (fun.names[Math.floor(Math.random() * fun.names.length)]);
-      var quote = fun.quotes[Math.floor(Math.random() * fun.quotes.length)];
-      box.innerHTML = '<div class="panel gaffer-card"><h2>' + U.esc(name) + "</h2><p>" + U.esc(quote) + '</p><button class="btn btn-gold" id="gaffer-spin">🎲 Spin again</button></div>';
-      U.$("#gaffer-spin").addEventListener("click", function () { PAGES.gaffer.enter(); });
+      var mount = U.$("#gaffer-box");
+      loadSquad().then(function () {
+        var gf = window.FUN_DEFAULTS.gaffer;
+        var pinned = gf.pinned;
+        function pool() {
+          return gf.names.concat((window.SQUAD || []).filter(function (p) { return p.active !== false; }).map(function (p) { return p.name; }));
+        }
+        function quote() { return randOf(gf.quotes) || "“We go again.”"; }
+
+        function renderCard(name, sub, allowSpin) {
+          mount.innerHTML =
+            '<div class="gaffer-card panel">' +
+              '<span class="gaffer-eyebrow">Current gaffer</span>' +
+              '<span class="gaffer-name" id="gaffer-name">' + U.esc(name) + "</span>" +
+              '<span class="gaffer-sub">' + sub + "</span>" +
+              (allowSpin ? '<button class="btn btn-gold" id="gaffer-spin">Appoint the gaffer</button>' : "") +
+              '<p class="gaffer-terms">Contract: one matchday. Terms: vibes. Severance: a firm handshake.</p>' +
+            "</div>";
+          var b = U.$("#gaffer-spin");
+          if (b) b.addEventListener("click", spin);
+        }
+
+        function spin() {
+          var nameEl = U.$("#gaffer-name");
+          var btn = U.$("#gaffer-spin");
+          if (btn) btn.disabled = true;
+          var names = pool();
+          var t = 0, delay = 55;
+          (function tick() {
+            nameEl.textContent = randOf(names);
+            nameEl.classList.add("spinning");
+            t += delay;
+            delay *= 1.13;
+            if (t < 1700) setTimeout(tick, delay);
+            else {
+              gafferPick = randOf(names);
+              nameEl.textContent = gafferPick;
+              nameEl.classList.remove("spinning");
+              nameEl.classList.add("landed");
+              U.$(".gaffer-sub").innerHTML = U.esc(quote()) + ' <span class="gaffer-board">— appointed by the wheel</span>';
+              if (btn) { btn.disabled = false; btn.textContent = "Sack & re-appoint"; }
+            }
+          })();
+        }
+
+        if (pinned) {
+          renderCard(pinned, U.esc(quote()) + ' <span class="gaffer-board">— pinned by the board</span>', false);
+        } else if (gafferPick) {
+          renderCard(gafferPick, U.esc(quote()) + ' <span class="gaffer-board">— appointed by the wheel</span>', true);
+          U.$("#gaffer-spin").textContent = "Sack & re-appoint";
+        } else {
+          renderCard("?????", "The dugout stands empty. It always does.", true);
+        }
+      });
     }
   };
 
@@ -938,8 +1042,157 @@
   };
   PAGES.tickets = { enter: function () { U.$("#tickets-view").innerHTML = U.emptyState("No fixtures on sale", "Check Matchday for what's coming up.", "🎟️"); } };
   PAGES.more = { enter: function () {} };
-  PAGES.funhouse = { enter: function () { U.$("#funhouse-view").innerHTML = U.emptyState("The Funhouse", "The gaffer wheel, chants and lore live in Housekeeping → Fun & Games once configured.", "🎡"); } };
-  PAGES.book = { enter: function () {} };
+  function shuffle(a) {
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  function funCard(id, icon, title, blurb, btnLabel) {
+    return '<div class="fun-card panel">' +
+      '<div class="fun-card-head"><span class="fun-icon">' + icon + '</span><span class="fun-title">' + U.esc(title) + "</span></div>" +
+      '<p class="fun-blurb">' + U.esc(blurb) + "</p>" +
+      '<div class="fun-out" id="fun-out-' + id + '"></div>' +
+      '<div class="fun-actions"><button class="btn btn-gold btn-small" id="fun-btn-' + id + '">' + U.esc(btnLabel) + "</button></div>" +
+    "</div>";
+  }
+
+  PAGES.funhouse = {
+    enter: function () {
+      var mt = U.$("#funhouse-view");
+      if (!mt) return;
+      loadSquad().then(function () {
+        var fun = window.FUN_DEFAULTS;
+        var squad = (window.SQUAD || []).filter(function (p) { return p.active !== false; });
+        function firstName(p) { return String(p.name || "").split(" ")[0]; }
+
+        mt.innerHTML =
+          '<p class="screen-intro">The club’s toy box. Everything here spins. Contract length: one click.</p>' +
+          '<div class="fun-grid">' +
+            funCard("gaffer", "🎩", "The Manager Spin", "The wheel appoints a gaffer from the names and the squad. No CV required.", "Appoint the gaffer") +
+            funCard("xi", "🎲", "The XI the Gaffer Picked", "One tap throws out a starting eleven. Tactical merit not guaranteed.", "Pick the XI") +
+            funCard("chant", "📣", "Matchday Chant Machine", "Terrace poetry, generated on demand. Best sung badly.", "Give us a song") +
+            funCard("super", "🏅", "Squad Superlatives", "The club’s least official awards, handed to random names.", "Hand out awards") +
+            funCard("oracle", "🔮", "The Oracle", "Ask it anything. It answers in the club’s voice: unreliably.", "Consult the Oracle") +
+            funCard("rumour", "📰", "Transfer Rumour Mill", "Definitely-real gossip from sources close to the sofa.", "Start a rumour") +
+          "</div>" +
+          '<div class="fun-links"><a class="btn btn-ghost btn-small" href="#gaffer">🎩 Full manager wheel →</a>' +
+            '<a class="btn btn-ghost btn-small" href="#book">📖 The Book of Tüpci →</a></div>';
+
+        function out(id) { return U.$("#fun-out-" + id, mt); }
+        function fill(id, html) { var o = out(id); if (o) { o.innerHTML = html; o.classList.add("fun-out-shown"); } }
+
+        U.$("#fun-btn-gaffer", mt).addEventListener("click", function () {
+          var names = fun.gaffer.names.concat(squad.map(function (p) { return p.name; }));
+          fill("gaffer", "🎩 <strong>" + U.esc(randOf(names)) + "</strong> — " + U.esc(randOf(fun.gaffer.quotes)));
+        });
+        U.$("#fun-btn-xi", mt).addEventListener("click", function () {
+          var gks = squad.filter(function (p) { return U.posGroup(p) === "GK"; });
+          var others = shuffle(squad.filter(function (p) { return U.posGroup(p) !== "GK"; }));
+          var xi = (gks.length ? [randOf(gks)] : []).concat(others.slice(0, 10));
+          fill("xi", xi.map(function (p) { return "#" + p.number + " " + U.esc(p.name); }).join(" · "));
+        });
+        U.$("#fun-btn-chant", mt).addEventListener("click", function () {
+          if (!squad.length) return fill("chant", "Sign someone first.");
+          var p = randOf(squad);
+          fill("chant", U.esc(randOf(fun.chants).replace(/\{full\}/g, p.name).replace(/\{name\}/g, firstName(p))));
+        });
+        U.$("#fun-btn-super", mt).addEventListener("click", function () {
+          var picks = shuffle(fun.superlatives).slice(0, 3).map(function (s) {
+            return '<div class="fun-award"><span class="fun-award-name">' + U.esc(randOf(squad).name || "—") + "</span> — " + U.esc(s) + "</div>";
+          });
+          fill("super", picks.join(""));
+        });
+        U.$("#fun-btn-oracle", mt).addEventListener("click", function () { fill("oracle", "🔮 " + U.esc(randOf(fun.oracle))); });
+        U.$("#fun-btn-rumour", mt).addEventListener("click", function () {
+          if (!squad.length) return fill("rumour", "No squad, no gossip.");
+          var p = randOf(squad), opp = randOf(fun.rumourClubs);
+          fill("rumour", "📰 " + U.esc(randOf(fun.rumours).replace(/\{full\}/g, p.name).replace(/\{name\}/g, firstName(p)).replace(/\{opp\}/g, opp)));
+        });
+      });
+    }
+  };
+  var ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+  var COMMANDMENTS = [
+    "I am Tüpci thy Captain, who brought thee up out of Division 5, out of the house of relegation, and who leadeth thee toward the Elite Division. Thou shalt have no gaffers before me.",
+    "Thou shalt not make unto thee any false formation, nor any likeness of a system that runs through any man but the Captain. Thou shalt not bow down to the 4-4-2.",
+    "Thou shalt not move Tüpci off CAM. For the board will not hold him guiltless that draggeth his token to the wing.",
+    "Remember the matchday, to keep it holy. Six days shalt thou grind the group chat, but the seventh is the fixture — thou shalt show up, and thou shalt press.",
+    "Honour thy Captain and thy talisman, that thy days may be long, and thy climb to the Elite Division swift, upon the archive which the club giveth thee.",
+    "Thou shalt not score in thine own net.",
+    "Thou shalt not commit the flat back four when the diamond is called for.",
+    "Thou shalt not steal Danwhizzy’s tap-in and claim it as a solo run. The archive remembereth who assisted.",
+    "Thou shalt not bear false witness against thy router. When thou laggeth, blame thyself, not the servers — for they know not what they do, but they know thy IP.",
+    "Thou shalt not covet thy opponent’s meta squad, nor his finesse shot, nor his overpowered striker, nor anything that is thy opponent’s. Trust the process. Pass to the purple shirts."
+  ];
+  var COMMANDMENT_XI = "Rizzy Dave stayeth on the bench. Not starting. Still dangerous. So it was written, so it shall remain.";
+  var PRAYERS = [
+    { title: "The Captain’s Creed", body:
+      "I believe in Tüpci, the Captain almighty,\nmaker of chances and assists,\nand in the CAM, his one eternal position,\nnon-negotiable, begotten not rotated,\nof one formation with the system.\nThrough him all goals were made.\nHe is ever-present, and of his 392 games there shall be no end.\nUp the Virgil." },
+    { title: "The Tüpci Prayer", body:
+      "Our Captain, who art in CAM,\nhallowed be thy touch.\nThy through-ball come, thy vision be done,\nin the final third as it is in the build-up.\nGive us this day our killer pass,\nand forgive us our misplaced ones,\nas we forgive those who overhit theirs.\nLead us not into a flat 4-4-2,\nbut deliver us the system.\nFor thine is the swagger, the armband, and the assist,\nfor ever and ever. Up the Virgil." },
+    { title: "Hail Tüpci", body:
+      "Hail Tüpci, full of vision, the ball is with thee.\nBlessed art thou among midfielders,\nand blessed is the movement of thy runs.\nHoly Captain, spine of the side,\ndictate for us sinners now,\nand at the hour of the reset. Up the Virgil." },
+    { title: "The System’s Grace", body:
+      "Bless us, O Captain, and these thy lineups,\nwhich we are about to receive from thy clipboard.\nThou art at CAM. Thou wilt always be at CAM.\nWe give thanks, and we press. Amen. Up the Virgil." },
+    { title: "Act of Contrition (for moving him off CAM)", body:
+      "O my Captain, I am heartily sorry\nfor having dragged thy token to the wing.\nI detest my drag-and-drops,\nbut most of all because they offend thee,\nwho art the whole system.\nI firmly resolve, with the help of the reset button,\nto keep thee at CAM, to sin no more,\nand to avoid the near occasion of a diamond formation. Up the Virgil." },
+    { title: "The Doxology", body:
+      "Glory be to the Captain,\nand to the armband, and to the holy assist.\nAs it was in Division 5,\nis now in the archive,\nand ever shall be, 392 without end. Up the Virgil." },
+    { title: "Psalm 90 (the OVR)", body:
+      "The Captain is my shepherd, I shall not lack service.\nHe maketh me to run beyond in green channels,\nhe leadeth me past the still fullbacks.\nYea, though I walk through the valley of the low block,\nI will fear no press, for the system is with me.\nSurely goals and assists shall follow me all the days of the season,\nand I will dwell in the final third for ever. Up the Virgil." },
+    { title: "The Ever-Present Litany", body:
+      "Captain, hear us. Captain, graciously hear us.\nFrom relegation, deliver us, Tüpci.\nFrom the dropped router, deliver us, Tüpci.\nFrom the own goal, deliver us, Tüpci.\nSystem of the whole side, have mercy on us.\nEver-present of 392 games, have mercy on us.\nHe who is always CAM, pray for us. Up the Virgil." }
+  ];
+  function reveal(el) {
+    if (!el) return;
+    el.hidden = false;
+    requestAnimationFrame(function () { el.classList.add("shown"); });
+  }
+
+  PAGES.book = {
+    enter: function () {
+      var mt = U.$("#book-view");
+      if (!mt) return;
+      mt.innerHTML =
+        '<div class="tupci-book">' +
+          '<p class="tupci-eyebrow">Brought down from Mount Betfred</p>' +
+          '<h1 class="tupci-title">The Ten Commandments of Tüpci</h1>' +
+          '<ol class="tupci-cmds">' +
+            COMMANDMENTS.map(function (c, i) {
+              return '<li><span class="tupci-num">' + ROMAN[i] + '</span><span class="tupci-text">' + U.esc(c) + "</span></li>";
+            }).join("") +
+          "</ol>" +
+          '<button type="button" class="tupci-margin" id="tupci-xi-trigger">…and an eleventh, written small in the margin.</button>' +
+          '<div class="tupci-reveal tupci-xi" id="tupci-xi" hidden></div>' +
+          '<div class="tupci-reveal tupci-prayers" id="tupci-prayers" hidden></div>' +
+          '<a class="back-link tupci-exit" href="#home">← close the book</a>' +
+        "</div>";
+      var xiTrigger = U.$("#tupci-xi-trigger", mt);
+      xiTrigger.addEventListener("click", function () {
+        xiTrigger.hidden = true;
+        var xi = U.$("#tupci-xi", mt);
+        xi.innerHTML =
+          '<p class="tupci-xi-lead">And an eleventh, for it is the oldest law of all —</p>' +
+          '<p class="tupci-cmd-xi"><span class="tupci-num">XI</span><span class="tupci-text">' + U.esc(COMMANDMENT_XI) + "</span></p>" +
+          '<button type="button" class="tupci-amen" id="tupci-amen">Up the Virgil.</button>';
+        reveal(xi);
+        U.$("#tupci-amen", mt).addEventListener("click", function () {
+          this.disabled = true;
+          this.textContent = "Amen.";
+          var pr = U.$("#tupci-prayers", mt);
+          pr.innerHTML =
+            '<p class="tupci-eyebrow">Deeper still — the prayers</p>' +
+            PRAYERS.map(function (p) {
+              return '<article class="tupci-prayer">' +
+                '<h2 class="tupci-prayer-title">' + U.esc(p.title) + "</h2>" +
+                '<p class="tupci-prayer-body">' + U.esc(p.body).replace(/\n/g, "<br>") + "</p>" +
+              "</article>";
+            }).join("");
+          reveal(pr);
+        });
+      });
+    }
+  };
 
   PAGES.admin = { enter: function () { window.ADMIN.enter(U.$("#admin-view"), { renderAccount: renderAccount }); } };
 

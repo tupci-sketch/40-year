@@ -57,13 +57,23 @@ pub.get("/players/:id", async (c) => {
      FROM match_player_stats mps JOIN matches m ON m.id=mps.match_id
      WHERE mps.player_id=? AND m.id > ?`
   ).bind(id, asOf).first();
+  // Per-game log: every recorded appearance with that game's own stat line,
+  // so a player's individual match-by-match record is visible, newest first.
+  const games = rows(await c.env.DB.prepare(
+    `SELECT m.id, m.season_id, m.opponent, m.our_score, m.their_score, m.result, m.date_iso, m.stage,
+            mps.goals, mps.assists, mps.rating, mps.shots, mps.tackles, mps.passes_made, mps.pass_attempts,
+            mps.red_cards, mps.saves, mps.conceded
+     FROM match_player_stats mps JOIN matches m ON m.id=mps.match_id
+     WHERE mps.player_id=? ORDER BY m.id DESC`
+  ).bind(id).all());
   return c.json({
     ok: true,
     player: { id: p.id, number: p.number, name: p.name, slug: p.slug, controlledBy: p.controlled_by,
       isHuman: !!p.is_human, retiredAI: !!p.retired_ai, linkedTo: p.linked_to || null,
       positions: parsePositions(p.positions_json), flavour: p.flavour },
     baseline: base || null,
-    recorded: rec
+    recorded: rec,
+    games: games
   });
 });
 

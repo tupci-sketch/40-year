@@ -2436,3 +2436,23 @@ body { overflow-x: hidden; }
 /* Account menu profile link. */
 .account-link { display: inline-block; color: var(--gold-bright); text-decoration: none; }
 .account-link:hover { text-decoration: underline; }
+
+/* Player page: full-career vs recorded-only toggle. */
+.stat-toggle { display: flex; gap: 8px; margin: 12px 0; }
+.stat-toggle .tab { flex: 1; }
+
+/* Funhouse: quick links row + revealed toy output. */
+.fun-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.fun-out:empty { display: none; }
+.fun-out-shown { margin-top: 10px; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: rgba(105, 22, 204, 0.12); border: 1px solid var(--panel-border); line-height: 1.5; }
+.fun-award { padding: 3px 0; }
+.fun-award-name { color: var(--gold-bright); font-family: var(--font-sub); }
+
+/* Forum category chips. */
+.forum-cats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.forum-cat { font-family: var(--font-sub); font-size: 0.82rem; letter-spacing: 0.03em;
+  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--panel-border);
+  background: var(--panel-grad); color: var(--silver); cursor: pointer; }
+.forum-cat.active { background: var(--purple, #6916cc); color: #fff; border-color: transparent; }
+.forum-cat:hover { color: var(--white); }

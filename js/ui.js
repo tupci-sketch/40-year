@@ -135,10 +135,23 @@
   /* Card images are served from the Worker (R2), as an absolute path like
      "/api/media/player-cards/file/...". Resolve against the API's origin;
      no card on file yet → the club crest placeholder (shipped with Pages). */
+  /* Shirt numbers that ship with a pre-uploaded squad photo in assets/img/.
+     (12 is a .JPG — the server is case-sensitive, so keep the extension exact.) */
+  var PHOTO_NUMS = { 1: "jpg", 2: "jpg", 3: "jpg", 4: "jpg", 5: "jpg", 6: "jpg",
+    7: "jpg", 8: "jpg", 9: "jpg", 10: "jpg", 12: "JPG", 17: "jpg", 18: "jpg",
+    19: "jpg", 27: "jpg", 31: "jpg", 32: "jpg", 43: "jpg", 69: "jpg" };
+  function localPhoto(p) {
+    var ext = PHOTO_NUMS[Number(p.number)];
+    return ext ? "assets/img/" + Number(p.number) + "." + ext : "assets/img/crest.png";
+  }
+  /* Card image priority: an uploaded R2 card wins; otherwise the pre-uploaded
+     squad photo for that shirt number; otherwise the club crest. */
   function cardSrc(p) {
-    if (!p.card) return "assets/img/crest.png";
-    var origin = String(window.API_URL || "").replace(/\/api\/?$/, "");
-    return origin + p.card;
+    if (p.card) {
+      var origin = String(window.API_URL || "").replace(/\/api\/?$/, "");
+      return origin + p.card;
+    }
+    return localPhoto(p);
   }
 
   /* ---------- components ---------- */
