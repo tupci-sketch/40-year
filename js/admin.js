@@ -34,6 +34,7 @@
     ] },
     { name: "Community", items: [
       ["users", "Users", "👥", 5, "Levels, bans & player links"],
+      ["points", "Points", "🪙", 9, "Add, remove or set balances"],
       ["titles", "Titles", "🏷️", 9, "Create & assign titles"],
       ["moderation", "Moderation", "🛡️", 9, "Reported content"]
     ] },
@@ -108,7 +109,7 @@
     var body = U.$("#admin-body", root);
     body.innerHTML = U.emptyState("Loading…", "", "🗝");
     var fn = { matches: renderMatches, fixtures: renderFixtures, squad: renderSquad, gaffers: renderGaffers,
-      news: renderNews, seasons: renderSeasons, users: renderUsers, titles: renderTitles,
+      news: renderNews, seasons: renderSeasons, users: renderUsers, points: renderPoints, titles: renderTitles,
       moderation: renderModeration, settings: renderSettings }[tab];
     if (fn) fn(body);
   }
@@ -573,6 +574,46 @@
           NET.adminProfileRole(btn.getAttribute("data-id"), { linkedPlayerId: pid }).then(function (r) {
             if (r && r.ok) { U.toast(pid ? "Account linked to player." : "Link cleared."); renderTab("users"); }
             else U.toast("✗ link failed");
+          });
+        });
+      });
+    });
+  }
+
+  /* ============================================================
+     POINTS (L9): add / remove / set a member's Virgil Points
+     ============================================================ */
+  function renderPoints(body) {
+    body.innerHTML = U.emptyState("Loading…", "", "🪙");
+    NET.adminUsers().then(function (res) {
+      var list = (res && res.users) || [];
+      body.innerHTML = '<p class="admin-inline-note">Add a positive or negative amount, or set an exact balance. Every change is logged.</p>' +
+        '<div class="admin-sublist">' + list.map(function (u) {
+          return '<div class="admin-row admin-row-stack"><div class="admin-row-top">' +
+            '<span class="admin-row-main">' + esc(u.display) + " · L" + u.level + '</span>' +
+            '<span class="pts-bal" data-id="' + u.id + '">🪙 ' + (u.points != null ? u.points : 0) + "</span></div>" +
+            '<div class="admin-row-link"><input type="number" class="pts-amt" data-id="' + u.id + '" placeholder="e.g. 50 or -20" style="flex:1;min-width:120px">' +
+              '<button class="btn btn-ghost btn-small pts-add" data-id="' + u.id + '">Apply</button>' +
+              '<button class="btn btn-ghost btn-small pts-set" data-id="' + u.id + '">Set to</button></div></div>';
+        }).join("") + "</div>";
+      function refresh(id, bal) { var el = body.querySelector('.pts-bal[data-id="' + id + '"]'); if (el) el.textContent = "🪙 " + bal; }
+      U.$$(".pts-add", body).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-id");
+          var v = parseInt(body.querySelector('.pts-amt[data-id="' + id + '"]').value, 10);
+          if (!v) return;
+          NET.adminUserPoints(id, { delta: v, reason: "admin adjustment" }).then(function (r) {
+            if (r && r.ok) { U.toast((v > 0 ? "+" : "") + v + " points."); refresh(id, r.balance); } else U.toast("✗ failed");
+          });
+        });
+      });
+      U.$$(".pts-set", body).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-id");
+          var v = parseInt(body.querySelector('.pts-amt[data-id="' + id + '"]').value, 10);
+          if (isNaN(v)) return;
+          NET.adminUserPoints(id, { mode: "set", amount: v, reason: "admin set" }).then(function (r) {
+            if (r && r.ok) { U.toast("Balance set to " + r.balance + "."); refresh(id, r.balance); } else U.toast("✗ failed");
           });
         });
       });

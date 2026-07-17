@@ -41,7 +41,7 @@
   var ROUTES = ["home", "archive", "match", "opponent", "squad", "player", "tactics",
     "matchday", "clubhouse", "thread", "inbox", "conversation", "profile",
     "funhouse", "book", "more", "stats", "honours", "gaffer", "news", "social",
-    "search", "about", "tickets", "admin"];
+    "search", "about", "tickets", "floor", "admin"];
 
   function parseHash() {
     var h = (location.hash || "#home").replace(/^#/, "");
@@ -740,6 +740,8 @@
       });
       if (clubhouseTab === "forum") renderForumList();
       else if (clubhouseTab === "chat") renderChat();
+      else if (clubhouseTab === "polls") renderPolls();
+      else if (clubhouseTab === "board") renderPointsBoard();
       else renderDirectory();
     }
   };
@@ -902,6 +904,84 @@
     };
     fetchChatMessages();
     chatTimer = setInterval(fetchChatMessages, 15000);
+  }
+
+  /* ---------------- POLLS ---------------- */
+  function renderPolls() {
+    var mt = U.$("#clubhouse-view");
+    mt.innerHTML = U.emptyState("Loading polls…", "", "📊");
+    NET.polls().then(function (res) {
+      var block = liveBlock(res, "polls");
+      if (block) { mt.innerHTML = block; return; }
+      var polls = (res && res.polls) || [];
+      var creator = NET.isMod() ?
+        '<div class="panel poll-create"><div class="section-label">Run a poll</div>' +
+          '<input type="text" id="poll-q" class="fun-input" maxlength="160" placeholder="Ask the club something…">' +
+          '<div id="poll-opts"><input type="text" class="fun-input poll-opt" maxlength="80" placeholder="Option 1"><input type="text" class="fun-input poll-opt" maxlength="80" placeholder="Option 2"></div>' +
+          '<div class="admin-actions"><button class="btn btn-ghost btn-small" id="poll-add-opt" type="button">+ Option</button>' +
+          '<button class="btn btn-gold btn-small" id="poll-create">Post poll</button></div></div>' : "";
+      mt.innerHTML = creator + (polls.length ? polls.map(pollCard).join("") : U.emptyState("No polls yet", NET.isMod() ? "Run one above." : "Check back when the staff put one up.", "📊"));
+
+      if (NET.isMod()) {
+        U.$("#poll-add-opt", mt).addEventListener("click", function () {
+          var box = U.$("#poll-opts", mt);
+          if (box.querySelectorAll(".poll-opt").length >= 8) return;
+          var inp = document.createElement("input"); inp.type = "text"; inp.className = "fun-input poll-opt"; inp.maxLength = 80;
+          inp.placeholder = "Option " + (box.querySelectorAll(".poll-opt").length + 1); box.appendChild(inp);
+        });
+        U.$("#poll-create", mt).addEventListener("click", function () {
+          var q = U.$("#poll-q", mt).value.trim();
+          var opts = U.$$(".poll-opt", mt).map(function (i) { return i.value.trim(); }).filter(Boolean);
+          if (!q || opts.length < 2) { U.toast("Need a question and 2+ options."); return; }
+          NET.pollCreate(q, opts).then(function (r) { if (r && r.ok) { U.toast("Poll posted."); renderPolls(); } else U.toast("✗ couldn't post"); });
+        });
+      }
+      wirePolls(mt);
+    });
+  }
+  function pollCard(p) {
+    var voted = p.myVote != null || p.closed;
+    return '<div class="panel poll-card" data-id="' + p.id + '">' +
+      '<div class="poll-q">' + U.esc(p.question) + (p.closed ? ' <span class="pill">closed</span>' : "") + "</div>" +
+      '<div class="poll-opts">' + (p.options || []).map(function (o) {
+        var pct = p.total ? Math.round((o.votes / p.total) * 100) : 0;
+        var mine = p.myVote === o.id;
+        if (voted) {
+          return '<div class="poll-result' + (mine ? " poll-mine" : "") + '"><div class="poll-bar" style="width:' + pct + '%"></div>' +
+            '<span class="poll-label">' + U.esc(o.label) + (mine ? " ✓" : "") + '</span><span class="poll-pct">' + pct + "%</span></div>";
+        }
+        return '<button class="poll-vote" data-poll="' + p.id + '" data-opt="' + o.id + '">' + U.esc(o.label) + "</button>";
+      }).join("") + "</div>" +
+      '<div class="poll-foot">' + p.total + (p.total === 1 ? " vote" : " votes") +
+        (NET.isMod() && !p.closed ? ' · <button class="poll-close" data-id="' + p.id + '">close</button>' : "") + "</div></div>";
+  }
+  function wirePolls(mt) {
+    U.$$(".poll-vote", mt).forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (!NET.me) { openAuth(); return; }
+        NET.pollVote(b.getAttribute("data-poll"), b.getAttribute("data-opt")).then(function (r) { if (r && r.ok) renderPolls(); });
+      });
+    });
+    U.$$(".poll-close", mt).forEach(function (b) {
+      b.addEventListener("click", function () { NET.pollClose(b.getAttribute("data-id")).then(function (r) { if (r && r.ok) renderPolls(); }); });
+    });
+  }
+
+  /* ---------------- VIRGIL POINTS LEADERBOARD ---------------- */
+  function renderPointsBoard() {
+    var mt = U.$("#clubhouse-view");
+    mt.innerHTML = U.emptyState("Counting…", "", "🪙");
+    NET.pointsBoard().then(function (res) {
+      var block = liveBlock(res, "the leaderboard");
+      if (block) { mt.innerHTML = block; return; }
+      var list = (res && res.leaderboard) || [];
+      if (!list.length) { mt.innerHTML = U.emptyState("No points earned yet", "Get chatting, posting and voting.", "🪙"); return; }
+      mt.innerHTML = '<div class="panel lb-panel"><div class="lb-title">Virgil Points · top earners</div><ol class="lb">' +
+        list.map(function (r) {
+          return "<li><span class='lb-name'>" + decoName(r.display, r.flair, r.accent) + "</span>" +
+            "<span class='lb-val'>" + U.num(r.lifetime) + "<span class='lb-unit'>pts</span></span></li>";
+        }).join("") + "</ol></div>";
+    });
   }
 
   function renderDirectory() {
@@ -1475,6 +1555,7 @@
           '<div class="fun-features">' +
             '<a class="fun-feature" href="#gaffer"><span class="fun-feature-ic">🎩</span><span class="fun-feature-t">The Gaffer Wheel</span><span class="fun-feature-s">Spin up a manager on the full stage — animation, quote and all.</span><span class="fun-feature-go">Open the dugout →</span></a>' +
             '<a class="fun-feature" href="#book"><span class="fun-feature-ic">📖</span><span class="fun-feature-t">The Book of Tüpci</span><span class="fun-feature-s">Ten commandments, the prayers, the scripture of the system.</span><span class="fun-feature-go">Read the scripture →</span></a>' +
+            '<a class="fun-feature" href="#floor"><span class="fun-feature-ic">🕹️</span><span class="fun-feature-t">The Clubhouse Floor</span><span class="fun-feature-s">Walk an avatar round a shared room — see who else is about.</span><span class="fun-feature-go">Step inside →</span></a>' +
           "</div>" +
           '<div class="fun-grid">' +
             // Oracle — you ASK it something
@@ -1557,6 +1638,88 @@
       });
     }
   };
+
+  /* ========================================================
+     THE CLUBHOUSE FLOOR — a shared avatar room (Habbo-lite).
+     Walk a token round a grid, see who else is on the floor,
+     throw an emote. Presence synced through the Worker by
+     short polling — no realtime infra needed at club scale.
+     ======================================================== */
+  var FLOOR_GRID = 13, floorTimer = null, floorState = { x: 6, y: 6, occ: [], emote: "" };
+  var FLOOR_EMOTES = ["👋", "🎉", "⚽", "😂", "🔥", "💜"];
+  function floorAvatar(o, meX, meY) {
+    var glyph = o.flair || (o.display ? o.display.charAt(0).toUpperCase() : "?");
+    var x = o.me ? meX : o.x, y = o.me ? meY : o.y;
+    var accent = o.accent ? " floor-accent-" + o.accent : "";
+    return '<div class="floor-avatar' + (o.me ? " floor-me" : "") + accent + '" style="left:' + ((x + 0.5) / FLOOR_GRID * 100) + "%;top:" + ((y + 0.5) / FLOOR_GRID * 100) + '%">' +
+      (o.emote ? '<span class="floor-emote">' + U.esc(o.emote) + "</span>" : "") +
+      '<span class="floor-token">' + U.esc(glyph) + "</span>" +
+      '<span class="floor-name">' + U.esc(o.display || "") + "</span></div>";
+  }
+  function paintFloor(mt) {
+    var occ = floorState.occ.slice();
+    if (!occ.some(function (o) { return o.me; }) && NET.me) occ.push({ me: true, x: floorState.x, y: floorState.y, display: NET.me.name, emote: floorState.emote });
+    var avatars = occ.map(function (o) { return floorAvatar(o, floorState.x, floorState.y); }).join("");
+    var floorEl = U.$("#floor-grid", mt);
+    if (floorEl) floorEl.innerHTML = avatars;
+    var count = U.$("#floor-count", mt);
+    if (count) count.textContent = occ.length + (occ.length === 1 ? " on the floor" : " on the floor");
+  }
+  function pushMove(mt) {
+    if (!NET.me) return;
+    NET.roomMove(floorState.x, floorState.y, floorState.emote || "").then(function () {});
+    paintFloor(mt);
+  }
+  function pollFloor(mt) {
+    NET.room().then(function (res) {
+      if (!res || !res.ok) return;
+      floorState.occ = res.occupants || [];
+      paintFloor(mt);
+    });
+  }
+  PAGES.floor = {
+    enter: function () {
+      var mt = U.$("#floor-view");
+      if (!mt) return;
+      if (!NET.me) { mt.innerHTML = '<div class="ch-card">' + U.emptyState("Members only", "Sign in to step onto the Clubhouse Floor.", "🚪") + "</div>"; return; }
+      floorState.emote = "";
+      mt.innerHTML =
+        '<p class="floor-hint"><span id="floor-count">…</span> · tap a tile to walk, or use the arrow keys</p>' +
+        '<div class="floor" id="floor"><div class="floor-grid" id="floor-grid"></div></div>' +
+        '<div class="floor-emotes">' + FLOOR_EMOTES.map(function (e) { return '<button class="floor-emote-btn" data-e="' + e + '">' + e + "</button>"; }).join("") + "</div>";
+      var floor = U.$("#floor", mt);
+      floor.addEventListener("click", function (ev) {
+        var r = floor.getBoundingClientRect();
+        floorState.x = Math.max(0, Math.min(FLOOR_GRID - 1, Math.floor((ev.clientX - r.left) / r.width * FLOOR_GRID)));
+        floorState.y = Math.max(0, Math.min(FLOOR_GRID - 1, Math.floor((ev.clientY - r.top) / r.height * FLOOR_GRID)));
+        floorState.emote = ""; pushMove(mt);
+      });
+      U.$$(".floor-emote-btn", mt).forEach(function (b) {
+        b.addEventListener("click", function (ev) { ev.stopPropagation(); floorState.emote = b.getAttribute("data-e"); pushMove(mt);
+          setTimeout(function () { if (floorState.emote === b.getAttribute("data-e")) { floorState.emote = ""; pushMove(mt); } }, 4000); });
+      });
+      this._keys = function (e) {
+        var k = e.key, moved = true;
+        if (k === "ArrowUp") floorState.y = Math.max(0, floorState.y - 1);
+        else if (k === "ArrowDown") floorState.y = Math.min(FLOOR_GRID - 1, floorState.y + 1);
+        else if (k === "ArrowLeft") floorState.x = Math.max(0, floorState.x - 1);
+        else if (k === "ArrowRight") floorState.x = Math.min(FLOOR_GRID - 1, floorState.x + 1);
+        else moved = false;
+        if (moved) { e.preventDefault(); floorState.emote = ""; pushMove(mt); }
+      };
+      window.addEventListener("keydown", this._keys);
+      pushMove(mt);       // register presence at my tile
+      pollFloor(mt);
+      clearInterval(floorTimer);
+      floorTimer = setInterval(function () { pollFloor(mt); }, 2500);
+    },
+    leave: function () {
+      clearInterval(floorTimer); floorTimer = null;
+      if (this._keys) { window.removeEventListener("keydown", this._keys); this._keys = null; }
+      if (NET.me) NET.roomLeave();
+    }
+  };
+
   var ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
   var COMMANDMENTS = [
     "I am Tüpci thy Captain, who brought thee up out of Division 5, out of the house of relegation, and who leadeth thee toward the Elite Division. Thou shalt have no gaffers before me.",

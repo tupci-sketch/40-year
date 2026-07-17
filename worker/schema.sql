@@ -490,12 +490,47 @@ CREATE TABLE IF NOT EXISTS user_purchases (
 );
 CREATE INDEX IF NOT EXISTS idx_purchases_user ON user_purchases(user_id, id DESC);
 
+-- The 🐐 GOAT flair is NOT sold — it's the captain's alone, granted, not bought.
 INSERT OR IGNORE INTO shop_items (sku, name, description, kind, payload, cost, sort) VALUES
   ('flair_ball','Match Ball flair','A ⚽ next to your name across the club.','flair','⚽',50,10),
   ('flair_fire','On Fire flair','You are 🔥. Everyone can see it.','flair','🔥',80,20),
   ('flair_crown','Crown flair','A 👑 for the big-time charlie.','flair','👑',150,30),
-  ('flair_goat','GOAT flair','Settle the debate with a 🐐.','flair','🐐',150,40),
   ('flair_purple','Purple Heart flair','💜 up the Virgil.','flair','💜',60,50),
   ('accent_gold','Gold name','Your name shines gold club-wide.','accent','gold',120,60),
   ('accent_electric','Electric name','Your name in Virgil purple.','accent','electric',120,70),
   ('accent_win','Green name','Your name in winner''s green.','accent','win',100,80);
+
+-- ============================================================
+--  Community polls + the shared Clubhouse Floor room
+-- ============================================================
+CREATE TABLE IF NOT EXISTS polls (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  question    TEXT NOT NULL,
+  created_by  INTEGER,
+  created_iso TEXT,
+  closed      INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS poll_options (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  poll_id  INTEGER NOT NULL,
+  label    TEXT NOT NULL,
+  sort     INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_polloptions_poll ON poll_options(poll_id);
+CREATE TABLE IF NOT EXISTS poll_votes (
+  poll_id     INTEGER NOT NULL,
+  option_id   INTEGER NOT NULL,
+  user_id     INTEGER NOT NULL,
+  created_iso TEXT,
+  PRIMARY KEY (poll_id, user_id)
+);
+
+-- Presence for the shared avatar room: one row per member, upserted on move.
+CREATE TABLE IF NOT EXISTS room_presence (
+  user_id     INTEGER PRIMARY KEY,
+  x           INTEGER NOT NULL DEFAULT 6,
+  y           INTEGER NOT NULL DEFAULT 6,
+  emote       TEXT,
+  updated_iso TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_roompresence_updated ON room_presence(updated_iso);

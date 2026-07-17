@@ -256,4 +256,61 @@ com.post("/reactions", async (c) => {
   return c.json({ ok: true, reacted: !existing, counts });
 });
 
+/* ---------------- POLLS ---------------- */
+com.get("/polls", async (c) => {
+  const me = await currentUser(c);
+  const polls = rows(await c.env.DB.prepare("SELECT id,question,created_by,created_iso,closed FROM polls ORDER BY id DESC LIMIT 30").all());
+  if (!polls.length) return c.json({ ok: true, polls: [] });
+  const ids = polls.map((p) => p.id); const ph = ids.map(() => "?").join(",");
+  const opts = rows(await c.env.DB.prepare(`SELECT id,poll_id,label,sort FROM poll_options WHERE poll_id IN (${ph}) ORDER BY sort ASC, id ASC`).bind(...ids).all());
+  const counts = rows(await c.env.DB.prepare(`SELECT poll_id, option_id, COUNT(*) n FROM poll_votes WHERE poll_id IN (${ph}) GROUP BY poll_id, option_id`).bind(...ids).all());
+  const cmap = {}; for (const r of counts) cmap[r.poll_id + ":" + r.option_id] = r.n;
+  let mine = {};
+  if (me) { for (const r of rows(await c.env.DB.prepare(`SELECT poll_id, option_id FROM poll_votes WHERE user_id=? AND poll_id IN (${ph})`).bind(me.id, ...ids).all())) mine[r.poll_id] = r.option_id; }
+  const optByPoll = {};
+  for (const o of opts) (optByPoll[o.poll_id] = optByPoll[o.poll_id] || []).push({ id: o.id, label: o.label, votes: cmap[o.poll_id + ":" + o.id] || 0 });
+  return c.json({ ok: true, polls: polls.map((p) => ({ id: p.id, question: p.question, closed: p.closed, created_iso: p.created_iso,
+    options: optByPoll[p.id] || [], total: (optByPoll[p.id] || []).reduce((a, o) => a + o.votes, 0), myVote: me ? (mine[p.id] || null) : null })) });
+});
+
+com.post("/polls", async (c) => {
+  const u = await requireUser(c); if (!u) return deny(c, "auth", 401);
+  if (Number(u.level) < 5) return deny(c, "denied", 403); // L5+ run polls
+  const b = await c.req.json().catch(() => ({}));
+  const question = clean(b.question, 160);
+  const options = (Array.isArray(b.options) ? b.options : []).map((o) => clean(o, 80)).filter(Boolean).slice(0, 8);
+  if (!question || options.length < 2) return deny(c, "need_2", 400);
+  const r = await c.env.DB.prepare("INSERT INTO polls (question,created_by,created_iso,closed) VALUES (?,?,?,0)").bind(question, u.id, nowISO()).run();
+  const pid = r.meta.last_row_id;
+  let sort = 0;
+  for (const label of options) await c.env.DB.prepare("INSERT INTO poll_options (poll_id,label,sort) VALUES (?,?,?)").bind(pid, label, sort++).run();
+  return c.json({ ok: true, id: pid });
+});
+
+com.post("/polls/:id/vote", async (c) => {
+  const u = await requireUser(c); if (!u) return deny(c, "auth", 401);
+  const pid = parseInt(c.req.param("id"), 10);
+  const b = await c.req.json().catch(() => ({}));
+  const optionId = parseInt(b.optionId, 10);
+  const poll = await c.env.DB.prepare("SELECT id,closed FROM polls WHERE id=?").bind(pid).first();
+  if (!poll) return deny(c, "not_found", 404);
+  if (poll.closed) return deny(c, "closed", 400);
+  const opt = await c.env.DB.prepare("SELECT id FROM poll_options WHERE id=? AND poll_id=?").bind(optionId, pid).first();
+  if (!opt) return deny(c, "bad_option", 400);
+  const first = !(await c.env.DB.prepare("SELECT 1 FROM poll_votes WHERE poll_id=? AND user_id=?").bind(pid, u.id).first());
+  await c.env.DB.prepare(
+    `INSERT INTO poll_votes (poll_id,option_id,user_id,created_iso) VALUES (?,?,?,?)
+     ON CONFLICT(poll_id,user_id) DO UPDATE SET option_id=excluded.option_id, created_iso=excluded.created_iso`
+  ).bind(pid, optionId, u.id, nowISO()).run();
+  if (first) await awardPoints(c.env, u.id, 1, "voted in a poll");
+  return c.json({ ok: true });
+});
+
+com.post("/polls/:id/close", async (c) => {
+  const u = await requireUser(c); if (!u) return deny(c, "auth", 401);
+  if (Number(u.level) < 5) return deny(c, "denied", 403);
+  await c.env.DB.prepare("UPDATE polls SET closed=1 WHERE id=?").bind(parseInt(c.req.param("id"), 10)).run();
+  return c.json({ ok: true });
+});
+
 export default com;

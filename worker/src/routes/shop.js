@@ -84,5 +84,17 @@ shop.get("/tickets", async (c) => {
   return c.json({ ok: true, tickets: list, cost: TICKET_COST });
 });
 
+/* ---- Virgil Points leaderboard (top earners, with cosmetics) ---- */
+shop.get("/leaderboard/points", async (c) => {
+  const top = await tryRows(c.env,
+    `SELECT p.user_id, p.balance, p.lifetime, u.display
+     FROM user_points p JOIN users u ON u.id=p.user_id
+     WHERE u.banned=0 ORDER BY p.lifetime DESC, p.balance DESC LIMIT 20`);
+  const { cosmeticsFor } = await import("../lib/points.js");
+  const cos = await cosmeticsFor(c.env, top.map((r) => r.user_id));
+  for (const r of top) { const cm = cos[r.user_id] || {}; r.flair = cm.flair || null; r.accent = cm.accent || null; }
+  return c.json({ ok: true, leaderboard: top });
+});
+
 export default shop;
 export { TICKET_COST };

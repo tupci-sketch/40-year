@@ -6,7 +6,7 @@
    ============================================================ */
 import { Hono } from "hono";
 import { requireLevel, nowISO } from "../lib/auth.js";
-import { awardPoints } from "../lib/points.js";
+import { awardPoints, getBalance } from "../lib/points.js";
 
 const admin = new Hono();
 function rows(r) { return (r && r.results) || []; }
@@ -490,15 +490,29 @@ admin.post("/settings", async (c) => {
 /* ---------------- USERS (L9) ---------------- */
 admin.get("/users", async (c) => {
   const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
-  const list = rows(await c.env.DB.prepare(
-    `SELECT u.id, u.username, u.display, u.level, u.banned, u.created_iso, u.last_iso,
-            up.linked_player_id, up.primary_identity_id,
-            p.name AS linked_player_name
-     FROM users u
-     LEFT JOIN user_profiles up ON up.user_id = u.id
-     LEFT JOIN players p ON p.id = up.linked_player_id
-     ORDER BY u.level DESC, u.username ASC`
-  ).all());
+  let list;
+  try {
+    list = rows(await c.env.DB.prepare(
+      `SELECT u.id, u.username, u.display, u.level, u.banned, u.created_iso, u.last_iso,
+              up.linked_player_id, up.primary_identity_id, p.name AS linked_player_name,
+              COALESCE(pts.balance, 0) AS points
+       FROM users u
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+       LEFT JOIN players p ON p.id = up.linked_player_id
+       LEFT JOIN user_points pts ON pts.user_id = u.id
+       ORDER BY u.level DESC, u.username ASC`
+    ).all());
+  } catch (e) {
+    // user_points not migrated yet — fall back without balances
+    list = rows(await c.env.DB.prepare(
+      `SELECT u.id, u.username, u.display, u.level, u.banned, u.created_iso, u.last_iso,
+              up.linked_player_id, up.primary_identity_id, p.name AS linked_player_name
+       FROM users u
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+       LEFT JOIN players p ON p.id = up.linked_player_id
+       ORDER BY u.level DESC, u.username ASC`
+    ).all());
+  }
   return c.json({ ok: true, users: list });
 });
 
@@ -522,6 +536,29 @@ admin.post("/users/:id/ban", async (c) => {
   if (b.banned) await c.env.DB.prepare("UPDATE user_sessions SET revoked=1 WHERE user_id=?").bind(id).run();
   await audit(c.env, g.user.id, b.banned ? "user_ban" : "user_unban", "user", id, null);
   return c.json({ ok: true });
+});
+
+/* ---------------- POINTS (L9): adjust a member's Virgil Points ---------------- */
+admin.post("/users/:id/points", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const id = intOr(c.req.param("id"), 0);
+  const user = await c.env.DB.prepare("SELECT id FROM users WHERE id=?").bind(id).first();
+  if (!user) return c.json({ ok: false, error: "not_found", code: 404 }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const reason = clean(b.reason, 60) || "admin adjustment";
+  let delta;
+  if (b.mode === "set") {
+    const target = intOr(b.amount, 0);
+    const bal = await getBalance(c.env, id);
+    delta = target - bal.balance;
+  } else {
+    delta = intOr(b.delta, 0);
+  }
+  if (!delta) return c.json({ ok: true, balance: (await getBalance(c.env, id)).balance, changed: 0 });
+  await awardPoints(c.env, id, delta, reason);
+  await audit(c.env, g.user.id, "points_adjust", "user", id, { delta, reason });
+  const nb = await getBalance(c.env, id);
+  return c.json({ ok: true, balance: nb.balance, changed: delta });
 });
 
 export default admin;

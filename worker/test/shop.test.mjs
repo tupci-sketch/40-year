@@ -44,7 +44,7 @@ ok(prof.json.profile.flair === "👑" && prof.json.profile.accent === "gold", "p
 
 // insufficient funds rejected
 await DB.prepare("UPDATE user_points SET balance=5 WHERE user_id=?").bind(uid).run();
-ok((await post(app, env, "/api/shop/buy", { sku: "flair_goat" }, H(tok))).status === 400, "insufficient balance rejected");
+ok((await post(app, env, "/api/shop/buy", { sku: "flair_fire" }, H(tok))).status === 400, "insufficient balance rejected");
 
 // tickets: claim one for a fixture
 await DB.prepare("INSERT INTO fixtures (id,kind,stage,date_iso,opponent) VALUES ('fxt','match','league','2099-05-01','Rivals')").run();
@@ -54,6 +54,19 @@ ok(claim.json.ok && claim.json.balance === 75, "claim ticket deducts 25");
 ok((await post(app, env, "/api/tickets/claim", { fixtureId: "fxt" }, H(tok))).status === 400, "cannot double-claim a ticket");
 const tix = await get(app, env, "/api/tickets", H(tok));
 ok(tix.json.tickets.length === 1 && tix.json.tickets[0].opponent === "Rivals", "my tickets lists the claimed ticket");
+
+// ---- L9 points admin + leaderboard ----
+const adminTok = (await post(app, env, "/api/auth/register", { name: "Boss", pass: "secret123" })).json.token;
+await DB.prepare("UPDATE users SET level=9 WHERE username='boss'").run();
+const modTok = (await post(app, env, "/api/auth/register", { name: "Middle", pass: "secret123" })).json.token;
+await DB.prepare("UPDATE users SET level=5 WHERE username='middle'").run();
+ok((await post(app, env, "/api/admin/users/" + uid + "/points", { delta: 100 }, H(modTok))).status === 403, "L5 cannot adjust points");
+const adj = await post(app, env, "/api/admin/users/" + uid + "/points", { delta: 100, reason: "gift" }, H(adminTok));
+ok(adj.json.ok && adj.json.balance === 175 && adj.json.changed === 100, "L9 adds 100 points (75 → 175)");
+const setb = await post(app, env, "/api/admin/users/" + uid + "/points", { mode: "set", amount: 40 }, H(adminTok));
+ok(setb.json.ok && setb.json.balance === 40, "L9 sets balance to 40");
+const lb = await get(app, env, "/api/leaderboard/points");
+ok(lb.json.ok && lb.json.leaderboard.length >= 1 && lb.json.leaderboard[0].lifetime >= lb.json.leaderboard[lb.json.leaderboard.length - 1].lifetime, "points leaderboard sorts by lifetime");
 
 // ---- resilience: engagement tables not migrated in yet ----
 // A fresh DB with the points tables dropped must NOT break core endpoints

@@ -75,4 +75,31 @@ ok(r1.json.reacted === true && r1.json.counts[0].n === 1, "reaction added");
 const r2 = await post(app, env, "/api/reactions", { target_type: "news", target_id: "1", emoji: "🔥" }, H(tokA));
 ok(r2.json.reacted === false && r2.json.counts.length === 0, "reaction toggled off");
 
+// ---- polls ----
+ok((await post(app, env, "/api/polls", { question: "MOTM?", options: ["Tupci", "Dan"] }, H(tokA))).status === 403, "L1 cannot create a poll");
+const poll = await post(app, env, "/api/polls", { question: "Best chant?", options: ["Purple Army", "Up the Virgil"] }, H(tokB));
+ok(poll.json.ok && poll.json.id, "L5 creates a poll");
+let pl = await get(app, env, "/api/polls", H(tokA));
+const p0 = pl.json.polls[0];
+ok(p0.question === "Best chant?" && p0.options.length === 2 && p0.total === 0, "poll lists with options, no votes");
+const optId = p0.options[0].id;
+ok((await post(app, env, "/api/polls/" + p0.id + "/vote", { optionId: optId }, H(tokA))).json.ok, "vote accepted");
+await post(app, env, "/api/polls/" + p0.id + "/vote", { optionId: optId }, H(tokB));
+pl = await get(app, env, "/api/polls", H(tokA));
+ok(pl.json.polls[0].total === 2 && pl.json.polls[0].myVote === optId, "votes tally + my vote recorded");
+// re-vote just moves the vote, doesn't double-count
+await post(app, env, "/api/polls/" + p0.id + "/vote", { optionId: p0.options[1].id }, H(tokA));
+pl = await get(app, env, "/api/polls", H(tokA));
+ok(pl.json.polls[0].total === 2, "re-voting moves, doesn't double-count");
+
+// ---- clubhouse floor room ----
+ok((await post(app, env, "/api/room/move", { x: 3, y: 9 }, H(tokA))).json.ok, "move upserts presence");
+await post(app, env, "/api/room/move", { x: 20, y: -5, emote: "👋" }, H(tokB)); // out-of-range clamps
+const rm = await get(app, env, "/api/room", H(tokA));
+ok(rm.json.occupants.length === 2, "room lists present members");
+const mineOcc = rm.json.occupants.find((o) => o.me);
+ok(mineOcc && mineOcc.x === 3 && mineOcc.y === 9, "my tile is where I moved");
+const bob = rm.json.occupants.find((o) => o.display === "Bobmod");
+ok(bob && bob.x === 12 && bob.y === 0 && bob.emote === "👋", "coords clamp to the grid + emote carried");
+
 done();
