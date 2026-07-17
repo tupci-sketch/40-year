@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS users (
   pw_salt      TEXT NOT NULL,
   pw_algo      TEXT NOT NULL DEFAULT 'sha256',-- 'sha256' (legacy) | 'pbkdf2'; upgraded on login
   created_iso  TEXT NOT NULL,
-  last_iso     TEXT
+  last_iso     TEXT,
+  totp_secret  TEXT,                            -- base32 authenticator secret (set at 2FA setup)
+  totp_enabled INTEGER NOT NULL DEFAULT 0        -- 1 once the user confirms a code
 );
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 

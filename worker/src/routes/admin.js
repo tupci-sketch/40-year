@@ -538,6 +538,24 @@ admin.post("/users/:id/ban", async (c) => {
   return c.json({ ok: true });
 });
 
+/* ---------------- PASSWORD RESET (L9): set a member's password ---------------- */
+import { makePassword } from "../lib/crypto.js";
+admin.post("/users/:id/password", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const id = intOr(c.req.param("id"), 0);
+  const user = await c.env.DB.prepare("SELECT id FROM users WHERE id=?").bind(id).first();
+  if (!user) return c.json({ ok: false, error: "not_found", code: 404 }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const next = String(b.newPassword || "");
+  if (next.length < 6) return c.json({ ok: false, error: "bad_pass", code: "bad_pass" }, 400);
+  const pw = await makePassword(next, c.env.PEPPER);
+  await c.env.DB.prepare("UPDATE users SET pw_hash=?, pw_salt=?, pw_algo=? WHERE id=?").bind(pw.pw_hash, pw.pw_salt, pw.pw_algo, id).run();
+  // Reset password → revoke their sessions so they must re-login.
+  await c.env.DB.prepare("UPDATE user_sessions SET revoked=1 WHERE user_id=?").bind(id).run();
+  await audit(c.env, g.user.id, "password_reset", "user", id, null);
+  return c.json({ ok: true });
+});
+
 /* ---------------- POINTS (L9): adjust a member's Virgil Points ---------------- */
 admin.post("/users/:id/points", async (c) => {
   const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);

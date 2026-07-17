@@ -171,7 +171,9 @@
     name_taken: "That name's taken.",
     bad_login: "Wrong name or password.",
     banned: "That account's been suspended.",
-    turnstile: "Verification failed — try again."
+    turnstile: "Verification failed — try again.",
+    "2fa_required": "Enter the 6-digit code from your authenticator app.",
+    "2fa_bad": "That code didn't match — try the current one."
   };
 
   function openAuth() {
@@ -179,6 +181,7 @@
     m.hidden = false;
     U.$("#auth-error").textContent = "";
     U.$("#auth-form").reset();
+    var tf = U.$("#auth-2fa-row"); if (tf) tf.hidden = true;
     renderTurnstile();
   }
   function closeAuth() { U.$("#auth-modal").hidden = true; }
@@ -221,18 +224,22 @@
       var btn = U.$("#auth-submit");
       btn.disabled = true;
       var tok = turnstileToken();
-      var p = mode === "register" ? NET.register(name, pass, tok) : NET.login(name, pass, tok);
+      var twoFaRow = U.$("#auth-2fa-row");
+      var code = (twoFaRow && !twoFaRow.hidden) ? U.$("#auth-2fa").value.trim() : "";
+      var p = mode === "register" ? NET.register(name, pass, tok) : NET.login(name, pass, tok, code);
       p.then(function (r) {
         btn.disabled = false;
         renderTurnstile();
         if (r && r.ok) {
+          if (twoFaRow) { twoFaRow.hidden = true; U.$("#auth-2fa").value = ""; }
           closeAuth();
           renderAccount();
           U.toast(mode === "register" ? "Welcome, " + r.name + "." : "Welcome back, " + r.name + ".");
           route();
         } else {
-          var code = r && (r.code || r.error);
-          err.textContent = AUTH_ERR[code] || ("Something went wrong" + (code ? " (" + code + ")" : "") + ". Try again.");
+          var rc = r && (r.code || r.error);
+          if (rc === "2fa_required" || rc === "2fa_bad") { if (twoFaRow) { twoFaRow.hidden = false; var f = U.$("#auth-2fa"); if (f) f.focus(); } }
+          err.textContent = AUTH_ERR[rc] || ("Something went wrong" + (rc ? " (" + rc + ")" : "") + ". Try again.");
         }
       });
     });
@@ -1075,10 +1082,10 @@
             (p.linkedPlayer ? '<p><a href="#player/' + p.linkedPlayer.id + '">On the pitch: ' + U.esc(p.linkedPlayer.name) + " #" + p.linkedPlayer.number + "</a></p>" : "") +
             (NET.me && !mine ? '<button class="btn btn-primary btn-small" id="prof-dm">Message</button>' : "") +
           "</div>" +
-          (mine ? '<div id="profile-clubhouse"></div>' : "");
+          (mine ? '<div id="profile-clubhouse"></div><div id="profile-security"></div>' : "");
         var dmb = U.$("#prof-dm");
         if (dmb) dmb.addEventListener("click", function () { NET.dmStart(p.username).then(function (r) { if (r && r.ok) location.hash = "#conversation/" + r.id; else U.toast("Couldn't start a conversation."); }); });
-        if (mine) renderClubhousePanel(U.$("#profile-clubhouse", mt), p);
+        if (mine) { renderClubhousePanel(U.$("#profile-clubhouse", mt), p); renderSecurityPanel(U.$("#profile-security", mt)); }
       });
     }
   };
@@ -1152,6 +1159,68 @@
           });
         });
       });
+    });
+  }
+
+  /* Owner-only Security: change password + optional authenticator 2FA. */
+  function renderSecurityPanel(box) {
+    if (!box) return;
+    NET.twoFAStatus().then(function (st) {
+      var on = st && st.enabled;
+      box.innerHTML =
+        '<div class="section-label">Security</div>' +
+        '<div class="panel">' +
+          '<div class="sec-sub">Change password</div>' +
+          '<input type="password" id="sec-cur" class="fun-input" placeholder="Current password" autocomplete="current-password">' +
+          '<input type="password" id="sec-new" class="fun-input" placeholder="New password (6+ chars)" autocomplete="new-password">' +
+          '<div class="admin-actions"><button class="btn btn-gold btn-small" id="sec-pw-save">Update password</button></div>' +
+        "</div>" +
+        '<div class="panel">' +
+          '<div class="sec-sub">Two-factor authentication ' + (on ? '<span class="pill pill-win">on</span>' : '<span class="pill">off</span>') + "</div>" +
+          '<p class="admin-inline-note">Optional. Protect your account with an authenticator app (Microsoft Authenticator, Google Authenticator, etc.).</p>' +
+          '<div id="sec-2fa"></div>' +
+        "</div>";
+      U.$("#sec-pw-save", box).addEventListener("click", function () {
+        var cur = U.$("#sec-cur", box).value, next = U.$("#sec-new", box).value;
+        if (next.length < 6) { U.toast("New password needs 6+ characters."); return; }
+        NET.changePassword(cur, next).then(function (r) {
+          if (r && r.ok) { U.toast("Password updated."); U.$("#sec-cur", box).value = ""; U.$("#sec-new", box).value = ""; }
+          else U.toast(r && r.code === "bad_current" ? "Current password is wrong." : "✗ couldn't update");
+        });
+      });
+      var twoBox = U.$("#sec-2fa", box);
+      function renderOff() {
+        twoBox.innerHTML = '<div class="admin-actions"><button class="btn btn-primary btn-small" id="sec-2fa-start">Set up 2FA</button></div>';
+        U.$("#sec-2fa-start", twoBox).addEventListener("click", function () {
+          NET.twoFASetup().then(function (r) {
+            if (!r || !r.ok) { U.toast("✗ couldn't start"); return; }
+            twoBox.innerHTML =
+              '<p class="admin-inline-note">In your authenticator app, add an account and enter this key (or use the link on this device):</p>' +
+              '<div class="sec-secret">' + U.esc(r.secret.replace(/(.{4})/g, "$1 ").trim()) + "</div>" +
+              '<div class="admin-actions"><a class="btn btn-ghost btn-small" href="' + U.esc(r.otpauth) + '">Open in an app</a></div>' +
+              '<input type="text" id="sec-2fa-code" class="fun-input" inputmode="numeric" maxlength="6" placeholder="6-digit code to confirm">' +
+              '<div class="admin-actions"><button class="btn btn-gold btn-small" id="sec-2fa-confirm">Turn on 2FA</button></div>';
+            U.$("#sec-2fa-confirm", twoBox).addEventListener("click", function () {
+              NET.twoFAEnable(U.$("#sec-2fa-code", twoBox).value.trim()).then(function (rr) {
+                if (rr && rr.ok) { U.toast("Two-factor is on."); if (NET.me) NET.me.twoFactor = true; renderOn(); }
+                else U.toast("That code didn't match.");
+              });
+            });
+          });
+        });
+      }
+      function renderOn() {
+        twoBox.innerHTML = '<p class="admin-inline-note">Two-factor is active. You\'ll enter a code from your app when you sign in.</p>' +
+          '<input type="text" id="sec-2fa-off-code" class="fun-input" inputmode="numeric" maxlength="6" placeholder="Code to turn it off">' +
+          '<div class="admin-actions"><button class="btn btn-ghost btn-small" id="sec-2fa-off">Turn off 2FA</button></div>';
+        U.$("#sec-2fa-off", twoBox).addEventListener("click", function () {
+          NET.twoFADisable({ code: U.$("#sec-2fa-off-code", twoBox).value.trim() }).then(function (rr) {
+            if (rr && rr.ok) { U.toast("Two-factor turned off."); if (NET.me) NET.me.twoFactor = false; renderOff(); }
+            else U.toast("Enter a current code to turn it off.");
+          });
+        });
+      }
+      if (on) renderOn(); else renderOff();
     });
   }
 

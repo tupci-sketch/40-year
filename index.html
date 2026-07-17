@@ -430,11 +430,15 @@
           <input type="password" id="auth-confirm" autocomplete="new-password">
           <span class="field-hint" id="auth-match-hint"></span>
         </label>
+        <label class="field" id="auth-2fa-row" hidden>
+          <span class="field-label">Authenticator code</span>
+          <input type="text" id="auth-2fa" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code">
+        </label>
         <div class="cf-turnstile" id="cf-turnstile"></div>
         <p class="auth-error" id="auth-error" role="alert"></p>
         <button type="submit" class="btn btn-primary" id="auth-submit">Sign in</button>
       </form>
-      <p class="auth-note">The stewards keep the door. Be good.</p>
+      <p class="auth-note">The stewards keep the door. Be good.<br>Forgotten your password? Ask an admin to reset it for you.</p>
     </div>
   </div>
 

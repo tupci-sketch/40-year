@@ -556,7 +556,8 @@
           (admin9 ? '<div class="admin-row-link">' +
             '<label class="field field-inline"><span class="field-label">Linked player</span>' +
             '<select class="us-player" data-id="' + u.id + '">' + playerOptions(u.linked_player_id || "") + "</select></label>" +
-            '<button class="btn btn-ghost btn-small us-link" data-id="' + u.id + '">Save link</button></div>' : "") +
+            '<button class="btn btn-ghost btn-small us-link" data-id="' + u.id + '">Save link</button>' +
+            '<button class="btn btn-ghost btn-small us-pw" data-id="' + u.id + '" data-name="' + esc(u.display) + '">Reset password</button></div>' : "") +
         "</div>";
       }).join("") + "</div>";
       U.$$(".us-setlevel", body).forEach(function (btn) {
@@ -574,6 +575,17 @@
           NET.adminProfileRole(btn.getAttribute("data-id"), { linkedPlayerId: pid }).then(function (r) {
             if (r && r.ok) { U.toast(pid ? "Account linked to player." : "Link cleared."); renderTab("users"); }
             else U.toast("✗ link failed");
+          });
+        });
+      });
+      U.$$(".us-pw", body).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var name = btn.getAttribute("data-name");
+          var np = window.prompt("Set a new password for " + name + " (6+ characters). They'll be signed out and must log in with it:");
+          if (np == null) return;
+          if (np.length < 6) { U.toast("Password needs 6+ characters."); return; }
+          NET.adminUserPassword(btn.getAttribute("data-id"), np).then(function (r) {
+            if (r && r.ok) U.toast("Password reset for " + name + "."); else U.toast("✗ couldn't reset");
           });
         });
       });

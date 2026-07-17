@@ -72,10 +72,16 @@
       var self = this;
       return this.post("/auth/register", { name: name, pass: pass, turnstile: turnstile || "" }).then(function (r) { return self._adopt(r); });
     },
-    login: function (name, pass, turnstile) {
+    login: function (name, pass, turnstile, code) {
       var self = this;
-      return this.post("/auth/login", { name: name, pass: pass, turnstile: turnstile || "" }).then(function (r) { return self._adopt(r); });
+      return this.post("/auth/login", { name: name, pass: pass, turnstile: turnstile || "", code: code || "" }).then(function (r) { return self._adopt(r); });
     },
+    changePassword: function (current, next) { return this.post("/auth/change-password", { current: current, next: next }); },
+    twoFAStatus:  function () { return this.get("/auth/2fa/status"); },
+    twoFASetup:   function () { return this.post("/auth/2fa/setup"); },
+    twoFAEnable:  function (code) { return this.post("/auth/2fa/enable", { code: code }); },
+    twoFADisable: function (b) { return this.post("/auth/2fa/disable", b); },
+    adminUserPassword: function (id, newPassword) { return this.post("/admin/users/" + id + "/password", { newPassword: newPassword }); },
     session: function () {
       var self = this;
       if (!this._token) return Promise.resolve({ ok: false, error: "session" });

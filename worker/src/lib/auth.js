@@ -81,5 +81,5 @@ export async function requireLevel(c, n) {
 
 /* Public shape of a user (never leak hashes). */
 export function publicUser(u) {
-  return u ? { name: u.display, username: u.username, level: Number(u.level) || 1 } : null;
+  return u ? { name: u.display, username: u.username, level: Number(u.level) || 1, twoFactor: Number(u.totp_enabled) === 1 } : null;
 }

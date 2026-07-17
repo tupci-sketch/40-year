@@ -1501,6 +1501,10 @@ textarea { resize: vertical; font-family: var(--font-body); }
 }
 .auth-close:hover { color: var(--white); }
 .auth-note { font-size: 0.72rem; color: var(--silver); text-align: center; margin-top: 12px; }
+/* Security panel (change password + 2FA) */
+.sec-sub { font-family: var(--font-sub); font-weight: 600; font-size: 0.86rem; letter-spacing: 0.03em; color: var(--white); margin-bottom: 8px; }
+.sec-secret { font-family: var(--font-mono, monospace); font-size: 1.15rem; letter-spacing: 0.12em; color: var(--gold-bright); background: rgba(7, 3, 11, 0.5); border: 1px dashed rgba(242, 180, 92, 0.5); border-radius: 8px; padding: 10px 12px; text-align: center; margin: 8px 0; word-break: break-all; }
+#profile-security .panel + .panel { margin-top: 12px; }
 
 /* ---------- TOAST ---------- */
 #toast {
