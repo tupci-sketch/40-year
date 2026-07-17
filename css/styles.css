@@ -573,13 +573,10 @@ body.nav-open #site-nav { display: block; }
   box-shadow: var(--glow-purple);
 }
 
-#squad-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-@media (min-width: 640px) { #squad-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; } }
-@media (min-width: 960px) { #squad-grid { grid-template-columns: repeat(4, 1fr); } }
+/* #squad-grid is just the outer container; the .card-grid inside it is the grid.
+   (It used to be a grid too, which nested the card grid into one half-width
+   column and shrank every card to a quarter of the screen.) */
+#squad-grid { display: block; }
 
 .card-tile {
   position: relative;
@@ -2540,14 +2537,17 @@ body { overflow-x: hidden; }
    full-width block flow. Mirrors the original site's grids.
    ============================================================ */
 
-/* Squad + any player-card grid: responsive columns, card aspect kept by .card-tile. */
-#squad-grid, .card-grid {
+/* Squad + any player-card grid: responsive columns, card aspect kept by .card-tile.
+   NOTE: #squad-grid is only the outer container — the cards live in a .card-grid
+   inside it, so ONLY .card-grid is the grid. (Making both grids nested one column
+   inside the other, which shrank every card to a quarter width.) */
+.card-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
-@media (min-width: 560px) { #squad-grid, .card-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 860px) { #squad-grid, .card-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 560px) { .card-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 860px) { .card-grid { grid-template-columns: repeat(4, 1fr); } }
 
 /* Home record tiles need the same grid the archive/match/player tiles use. */
 #home-live { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -2557,10 +2557,13 @@ body { overflow-x: hidden; }
 /* The home league strip is a full-width panel, not a tile. */
 #home-live .league-strip { grid-column: 1 / -1; }
 /* Section label + the season tile-row span the whole home grid. */
-#home-live .section-label, #home-live .tile-row { grid-column: 1 / -1; }
+#home-live .section-label, #home-live .tile-row, #home-live .home-scope-head, #home-live .home-scope-note { grid-column: 1 / -1; }
 #home-live .tile-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 @media (min-width: 640px) { #home-live .tile-row { grid-template-columns: repeat(4, 1fr); } }
 .home-season-label { margin-bottom: 2px; }
+.home-scope-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.home-scope-toggle { margin: 0; }
+.home-scope-note { font-size: 0.78rem; color: var(--silver); margin: 2px 0 0; }
 
 /* Recent-form pill strip. */
 .form-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }

@@ -583,6 +583,14 @@
         field("Position", '<input type="text" id="st-league-position" maxlength="60" placeholder="e.g. 1 Chance Rem">') +
         field("Points", '<input type="text" id="st-league-points" maxlength="30" placeholder="e.g. 12/16">') +
         '<div class="admin-actions"><button class="btn btn-gold btn-small" id="st-league-save">Save league standing</button><span class="admin-inline-note" id="st-league-msg"></span></div>' +
+      "</div>" +
+      '<div class="panel">' +
+        '<div class="section-label">Social links</div>' +
+        '<p class="admin-inline-note">Update the club’s socials here so the Social page always points at the right accounts — no code, no typos to worry about. Just the handle/username (or paste a full link for YouTube).</p>' +
+        field("TikTok handle", '<input type="text" id="st-tiktok" maxlength="60" placeholder="danwhizzy">') +
+        field("Twitch channel", '<input type="text" id="st-twitch" maxlength="60" placeholder="40yrvirgil">') +
+        field("YouTube", '<input type="text" id="st-youtube" maxlength="120" placeholder="@handle or full channel/video link">') +
+        '<div class="admin-actions"><button class="btn btn-gold btn-small" id="st-socials-save">Save socials</button><span class="admin-inline-note" id="st-socials-msg"></span></div>' +
       "</div>";
     U.$("#st-banner-save", body).addEventListener("click", function () {
       NET.adminBanner(U.$("#st-banner-text", body).value.trim(), U.$("#st-banner-active", body).checked)
@@ -600,6 +608,22 @@
         U.$("#st-league-position", body).value.trim(),
         U.$("#st-league-points", body).value.trim()
       ).then(function (r) { if (r && r.ok) U.toast("League standing saved."); else U.$("#st-league-msg", body).textContent = "✗ failed"; });
+    });
+    NET.socials().then(function (res) {
+      var s = (res && res.socials) || {};
+      U.$("#st-tiktok", body).value = s.tiktok || "";
+      U.$("#st-twitch", body).value = s.twitch || "";
+      U.$("#st-youtube", body).value = s.youtube || "";
+    });
+    U.$("#st-socials-save", body).addEventListener("click", function () {
+      var val = JSON.stringify({
+        tiktok: U.$("#st-tiktok", body).value.trim().replace(/^@/, ""),
+        twitch: U.$("#st-twitch", body).value.trim(),
+        youtube: U.$("#st-youtube", body).value.trim()
+      });
+      NET.adminSettings("socials", val).then(function (r) {
+        if (r && r.ok) U.toast("Socials saved."); else U.$("#st-socials-msg", body).textContent = "✗ failed";
+      });
     });
   }
 

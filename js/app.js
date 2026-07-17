@@ -249,13 +249,11 @@
         var block = liveBlock(res, "the record");
         if (block) { mt.innerHTML = block; return; }
         var rec = res.record || {};
+        var recAll = res.recordAll || {};
         var form = (res.form || []).map(function (r) { return U.pill(r); }).join("");
         var next = res.nextFixture;
         var ls = res.leagueStatus || {};
         function cell(v, lab) { return v ? '<div class="league-cell"><span class="league-val">' + U.esc(v) + '</span><span class="league-lab">' + lab + "</span></div>" : ""; }
-        // League standing (manual) sits on its own; the W/D/L record + form
-        // below are the current season's own recorded games — labelled as such
-        // and the form is shown exactly once, centred.
         var strip = (ls.division || ls.position || ls.points)
           ? '<div class="league-strip panel">' +
               '<div class="league-row">' +
@@ -263,18 +261,41 @@
               "</div>" +
             "</div>"
           : "";
-        mt.innerHTML = strip +
-          '<div class="section-label home-season-label">This season</div>' +
-          '<div class="tile-row">' +
-            U.statTile("Played", U.num(rec.played)) +
-            U.statTile("Wins", U.num(rec.wins), { accent: "win" }) +
-            U.statTile("Draws", U.num(rec.draws)) +
-            U.statTile("Losses", U.num(rec.losses), { accent: "loss" }) +
-          "</div>" +
-          '<div class="stat-tile stat-tile-wide home-form-tile"><span class="stat-tile-label">Recent form</span><div class="form-pills form-pills-center">' + (form || "—") + "</div></div>" +
-          (next ? '<a class="stat-tile stat-tile-wide" href="#matchday"><span class="stat-tile-label">Next up</span><span class="stat-tile-value" style="font-size:1.1rem">' +
-            (next.opponent ? U.esc(next.opponent) : "Club session") + (next.date_iso ? " · " + U.fmtDate(next.date_iso) : "") + "</span></a>" : "");
-        U.runCountUps(mt);
+
+        // The complete verified record is the default; a toggle drops to the
+        // current-season slice. Goals for/against only shown for all-time
+        // (the baseline carries them). Recent form is shown once, centred.
+        var scope = "all";
+        function recordTiles() {
+          var r = scope === "all" ? recAll : rec;
+          return '<div class="tile-row">' +
+            U.statTile("Played", U.num(r.played)) +
+            U.statTile("Wins", U.num(r.wins), { accent: "win" }) +
+            U.statTile("Draws", U.num(r.draws)) +
+            U.statTile("Losses", U.num(r.losses), { accent: "loss" }) +
+            (scope === "all" && (r.goalsFor != null || r.goalsAgainst != null)
+              ? U.statTile("Goals for", U.num(r.goalsFor), { accent: "gold" }) + U.statTile("Goals against", U.num(r.goalsAgainst))
+              : "") +
+          "</div>";
+        }
+        function renderHome() {
+          mt.innerHTML = strip +
+            '<div class="home-scope-head"><div class="section-label home-season-label">' + (scope === "all" ? "All-time record" : "This season") + "</div>" +
+              '<div class="stat-toggle home-scope-toggle">' +
+                '<button class="tab' + (scope === "all" ? " active" : "") + '" data-scope="all">All-time</button>' +
+                '<button class="tab' + (scope === "season" ? " active" : "") + '" data-scope="season">This season</button>' +
+              "</div></div>" +
+            recordTiles() +
+            (scope === "all" ? '<p class="home-scope-note">Every game the club has ever played — the full verified run. Wins/draws/losses are the recorded competitive record. Switch to <em>This season</em> for the current campaign.</p>' : "") +
+            '<div class="stat-tile stat-tile-wide home-form-tile"><span class="stat-tile-label">Recent form</span><div class="form-pills form-pills-center">' + (form || "—") + "</div></div>" +
+            (next ? '<a class="stat-tile stat-tile-wide" href="#matchday"><span class="stat-tile-label">Next up</span><span class="stat-tile-value" style="font-size:1.1rem">' +
+              (next.opponent ? U.esc(next.opponent) : "Club session") + (next.date_iso ? " · " + U.fmtDate(next.date_iso) : "") + "</span></a>" : "");
+          U.$$(".home-scope-toggle .tab", mt).forEach(function (b) {
+            b.addEventListener("click", function () { scope = b.getAttribute("data-scope"); renderHome(); });
+          });
+          U.runCountUps(mt);
+        }
+        renderHome();
         if (res.banner && res.banner.active && res.banner.text) {
           var bn = U.$("#site-banner");
           U.$("#site-banner-text").textContent = res.banner.text;
@@ -1049,7 +1070,7 @@
             U.statTile("Losses", U.num(cr.losses), { accent: "loss" }) +
             U.statTile("Goals for", U.num(cr.goalsFor), { accent: "gold" }) +
             U.statTile("Goals against", U.num(cr.goalsAgainst)) +
-            U.statTile("Win %", U.winPct(cr.wins, cr.played), { suffix: "%" }) +
+            U.statTile("Win %", U.winPct(cr.wins, (Number(cr.wins) || 0) + (Number(cr.draws) || 0) + (Number(cr.losses) || 0)), { suffix: "%" }) +
             (cr.badge ? U.statTile("Badge", cr.badge, { accent: "gold" }) : "") +
           "</div>" +
           '<div class="section-label">The recorded games · ' + U.num(rc.count) + " on file</div>" +
@@ -1241,49 +1262,79 @@
     }
   };
 
+  // Normalise a stored YouTube value (handle, channel URL, or video URL) into
+  // a link + a friendly label + an optional embeddable video id.
+  function youtubeInfo(raw) {
+    var v = String(raw || "").trim();
+    if (!v) return null;
+    var vid = "";
+    var mv = v.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([A-Za-z0-9_\-]{6,})/);
+    if (mv) vid = mv[1];
+    var url, label;
+    if (/^https?:\/\//i.test(v)) { url = v; label = v.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, ""); }
+    else if (v.charAt(0) === "@") { url = "https://www.youtube.com/" + v; label = v; }
+    else { url = "https://www.youtube.com/@" + v; label = "@" + v; }
+    return { url: url, label: label, videoId: vid };
+  }
+
   PAGES.social = {
     enter: function () {
       var mt = U.$("#social-view");
       if (!mt) return;
-      var handle = "danwhizzy";
-      var twitch = "40yrvirgil";
-      var parent = location.hostname || "40yrvirgil.co.uk";
-      var twitchSrc = "https://player.twitch.tv/?channel=" + encodeURIComponent(twitch) +
-        "&parent=" + encodeURIComponent(parent) + "&muted=true&autoplay=true";
+      mt.innerHTML = U.emptyState("Loading the socials…", "", "📱");
+      NET.socials().then(function (res) {
+        var s = (res && res.socials) || {};
+        var handle = s.tiktok || "danwhizzy";
+        var twitch = s.twitch || "40yrvirgil";
+        var yt = youtubeInfo(s.youtube);
+        var parent = location.hostname || "40yrvirgil.co.uk";
+        var twitchSrc = "https://player.twitch.tv/?channel=" + encodeURIComponent(twitch) +
+          "&parent=" + encodeURIComponent(parent) + "&muted=true&autoplay=true";
 
-      mt.innerHTML =
-        '<div class="section-label">@' + handle + " on TikTok</div>" +
-        '<p class="screen-intro">The golden boot moonlights as a content machine. Latest uploads, straight from the source — this updates itself every time he posts.</p>' +
-        '<div class="social-embed">' +
-          '<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@' + handle + '" data-unique-id="' + handle + '" data-embed-type="creator" style="max-width:780px;min-width:288px;">' +
-            '<section class="tiktok-card">' +
-              '<span class="tiktok-card-avatar">' + handle.charAt(0).toUpperCase() + "</span>" +
-              '<span class="tiktok-card-handle">@' + handle + "</span>" +
-              '<span class="tiktok-card-sub">The 40Yr Virgil on TikTok</span>' +
-              '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.tiktok.com/@' + handle + '?refer=creator_embed">Open profile →</a>' +
-            "</section>" +
-          "</blockquote>" +
-        "</div>" +
-        '<p class="social-fallback">Feed not loading? TikTok’s profile widget can be temperamental — <a href="https://www.tiktok.com/@' + handle + '" target="_blank" rel="noopener">open @' + handle + " on TikTok →</a></p>" +
-        '<div class="section-label">' + twitch + " on Twitch</div>" +
-        '<p class="screen-intro">When the club’s live, the stream plays right here. When it’s not, Twitch shows the offline screen — hit follow so you don’t miss kickoff.</p>' +
-        '<div class="twitch-embed-wrap">' +
-          '<iframe class="twitch-player" src="' + twitchSrc + '" title="' + twitch + ' on Twitch" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen scrolling="no" frameborder="0"></iframe>' +
-        "</div>" +
-        '<div class="twitch-card twitch-card-slim">' +
-          '<span class="twitch-card-handle">' + twitch + "</span>" +
-          '<span class="twitch-card-sub">Live from the Betfred Arena (the sofa).</span>' +
-          '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.twitch.tv/' + twitch + '">Open on Twitch →</a>' +
-        "</div>";
+        mt.innerHTML =
+          '<div class="section-label">@' + U.esc(handle) + " on TikTok</div>" +
+          '<p class="screen-intro">The golden boot moonlights as a content machine. Latest uploads, straight from the source — this updates itself every time he posts.</p>' +
+          '<div class="social-embed">' +
+            '<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@' + U.esc(handle) + '" data-unique-id="' + U.esc(handle) + '" data-embed-type="creator" style="max-width:780px;min-width:288px;">' +
+              '<section class="tiktok-card">' +
+                '<span class="tiktok-card-avatar">' + U.esc(handle.charAt(0).toUpperCase()) + "</span>" +
+                '<span class="tiktok-card-handle">@' + U.esc(handle) + "</span>" +
+                '<span class="tiktok-card-sub">The 40Yr Virgil on TikTok</span>' +
+                '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.tiktok.com/@' + U.esc(handle) + '?refer=creator_embed">Open profile →</a>' +
+              "</section>" +
+            "</blockquote>" +
+          "</div>" +
+          '<p class="social-fallback">Feed not loading? TikTok’s profile widget can be temperamental — <a href="https://www.tiktok.com/@' + U.esc(handle) + '" target="_blank" rel="noopener">open @' + U.esc(handle) + " on TikTok →</a></p>" +
+          (yt ?
+            '<div class="section-label">The 40Yr Virgil on YouTube</div>' +
+            '<p class="screen-intro">Full-length uploads, highlights and the odd rant — the club’s YouTube home.</p>' +
+            (yt.videoId ?
+              '<div class="twitch-embed-wrap"><iframe class="twitch-player" src="https://www.youtube.com/embed/' + U.esc(yt.videoId) + '" title="YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen frameborder="0"></iframe></div>' : "") +
+            '<div class="twitch-card twitch-card-slim social-yt">' +
+              '<span class="twitch-card-handle">▶ ' + U.esc(yt.label) + "</span>" +
+              '<span class="twitch-card-sub">New from the sofa studio.</span>' +
+              '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="' + U.esc(yt.url) + '">Open on YouTube →</a>' +
+            "</div>" : "") +
+          '<div class="section-label">' + U.esc(twitch) + " on Twitch</div>" +
+          '<p class="screen-intro">When the club’s live, the stream plays right here. When it’s not, Twitch shows the offline screen — hit follow so you don’t miss kickoff.</p>' +
+          '<div class="twitch-embed-wrap">' +
+            '<iframe class="twitch-player" src="' + twitchSrc + '" title="' + U.esc(twitch) + ' on Twitch" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen scrolling="no" frameborder="0"></iframe>' +
+          "</div>" +
+          '<div class="twitch-card twitch-card-slim">' +
+            '<span class="twitch-card-handle">' + U.esc(twitch) + "</span>" +
+            '<span class="twitch-card-sub">Live from the Betfred Arena (the sofa).</span>' +
+            '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="https://www.twitch.tv/' + U.esc(twitch) + '">Open on Twitch →</a>' +
+          "</div>";
 
-      // (Re)load TikTok's creator-embed widget so the blockquote hydrates.
-      var old = document.getElementById("tiktok-embed-script");
-      if (old) old.parentNode.removeChild(old);
-      var s = document.createElement("script");
-      s.id = "tiktok-embed-script";
-      s.async = true;
-      s.src = "https://www.tiktok.com/embed.js";
-      document.body.appendChild(s);
+        // (Re)load TikTok's creator-embed widget so the blockquote hydrates.
+        var old = document.getElementById("tiktok-embed-script");
+        if (old) old.parentNode.removeChild(old);
+        var sc = document.createElement("script");
+        sc.id = "tiktok-embed-script";
+        sc.async = true;
+        sc.src = "https://www.tiktok.com/embed.js";
+        document.body.appendChild(sc);
+      });
     }
   };
 

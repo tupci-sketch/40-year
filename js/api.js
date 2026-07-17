@@ -105,6 +105,7 @@
     fixtures:      function () { return this.get("/fixtures"); },
     news:          function () { return this.get("/news"); },
     gaffers:       function () { return this.get("/gaffers"); },
+    socials:       function () { return this.get("/socials"); },
     profile:       function (username) { return this.get("/profiles/" + encodeURIComponent(username)); },
     members:       function (q) { return this.get("/members" + qs(q)); },
     identityTypes: function () { return this.get("/identity-types"); },

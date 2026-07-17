@@ -84,6 +84,14 @@ const home = await get(app, env, "/api/home");
 ok(home.json.latestResult.id === 3 && home.json.form.join("") === "WDW", "home: latest result + form");
 ok(home.json.nextFixture && home.json.nextFixture.opponent === "Delta City", "home: next fixture");
 ok(home.json.news.length === 1, "home: news");
+ok(home.json.recordAll && home.json.recordAll.played === 392 && home.json.recordAll.wins === 2, "home: all-time played = most-capped player's apps (392), record from derived");
+
+// socials: defaults, then editable via admin settings
+const soc0 = await get(app, env, "/api/socials");
+ok(soc0.json.socials.tiktok === "danwhizzy" && soc0.json.socials.twitch === "40yrvirgil" && soc0.json.socials.youtube === "", "socials: sensible defaults");
+await run("INSERT INTO site_settings (key,value) VALUES ('socials', ?)", JSON.stringify({ tiktok: "virgiltv", twitch: "thevirgil", youtube: "@40yrvirgil" }));
+const soc1 = await get(app, env, "/api/socials");
+ok(soc1.json.socials.tiktok === "virgiltv" && soc1.json.socials.youtube === "@40yrvirgil", "socials: reads stored handles");
 
 ok((await get(app, env, "/api/fixtures")).json.fixtures.length === 1, "fixtures upcoming");
 ok((await get(app, env, "/api/news")).json.news[0].title === "We go again", "news published");

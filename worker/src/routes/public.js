@@ -331,7 +331,10 @@ pub.get("/stats", async (c) => {
   return c.json({
     ok: true,
     clubRecord: {
-      played: Number(baseline.played) || derived.played, wins: Number(baseline.wins) || derived.wins,
+      // Games played = the most-capped ever-present player's verified apps (the
+      // club's true total games); the stored record is only the W/D/L record.
+      played: Math.max(Number(baseline.played) || derived.played, bases.reduce((m, b) => Math.max(m, Number(b.apps) || 0), 0)),
+      wins: Number(baseline.wins) || derived.wins,
       draws: Number(baseline.draws) || derived.draws, losses: Number(baseline.losses) || derived.losses,
       goalsFor: Number(baseline.goalsFor) || derived.goalsFor, goalsAgainst: Number(baseline.goalsAgainst) || derived.goalsAgainst,
       badge: baseline.badge || ""
@@ -339,6 +342,20 @@ pub.get("/stats", async (c) => {
     recorded: { count: matches.length, wins: logW, draws: logD, losses: logL, goalsFor: logGF, goalsAgainst: logGA, winStreak: winBest, unbeaten: unbBest },
     extremes: { bestWin, worstLoss, cleanSheets, goalFests, hatTricks: hats.reduce((a, h) => a + Number(h.n), 0) },
     boards, players, opposition
+  });
+});
+
+/* ---- socials (editable handles for the Social page) ---- */
+pub.get("/socials", async (c) => {
+  const row = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='socials'").first();
+  let socials = {}; try { socials = row ? JSON.parse(row.value || "{}") : {}; } catch (e) {}
+  return c.json({
+    ok: true,
+    socials: {
+      tiktok: socials.tiktok || "danwhizzy",
+      twitch: socials.twitch || "40yrvirgil",
+      youtube: socials.youtube || ""
+    }
   });
 });
 
@@ -374,6 +391,28 @@ pub.get("/home", async (c) => {
     `SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses FROM matches ${seasonWhere}`
   ).bind(...seasonArgs).first();
 
+  // Complete all-time record: the owner-verified baseline (the full 500+ era)
+  // with the archive-derived totals as a fallback. Lets the home card show the
+  // whole story by default, with the current-season slice a toggle away.
+  const baseRows = rows(await c.env.DB.prepare("SELECT key,value FROM club_record_baselines").all());
+  const bl = {}; for (const r of baseRows) bl[r.key] = r.value;
+  const derivedAll = await c.env.DB.prepare(
+    `SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses,
+            COALESCE(SUM(our_score),0) goalsFor, COALESCE(SUM(their_score),0) goalsAgainst FROM matches`
+  ).first();
+  // Total games the club has EVER played = the most-capped ever-present
+  // player's verified apps (Tüpci is ever-present, so his 564 apps = the club's
+  // total games). The stored club record (392) is only the competitive W/D/L
+  // record, not the games-played total — so "played" takes the larger figure.
+  const maxAppsRow = await c.env.DB.prepare("SELECT MAX(apps) m FROM player_career_baselines").first();
+  const maxApps = maxAppsRow && maxAppsRow.m ? Number(maxAppsRow.m) : 0;
+  const recordAll = {
+    played: Math.max(Number(bl.played) || derivedAll.played, maxApps),
+    wins: Number(bl.wins) || derivedAll.wins,
+    draws: Number(bl.draws) || derivedAll.draws, losses: Number(bl.losses) || derivedAll.losses,
+    goalsFor: Number(bl.goalsFor) || derivedAll.goalsFor, goalsAgainst: Number(bl.goalsAgainst) || derivedAll.goalsAgainst
+  };
+
   const leagueRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='league_status'").first();
   let leagueStatus = null; try { leagueStatus = leagueRow ? JSON.parse(leagueRow.value || "null") : null; } catch (e) {}
 
@@ -382,7 +421,7 @@ pub.get("/home", async (c) => {
   ).all());
   const bannerRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='banner'").first();
   let banner = null; try { banner = bannerRow ? JSON.parse(bannerRow.value || "null") : null; } catch (e) {}
-  return c.json({ ok: true, latestResult: latest, nextFixture, form, record, leagueStatus, news, banner });
+  return c.json({ ok: true, latestResult: latest, nextFixture, form, record, recordAll, leagueStatus, news, banner });
 });
 
 export default pub;
