@@ -482,15 +482,28 @@
      USERS
      ============================================================ */
   function renderUsers(body) {
-    NET.adminUsers().then(function (res) {
+    body.innerHTML = U.emptyState("Loading…", "", "⏱");
+    // Squad is needed for the account↔player link picker; make sure it's loaded.
+    var need = (window.SQUAD && window.SQUAD.length) ? Promise.resolve() : NET.squad().then(function (r) { if (r && r.ok) window.SQUAD = r.squad; });
+    Promise.all([NET.adminUsers(), need]).then(function (results) {
+      var res = results[0];
       var list = (res && res.users) || [];
-      body.innerHTML = '<div class="admin-sublist">' + list.map(function (u) {
-        return '<div class="admin-row"><span class="admin-row-main">' + esc(u.display) + " · L" + u.level + (u.banned ? " · BANNED" : "") + "</span>" +
-          (NET.isAdmin() ? '<input type="number" class="us-level" data-id="' + u.id + '" min="1" max="9" value="' + u.level + '" style="width:52px">' +
+      var admin9 = NET.isAdmin();
+      body.innerHTML = '<p class="screen-intro">Set access levels, ban/unban, and (L9) link an account to the squad player it belongs to.</p>' +
+        '<div class="admin-sublist">' + list.map(function (u) {
+        return '<div class="admin-row admin-row-stack">' +
+          '<div class="admin-row-top"><span class="admin-row-main">' + esc(u.display) + " · L" + u.level + (u.banned ? " · BANNED" : "") +
+            (u.linked_player_name ? ' <span class="admin-inline-note">↔ ' + esc(u.linked_player_name) + "</span>" : "") + "</span>" +
+          (admin9 ? '<input type="number" class="us-level" data-id="' + u.id + '" min="1" max="9" value="' + u.level + '" style="width:52px">' +
             '<button class="btn btn-ghost btn-small us-setlevel" data-id="' + u.id + '">Set</button>' +
             '<button class="btn btn-ghost btn-small us-ban" data-id="' + u.id + '" data-banned="' + (u.banned ? "0" : "1") + '">' + (u.banned ? "Unban" : "Ban") + "</button>" : "") +
+          "</div>" +
+          (admin9 ? '<div class="admin-row-link">' +
+            '<label class="field field-inline"><span class="field-label">Linked player</span>' +
+            '<select class="us-player" data-id="' + u.id + '">' + playerOptions(u.linked_player_id || "") + "</select></label>" +
+            '<button class="btn btn-ghost btn-small us-link" data-id="' + u.id + '">Save link</button></div>' : "") +
         "</div>";
-      }).join("");
+      }).join("") + "</div>";
       U.$$(".us-setlevel", body).forEach(function (btn) {
         btn.addEventListener("click", function () {
           var lvl = body.querySelector('.us-level[data-id="' + btn.getAttribute("data-id") + '"]').value;
@@ -499,6 +512,15 @@
       });
       U.$$(".us-ban", body).forEach(function (btn) {
         btn.addEventListener("click", function () { NET.adminUserBan(btn.getAttribute("data-id"), btn.getAttribute("data-banned") === "1").then(function () { renderTab("users"); }); });
+      });
+      U.$$(".us-link", body).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var pid = body.querySelector('.us-player[data-id="' + btn.getAttribute("data-id") + '"]').value;
+          NET.adminProfileRole(btn.getAttribute("data-id"), { linkedPlayerId: pid }).then(function (r) {
+            if (r && r.ok) { U.toast(pid ? "Account linked to player." : "Link cleared."); renderTab("users"); }
+            else U.toast("✗ link failed");
+          });
+        });
       });
     });
   }

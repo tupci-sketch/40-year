@@ -88,4 +88,16 @@ ok(home.json.news.length === 1, "home: news");
 ok((await get(app, env, "/api/fixtures")).json.fixtures.length === 1, "fixtures upcoming");
 ok((await get(app, env, "/api/news")).json.news[0].title === "We go again", "news published");
 
+// stats centre: club all-time + recorded slice + streaks + boards
+const stats = await get(app, env, "/api/stats");
+ok(stats.json.ok && stats.json.recorded.count === 3, "stats: recorded count");
+ok(stats.json.recorded.wins === 2 && stats.json.recorded.draws === 1 && stats.json.recorded.losses === 0, "stats: recorded W/D/L");
+ok(stats.json.recorded.goalsFor === 6 && stats.json.recorded.goalsAgainst === 3, "stats: recorded GF/GA");
+ok(stats.json.recorded.winStreak === 1 && stats.json.recorded.unbeaten === 3, "stats: streaks (win run 1, unbeaten 3)");
+const careerGoals = stats.json.boards.careerGoals;
+ok(careerGoals[0].player_id === "tupci" && careerGoals[0].val === 353, "stats: career goals = baseline 351 + 2 recorded-after");
+ok(stats.json.players.tupci.careerAssists === 438 && stats.json.players.tupci.careerGames === 395, "stats: tupci career assists/games folded");
+ok(stats.json.opposition.length === 3 && stats.json.opposition.every((o) => o.p === 1), "stats: opposition head-to-head (3 opponents)");
+ok(stats.json.boards.goldenBoot.length >= 2 && stats.json.boards.goldenBoot[0].val === 2, "stats: golden boot (recorded)");
+
 done();

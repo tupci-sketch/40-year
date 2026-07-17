@@ -101,6 +101,7 @@
     match:         function (id) { return this.get("/matches/" + encodeURIComponent(id)); },
     player:        function (id) { return this.get("/players/" + encodeURIComponent(id)); },
     leaderboards:  function (q) { return this.get("/leaderboards" + qs(q)); },
+    stats:         function () { return this.get("/stats"); },
     fixtures:      function () { return this.get("/fixtures"); },
     news:          function () { return this.get("/news"); },
     gaffers:       function () { return this.get("/gaffers"); },

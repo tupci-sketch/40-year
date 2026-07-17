@@ -50,6 +50,14 @@ ok(pub3.json.profile.linkedPlayer && pub3.json.profile.linkedPlayer.id === "amy"
 // bad link target rejected
 ok((await patchReq(app, env, "/api/admin/users/" + userId + "/profile-role", { linkedPlayerId: "ghost" }, H(adminTok))).status === 400, "linking unknown player rejected");
 
+// partial update: sending only the player link must NOT wipe the identity
+await patchReq(app, env, "/api/admin/users/" + userId + "/profile-role", { linkedPlayerId: "" }, H(adminTok));
+const rowAfterClear = await DB.prepare("SELECT primary_identity_id, linked_player_id FROM user_profiles WHERE user_id=?").bind(userId).first();
+ok(rowAfterClear.linked_player_id === null && rowAfterClear.primary_identity_id === idSquad, "partial update: clearing link keeps identity");
+await patchReq(app, env, "/api/admin/users/" + userId + "/profile-role", { linkedPlayerId: "amy" }, H(adminTok));
+const rowAfterRelink = await DB.prepare("SELECT primary_identity_id, linked_player_id FROM user_profiles WHERE user_id=?").bind(userId).first();
+ok(rowAfterRelink.linked_player_id === "amy" && rowAfterRelink.primary_identity_id === idSquad, "partial update: re-linking keeps identity");
+
 // ---- privacy: profile_public off hides the whole profile ----
 await app.request("/api/me/privacy", { method: "PATCH", headers: { ...H(amyTok), "Content-Type": "application/json" }, body: JSON.stringify({ profilePublic: false }) }, env);
 ok((await get(app, env, "/api/profiles/amy")).status === 403, "private profile hidden from public view");

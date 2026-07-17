@@ -130,18 +130,25 @@ proAdmin.patch("/users/:id/profile-role", async (c) => {
   const b = await c.req.json().catch(() => ({}));
   const user = await c.env.DB.prepare("SELECT id FROM users WHERE id=?").bind(userId).first();
   if (!user) return deny(c, "not_found", 404);
+  const existing = await c.env.DB.prepare("SELECT primary_identity_id, linked_player_id FROM user_profiles WHERE user_id=?").bind(userId).first();
 
-  let linkedPlayerId = null;
-  if (b.linkedPlayerId) {
-    const p = await c.env.DB.prepare("SELECT id FROM players WHERE id=?").bind(clean(b.linkedPlayerId, 24)).first();
-    if (!p) return deny(c, "player_not_found", 400);
-    linkedPlayerId = p.id;
+  // Partial update: only touch a field the caller actually sent, so linking a
+  // player doesn't wipe the identity (and vice-versa). Empty string = clear.
+  let linkedPlayerId = existing ? existing.linked_player_id : null;
+  if ("linkedPlayerId" in b) {
+    if (b.linkedPlayerId) {
+      const p = await c.env.DB.prepare("SELECT id FROM players WHERE id=?").bind(clean(b.linkedPlayerId, 24)).first();
+      if (!p) return deny(c, "player_not_found", 400);
+      linkedPlayerId = p.id;
+    } else linkedPlayerId = null;
   }
-  let identityId = null;
-  if (b.identityId) {
-    const idt = await c.env.DB.prepare("SELECT id FROM user_identity_types WHERE id=?").bind(parseInt(b.identityId, 10)).first();
-    if (!idt) return deny(c, "identity_not_found", 400);
-    identityId = idt.id;
+  let identityId = existing ? existing.primary_identity_id : null;
+  if ("identityId" in b) {
+    if (b.identityId) {
+      const idt = await c.env.DB.prepare("SELECT id FROM user_identity_types WHERE id=?").bind(parseInt(b.identityId, 10)).first();
+      if (!idt) return deny(c, "identity_not_found", 400);
+      identityId = idt.id;
+    } else identityId = null;
   }
   await c.env.DB.prepare(
     `INSERT INTO user_profiles (user_id, primary_identity_id, linked_player_id) VALUES (?,?,?)

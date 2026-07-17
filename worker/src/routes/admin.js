@@ -487,7 +487,15 @@ admin.post("/settings", async (c) => {
 /* ---------------- USERS (L9) ---------------- */
 admin.get("/users", async (c) => {
   const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
-  const list = rows(await c.env.DB.prepare("SELECT id,username,display,level,banned,created_iso,last_iso FROM users ORDER BY level DESC, username ASC").all());
+  const list = rows(await c.env.DB.prepare(
+    `SELECT u.id, u.username, u.display, u.level, u.banned, u.created_iso, u.last_iso,
+            up.linked_player_id, up.primary_identity_id,
+            p.name AS linked_player_name
+     FROM users u
+     LEFT JOIN user_profiles up ON up.user_id = u.id
+     LEFT JOIN players p ON p.id = up.linked_player_id
+     ORDER BY u.level DESC, u.username ASC`
+  ).all());
   return c.json({ ok: true, users: list });
 });
 

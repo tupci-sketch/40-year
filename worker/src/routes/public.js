@@ -176,6 +176,156 @@ pub.get("/leaderboards", async (c) => {
   return c.json({ ok: true, metric, leaderboard: list });
 });
 
+/* ---- stats centre: club record + recorded slice + streaks + all boards ----
+   Everything the old Stats page needed, computed server-side in a handful of
+   grouped queries so the client just renders. "Career/all-time" boards fold
+   each player's verified baseline into their recorded contributions after the
+   baseline seq (same honest model as the player page); "recorded" boards use
+   only the games with a full stat line on file. */
+pub.get("/stats", async (c) => {
+  // Club record: verified baseline (k/v) with the archive-derived totals as fallback.
+  const baseRows = rows(await c.env.DB.prepare("SELECT key,value FROM club_record_baselines").all());
+  const baseline = {}; for (const r of baseRows) baseline[r.key] = r.value;
+  const derived = await c.env.DB.prepare(
+    `SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses,
+            COALESCE(SUM(our_score),0) goalsFor, COALESCE(SUM(their_score),0) goalsAgainst FROM matches`
+  ).first();
+
+  // Chronological result stream for streaks + opposition head-to-head.
+  const matches = rows(await c.env.DB.prepare(
+    "SELECT id, opponent, our_score, their_score, result FROM matches ORDER BY id ASC"
+  ).all());
+  let win = 0, winBest = 0, unb = 0, unbBest = 0, logW = 0, logD = 0, logL = 0, logGF = 0, logGA = 0;
+  let bestWin = null, worstLoss = null, cleanSheets = 0, goalFests = 0;
+  const byOpp = {};
+  for (const m of matches) {
+    const our = Number(m.our_score) || 0, their = Number(m.their_score) || 0;
+    if (m.result === "W") { win++; unb++; logW++; } else if (m.result === "D") { win = 0; unb++; logD++; } else { win = 0; unb = 0; logL++; }
+    if (win > winBest) winBest = win;
+    if (unb > unbBest) unbBest = unb;
+    logGF += our; logGA += their;
+    if (m.result === "W" && (!bestWin || (our - their) > bestWin.margin || ((our - their) === bestWin.margin && our > bestWin.our)))
+      bestWin = { margin: our - their, our, their, opp: m.opponent };
+    if (m.result === "L" && (!worstLoss || (their - our) > worstLoss.margin || ((their - our) === worstLoss.margin && their > worstLoss.their)))
+      worstLoss = { margin: their - our, our, their, opp: m.opponent };
+    if (their === 0) cleanSheets++;
+    if (our + their >= 9) goalFests++;
+    const k = (m.opponent || "Unknown").trim();
+    const o = byOpp[k] || (byOpp[k] = { name: k, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 });
+    o.p++;
+    if (m.result === "W") o.w++; else if (m.result === "D") o.d++; else if (m.result === "L") o.l++;
+    o.gf += our; o.ga += their;
+  }
+  const opposition = Object.keys(byOpp).map((k) => byOpp[k]).sort((a, b) => b.p - a.p || a.name.localeCompare(b.name));
+
+  // Per-player recorded aggregates (joined to matches for win% + a stat line = an appearance).
+  const rec = rows(await c.env.DB.prepare(
+    `SELECT mps.player_id,
+            COUNT(*) apps,
+            COALESCE(SUM(mps.goals),0) goals,
+            COALESCE(SUM(mps.assists),0) assists,
+            AVG(mps.rating) avg_rating,
+            SUM(CASE WHEN mps.rating IS NOT NULL THEN 1 ELSE 0 END) rated,
+            COALESCE(SUM(mps.red_cards),0) reds,
+            COALESCE(SUM(mps.tackles),0) tackles,
+            COALESCE(SUM(mps.passes_made),0) passes_made,
+            COALESCE(SUM(mps.pass_attempts),0) pass_attempts,
+            COALESCE(SUM(CASE WHEN m.result='W' THEN 1 ELSE 0 END),0) wins
+     FROM match_player_stats mps JOIN matches m ON m.id=mps.match_id
+     GROUP BY mps.player_id`
+  ).all());
+  // Recorded contributions AFTER each player's baseline seq (for all-time = baseline + these).
+  const after = rows(await c.env.DB.prepare(
+    `SELECT mps.player_id, COUNT(*) apps, COALESCE(SUM(mps.goals),0) goals, COALESCE(SUM(mps.assists),0) assists
+     FROM match_player_stats mps JOIN player_career_baselines b ON b.player_id=mps.player_id
+     WHERE mps.match_id > b.as_of_seq GROUP BY mps.player_id`
+  ).all());
+  const hats = rows(await c.env.DB.prepare(
+    "SELECT player_id, COUNT(*) n FROM match_player_stats WHERE goals >= 3 GROUP BY player_id"
+  ).all());
+  const motm = rows(await c.env.DB.prepare(
+    "SELECT motm_player_id id, COUNT(*) n FROM matches WHERE motm_player_id IS NOT NULL AND motm_player_id <> '' GROUP BY motm_player_id"
+  ).all());
+  const bases = rows(await c.env.DB.prepare(
+    "SELECT player_id, apps, goals, assists, avg_rating, as_of_seq, win_pct FROM player_career_baselines"
+  ).all());
+
+  const recBy = {}; for (const r of rec) recBy[r.player_id] = r;
+  const afterBy = {}; for (const r of after) afterBy[r.player_id] = r;
+  const baseBy = {}; for (const b of bases) baseBy[b.player_id] = b;
+
+  // Build the union of every player id we know a total for.
+  const ids = {}; for (const r of rec) ids[r.player_id] = 1; for (const b of bases) ids[b.player_id] = 1;
+
+  // Career all-time per player = baseline + recorded-after-baseline; if no baseline, all recorded.
+  const career = {};
+  for (const id of Object.keys(ids)) {
+    const b = baseBy[id], a = afterBy[id], r = recBy[id];
+    if (b) {
+      career[id] = {
+        games: (Number(b.apps) || 0) + (a ? Number(a.apps) : 0),
+        goals: (Number(b.goals) || 0) + (a ? Number(a.goals) : 0),
+        assists: (Number(b.assists) || 0) + (a ? Number(a.assists) : 0),
+        avg_rating: b.avg_rating != null ? Number(b.avg_rating) : (r && r.avg_rating != null ? Number(r.avg_rating) : null),
+        win_pct: b.win_pct != null ? Number(b.win_pct) : null,
+        hasBaseline: true
+      };
+    } else if (r) {
+      career[id] = {
+        games: Number(r.apps) || 0, goals: Number(r.goals) || 0, assists: Number(r.assists) || 0,
+        avg_rating: r.avg_rating != null ? Number(r.avg_rating) : null,
+        win_pct: r.apps ? Math.round((r.wins / r.apps) * 100) : null, hasBaseline: false
+      };
+    }
+  }
+
+  const sortDesc = (arr) => arr.sort((a, b) => b.val - a.val);
+  const boards = {
+    goldenBoot: sortDesc(rec.filter((r) => r.goals > 0).map((r) => ({ player_id: r.player_id, val: Number(r.goals) }))),
+    assists: sortDesc(rec.filter((r) => r.assists > 0).map((r) => ({ player_id: r.player_id, val: Number(r.assists) }))),
+    rating: rec.filter((r) => r.rated > 0).map((r) => ({ player_id: r.player_id, val: Number(r.avg_rating), n: Number(r.rated) })).sort((a, b) => b.val - a.val),
+    motm: sortDesc(motm.map((r) => ({ player_id: r.id, val: Number(r.n) }))),
+    hatTricks: sortDesc(hats.map((r) => ({ player_id: r.player_id, val: Number(r.n) }))),
+    reds: sortDesc(rec.filter((r) => r.reds > 0).map((r) => ({ player_id: r.player_id, val: Number(r.reds) }))),
+    careerGoals: sortDesc(Object.keys(career).filter((id) => career[id].goals > 0).map((id) => ({ player_id: id, val: career[id].goals }))),
+    careerAssists: sortDesc(Object.keys(career).filter((id) => career[id].assists > 0).map((id) => ({ player_id: id, val: career[id].assists })))
+  };
+  // Biggest contributors: career goals+assists per game, reasonable sample.
+  boards.contributors = Object.keys(career).map((id) => {
+    const c2 = career[id], g = c2.goals, a = c2.assists, n = c2.games || 1;
+    return { player_id: id, g, a, games: c2.games, per: (g + a) / n };
+  }).filter((r) => r.games >= 20).sort((a, b) => b.per - a.per);
+
+  // Per-player table payload (recorded pass% + career headline) keyed by id.
+  const players = {};
+  for (const id of Object.keys(ids)) {
+    const r = recBy[id], cr = career[id] || {};
+    players[id] = {
+      recApps: r ? Number(r.apps) : 0, recGoals: r ? Number(r.goals) : 0, recAssists: r ? Number(r.assists) : 0,
+      recAvg: r && r.avg_rating != null ? Number(r.avg_rating) : null,
+      recTackles: r ? Number(r.tackles) : 0,
+      passPct: r && r.pass_attempts ? Math.round((r.passes_made / r.pass_attempts) * 100) : null,
+      recWinPct: r && r.apps ? Math.round((r.wins / r.apps) * 100) : null,
+      careerGames: cr.games || 0, careerGoals: cr.goals || 0, careerAssists: cr.assists || 0,
+      careerAvg: cr.avg_rating != null ? cr.avg_rating : null, careerWinPct: cr.win_pct != null ? cr.win_pct : null,
+      hasBaseline: !!cr.hasBaseline
+    };
+  }
+
+  return c.json({
+    ok: true,
+    clubRecord: {
+      played: Number(baseline.played) || derived.played, wins: Number(baseline.wins) || derived.wins,
+      draws: Number(baseline.draws) || derived.draws, losses: Number(baseline.losses) || derived.losses,
+      goalsFor: Number(baseline.goalsFor) || derived.goalsFor, goalsAgainst: Number(baseline.goalsAgainst) || derived.goalsAgainst,
+      badge: baseline.badge || ""
+    },
+    recorded: { count: matches.length, wins: logW, draws: logD, losses: logL, goalsFor: logGF, goalsAgainst: logGA, winStreak: winBest, unbeaten: unbBest },
+    extremes: { bestWin, worstLoss, cleanSheets, goalFests, hatTricks: hats.reduce((a, h) => a + Number(h.n), 0) },
+    boards, players, opposition
+  });
+});
+
 /* ---- gaffers (active) ---- */
 pub.get("/gaffers", async (c) => {
   const list = rows(await c.env.DB.prepare("SELECT id,name,active FROM gaffers WHERE active=1 ORDER BY name ASC").all());

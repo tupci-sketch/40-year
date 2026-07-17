@@ -432,9 +432,10 @@
           '<div class="tile-row">' + U.statTile("Played", ms.length) + U.statTile("Won", w, { accent: "win" }) + U.statTile("Drawn", d) + U.statTile("Lost", l, { accent: "loss" }) + "</div>" +
           '<div class="section-label">Meetings</div>' +
           ms.map(function (m) {
-            return '<a class="result-row" href="#match/' + m.id + '">' + U.pill(m.result) +
+            return '<a class="result-row" href="#match/' + m.id + '"><div class="result-main">' + U.pill(m.result) +
+              '<div class="result-mid"><span class="result-line">Match ' + m.id + (m.stage && m.stage !== "league" ? " · " + U.esc(STAGE_LABEL[m.stage] || m.stage) : "") + "</span></div>" +
               '<span class="result-score">' + m.our_score + "–" + m.their_score + "</span>" +
-              '<span class="result-meta">' + (m.date_iso ? U.fmtDate(m.date_iso) : "") + "</span></a>";
+              '<span class="result-meta">' + (m.date_iso ? U.fmtDate(m.date_iso) : "") + "</span></div></a>";
           }).join("");
         U.runCountUps(mt);
       });
@@ -871,52 +872,146 @@
   /* ========================================================
      STATS / HONOURS / GAFFER / NEWS / SOCIAL / SEARCH / ABOUT
      ======================================================== */
+  /* One leaderboard panel: [{player_id, val, n?}] + a value formatter. */
+  function lbPanel(title, rows, fmt, unit) {
+    if (!rows || !rows.length) return "";
+    return '<div class="panel lb-panel"><div class="lb-title">' + U.esc(title) + "</div><ol class=\"lb\">" +
+      rows.slice(0, 12).map(function (r) {
+        var p = U.playerById(r.player_id);
+        var who = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a> " + U.controlBadge(p) : U.esc(r.player_id);
+        return "<li><span class='lb-name'>" + who + "</span><span class='lb-val'>" + fmt(r) +
+          (unit ? "<span class='lb-unit'>" + unit + "</span>" : "") + "</span></li>";
+      }).join("") + "</ol></div>";
+  }
+
   PAGES.stats = {
     enter: function () {
-      var clubBox = U.$("#stats-club"), lbBox = U.$("#stats-leaders");
-      clubBox.innerHTML = U.emptyState("Loading…", "", "⏱");
-      NET.clubRecord().then(function (res) {
-        var block = liveBlock(res, "the record");
+      var clubBox = U.$("#stats-club"), lbBox = U.$("#stats-leaders"), oppBox = U.$("#stats-opposition");
+      clubBox.innerHTML = U.emptyState("Counting…", "", "⏱"); lbBox.innerHTML = ""; oppBox.innerHTML = "";
+      Promise.all([NET.stats(), loadSquad()]).then(function (results) {
+        var res = results[0];
+        var block = liveBlock(res, "the stats centre");
         if (block) { clubBox.innerHTML = block; return; }
-        var d = res.derived || {}, b = res.baseline || {};
-        clubBox.innerHTML = U.statTile("Played", U.num(b.played) || U.num(d.played)) + U.statTile("Wins", U.num(b.wins) || U.num(d.wins), { accent: "win" }) +
-          U.statTile("Draws", U.num(b.draws) || U.num(d.draws)) + U.statTile("Losses", U.num(b.losses) || U.num(d.losses), { accent: "loss" }) +
-          U.statTile("Goals for", U.num(b.goalsFor) || U.num(d.goalsFor)) + U.statTile("Goals against", U.num(b.goalsAgainst) || U.num(d.goalsAgainst));
+        var cr = res.clubRecord || {}, rc = res.recorded || {}, b = res.boards || {}, players = res.players || {}, opp = res.opposition || [];
+
+        /* ---- club tiles: all-time verified + the recorded slice + streaks ---- */
+        clubBox.innerHTML =
+          '<div class="tile-row">' +
+            U.statTile("Played", U.num(cr.played), { accent: "electric" }) +
+            U.statTile("Wins", U.num(cr.wins), { accent: "win" }) +
+            U.statTile("Draws", U.num(cr.draws), { accent: "draw" }) +
+            U.statTile("Losses", U.num(cr.losses), { accent: "loss" }) +
+            U.statTile("Goals for", U.num(cr.goalsFor), { accent: "gold" }) +
+            U.statTile("Goals against", U.num(cr.goalsAgainst)) +
+            U.statTile("Win %", U.winPct(cr.wins, cr.played), { suffix: "%" }) +
+            (cr.badge ? U.statTile("Badge", cr.badge, { accent: "gold" }) : "") +
+          "</div>" +
+          '<div class="section-label">The recorded games · ' + U.num(rc.count) + " on file</div>" +
+          '<div class="tile-row">' +
+            U.statTile("Record", (rc.wins || 0) + " – " + (rc.draws || 0) + " – " + (rc.losses || 0)) +
+            U.statTile("Scored", U.num(rc.goalsFor), { accent: "gold" }) +
+            U.statTile("Conceded", U.num(rc.goalsAgainst)) +
+            U.statTile("Longest win run", U.num(rc.winStreak), { accent: "win" }) +
+            U.statTile("Longest unbeaten", U.num(rc.unbeaten), { accent: "electric" }) +
+          "</div>" +
+          '<p class="sync-note">All-time totals = the EA-era baseline plus every match logged since. The recorded games are the slice with full match-by-match detail.</p>';
         U.runCountUps(clubBox);
+
+        /* ---- leaderboards ---- */
+        var f0 = function (r) { return r.val; };
+        var contribHtml = (b.contributors && b.contributors.length)
+          ? '<div class="section-label">Biggest contributors · goals + assists per game</div>' +
+            '<div class="panel lb-panel"><ol class="lb lb-contrib">' +
+            b.contributors.slice(0, 12).map(function (r) {
+              var p = U.playerById(r.player_id);
+              var who = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a> " + U.controlBadge(p) : U.esc(r.player_id);
+              return "<li><span class='lb-name'>" + who +
+                "<span class='lb-sub'>" + r.g + "G + " + r.a + "A across " + r.games + " games</span></span>" +
+                "<span class='lb-val'>" + r.per.toFixed(2) + "<span class='lb-unit'>/game</span></span></li>";
+            }).join("") + "</ol></div>"
+          : "";
+
+        lbBox.innerHTML =
+          contribHtml +
+          '<div class="lb-grid">' +
+            lbPanel("Golden Boot · recorded games", b.goldenBoot, f0) +
+            lbPanel("Career goals · all-time", b.careerGoals, f0) +
+            lbPanel("Assists · recorded games", b.assists, f0) +
+            lbPanel("Career assists · all-time", b.careerAssists, f0) +
+            lbPanel("Average rating · recorded", b.rating, function (r) { return Number(r.val).toFixed(2); }) +
+            lbPanel("Man of the Match", b.motm, f0) +
+            lbPanel("Hat-tricks", b.hatTricks, f0) +
+            lbPanel("Discipline · red cards", b.reds, f0) +
+          "</div>" +
+          '<p class="sync-note">Recorded-game boards count everyone — including the algorithms. Career boards fold each player’s verified all-time total into everything logged since.</p>';
+
+        /* ---- career table for the humans ---- */
+        // Every player carrying the "human" tag belongs here — Amy included —
+        // whether or not they've got a verified baseline or recorded stats yet.
+        var humanRows = (window.SQUAD || []).filter(function (p) { return p.isHuman; })
+          .map(function (p) { return { id: p.id, d: players[p.id] || {} }; })
+          .sort(function (a, b2) { return (b2.d.careerGoals || 0) - (a.d.careerGoals || 0); });
+        var careerHtml = humanRows.length
+          ? '<div class="section-label">Career records · the humans</div>' +
+            '<div class="panel"><div class="table-scroll"><table class="opp-table opp-table-wide career-table">' +
+            '<thead><tr><th>Player</th><th>Games</th><th>G</th><th>A</th><th>Avg R</th><th>Pass %</th><th>Tkl</th><th>Win %</th></tr></thead><tbody>' +
+            humanRows.map(function (r) {
+              var p = U.playerById(r.id), d = r.d;
+              var nm = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a>" : U.esc(r.id);
+              return "<tr><td>" + nm + "</td><td>" + (d.careerGames || 0) + "</td><td>" + (d.careerGoals || 0) + "</td><td>" + (d.careerAssists || 0) + "</td><td>" +
+                (d.careerAvg != null ? Number(d.careerAvg).toFixed(1) : "—") + "</td><td>" + (d.passPct != null ? d.passPct + "%" : "—") + "</td><td>" +
+                (d.recTackles || 0) + "</td><td>" + (d.careerWinPct != null ? d.careerWinPct + "%" : "—") + "</td></tr>";
+            }).join("") + "</tbody></table></div></div>"
+          : "";
+
+        /* ---- opposition head-to-head ---- */
+        oppBox.innerHTML =
+          careerHtml +
+          '<div class="section-label">Opposition · head to head</div>' +
+          '<div class="panel"><div class="table-scroll"><table class="opp-table opp-table-wide">' +
+          '<thead><tr><th>Opponent</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th></tr></thead><tbody>' +
+          opp.map(function (o) {
+            return '<tr><td><a href="#opponent/' + encodeURIComponent(o.name) + '">' + U.esc(o.name) + "</a></td><td>" +
+              o.p + "</td><td>" + o.w + "</td><td>" + o.d + "</td><td>" + o.l + "</td><td>" + o.gf + "</td><td>" + o.ga + "</td></tr>";
+          }).join("") + "</tbody></table></div></div>";
       });
-      var metric = "goals";
-      function renderLb() {
-        lbBox.innerHTML = U.emptyState("Loading…", "", "⏱");
-        loadSquad().then(function () {
-          NET.leaderboards({ metric: metric }).then(function (res) {
-            var block = liveBlock(res, "leaderboards");
-            if (block) { lbBox.innerHTML = block; return; }
-            lbBox.innerHTML = '<div class="tabbar">' + ["goals", "assists", "apps", "rating"].map(function (m) {
-              return '<button class="tab' + (m === metric ? " active" : "") + '" data-m="' + m + '">' + m.charAt(0).toUpperCase() + m.slice(1) + "</button>";
-            }).join("") + "</div>" +
-            '<div class="table-scroll"><table class="opp-table"><thead><tr><th>#</th><th>Player</th><th>' + metric + "</th></tr></thead><tbody>" +
-              (res.leaderboard || []).map(function (r, i) {
-                var p = U.playerById(r.player_id);
-                var val = metric === "rating" ? (r.avg_rating != null ? Number(r.avg_rating).toFixed(1) : "—") : r[metric === "apps" ? "apps" : metric];
-                return "<tr><td>" + (i + 1) + "</td><td>" + (p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a>" : U.esc(r.player_id)) + "</td><td>" + val + "</td></tr>";
-              }).join("") + "</tbody></table></div>";
-            U.$$(".tabbar .tab", lbBox).forEach(function (b) { b.addEventListener("click", function () { metric = b.getAttribute("data-m"); renderLb(); }); });
-          });
-        });
-      }
-      renderLb();
     }
   };
 
   PAGES.honours = {
     enter: function () {
       var cabinet = U.$("#honours-cabinet"), timeline = U.$("#honours-timeline");
-      cabinet.innerHTML = ""; timeline.innerHTML = U.emptyState("Loading…", "", "🏆");
-      NET.seasons().then(function (res) {
-        var seasons = (res && res.seasons) || [];
-        timeline.innerHTML = '<div class="section-label">Seasons</div>' + (seasons.length ? seasons.map(function (s) {
-          return '<div class="panel"><strong>' + U.esc(s.label) + "</strong>" + (s.id === (res.currentSeason) ? ' <span class="pill pill-win">current</span>' : "") + "</div>";
-        }).join("") : U.emptyState("No seasons recorded yet", "", "—"));
+      cabinet.innerHTML = U.emptyState("Opening the cabinet…", "", "🏆"); timeline.innerHTML = "";
+      Promise.all([NET.stats(), NET.seasons()]).then(function (results) {
+        var st = results[0], seasonsRes = results[1];
+        var block = liveBlock(st, "the trophy cabinet");
+        if (block) { cabinet.innerHTML = block; }
+        else {
+          var x = st.extremes || {};
+          cabinet.innerHTML = '<div class="tile-row">' +
+            (x.bestWin ? U.statTile("Biggest win", x.bestWin.our + "–" + x.bestWin.their, { accent: "win", sub: "vs " + x.bestWin.opp }) : "") +
+            (x.worstLoss ? U.statTile("Heaviest defeat", x.worstLoss.our + "–" + x.worstLoss.their, { accent: "loss", sub: "vs " + x.worstLoss.opp + " · character building" }) : "") +
+            U.statTile("Clean sheets", U.num(x.cleanSheets), { accent: "electric", sub: "recorded games" }) +
+            U.statTile("Hat-tricks", U.num(x.hatTricks), { accent: "gold", sub: "and counting" }) +
+            (x.goalFests ? U.statTile("9+ goal thrillers", U.num(x.goalFests), { sub: "defending optional" }) : "") +
+          "</div>";
+          U.runCountUps(cabinet);
+        }
+        var seasons = (seasonsRes && seasonsRes.seasons) || [];
+        var items = [{ dateLabel: "2024", title: "Club founded", sub: "Fifteen names on a sheet, one badge, zero doubts. Est. 2024.", tone: "note" }];
+        seasons.slice().sort(function (a, b) { return (a.sort || 0) - (b.sort || 0); }).forEach(function (s) {
+          items.push({ dateLabel: U.esc(s.label), title: s.label + (s.id === seasonsRes.currentSeason ? " · current" : (s.archived ? " · archived" : "")),
+            sub: "", tone: s.id === seasonsRes.currentSeason ? "up" : "" });
+        });
+        timeline.innerHTML = '<div class="section-label">The story so far</div>' +
+          '<div class="timeline">' + items.map(function (it) {
+            return '<div class="timeline-item' + (it.tone ? " timeline-" + it.tone : "") + '">' +
+              '<span class="timeline-dot"></span>' +
+              '<span class="timeline-date">' + U.esc(it.dateLabel) + "</span>" +
+              '<span class="timeline-title">' + U.esc(it.title) + "</span>" +
+              (it.sub ? '<span class="timeline-sub">' + U.esc(it.sub) + "</span>" : "") +
+            "</div>";
+          }).join("") + "</div>";
       });
     }
   };

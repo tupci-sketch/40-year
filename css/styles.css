@@ -1347,6 +1347,11 @@ body.nav-open #site-nav { display: block; }
   font-size: 0.82rem;
 }
 .admin-row-main { min-width: 0; overflow-wrap: anywhere; }
+.admin-row-stack { flex-direction: column; align-items: stretch; }
+.admin-row-stack .admin-row-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.admin-row-link { display: flex; align-items: flex-end; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(164, 165, 166, 0.1); flex-wrap: wrap; }
+.admin-row-link .field-inline { flex: 1; min-width: 150px; margin: 0; }
+.admin-row-link .field-inline .field-label { font-size: 0.62rem; }
 .admin-banned { color: var(--loss); font-weight: 600; }
 .admin-pull-out { margin-top: 10px; }
 .admin-pull-ok { color: var(--win) !important; }
@@ -1758,6 +1763,7 @@ textarea { resize: vertical; font-family: var(--font-body); }
 .lb-sub { display: block; font-size: 0.72rem; color: var(--silver); font-weight: 400; margin-top: 2px; white-space: normal; }
 .lb-contrib .lb-name { white-space: normal; }
 .lb-unit { font-size: 0.6rem; color: var(--silver); margin-left: 2px; font-weight: 600; }
+.lb-title { font-family: var(--font-sub); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-bright); font-weight: 700; margin: 2px 0 4px; }
 
 /* ---- NEWS / The Gazette ---- */
 .news-grid { display: grid; gap: 14px; }
