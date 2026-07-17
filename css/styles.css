@@ -1880,6 +1880,41 @@ textarea { resize: vertical; font-family: var(--font-body); }
 .forum-reply-box, .forum-compose-box { margin-top: 14px; }
 .forum-reply-box textarea, .forum-compose-box textarea { width: 100%; resize: vertical; }
 
+/* ---- forum: richer thread rows, authors, reactions ---- */
+.forum-cat-n { font-size: 0.7em; opacity: 0.8; margin-left: 2px; }
+.forum-thread {
+  display: flex; align-items: center; gap: 12px; text-decoration: none;
+  background: var(--panel-grad); border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.forum-thread:hover { border-color: rgba(242, 180, 92, 0.5); transform: translateX(2px); }
+.forum-thread .forum-thread-main { flex: 1; min-width: 0; }
+.forum-thread-by { font-size: 0.74rem; color: var(--silver); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.forum-thread-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.forum-thread-side .forum-thread-replies { font-size: 0.95rem; min-width: 0; }
+.forum-thread-when { font-size: 0.68rem; color: var(--silver); }
+
+.forum-post { position: relative; }
+.forum-post .forum-del { position: absolute; top: 12px; right: 12px; }
+.forum-post .post-meta { padding-right: 30px; }
+.post-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.post-author { font-weight: 600; }
+.post-time { font-size: 0.72rem; color: var(--silver); margin-left: auto; }
+.forum-post-body { font-size: 0.95rem; line-height: 1.55; color: var(--silver-light, #cfd0d2); word-wrap: break-word; margin: 0; }
+
+/* reaction bars (forum + chat) */
+.react-bar { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+.react-btn {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px;
+  background: rgba(7, 3, 11, 0.5); border: 1px solid var(--line); color: var(--white);
+  cursor: pointer; font-size: 0.86rem; line-height: 1.4; transition: border-color 0.15s ease, background 0.15s ease;
+}
+.react-btn:hover { border-color: var(--gold-bright); }
+.react-btn.react-on { border-color: var(--purple-electric); background: rgba(105, 22, 204, 0.24); }
+.react-n { font-size: 0.72rem; color: var(--gold-bright); font-weight: 600; }
+.chat-msg .react-bar { margin-top: 5px; }
+
 /* ---- PERSONAL (level 9) ---- */
 .pers-toggles { display: grid; gap: 10px; margin-bottom: 16px; }
 .pers-toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; }

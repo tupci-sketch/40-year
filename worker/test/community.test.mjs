@@ -41,8 +41,14 @@ const rep = await post(app, env, "/api/forum/threads/" + th.json.id + "/posts", 
 ok(rep.json.ok, "reply to thread");
 const tv = await get(app, env, "/api/forum/threads/" + th.json.id);
 ok(tv.json.thread.title === "Fish" && tv.json.thread.replies === 1 && tv.json.posts.length === 1, "thread view + reply count");
+ok(tv.json.thread.author === "Alice" && tv.json.posts[0].author === "Bobmod", "thread + posts carry author names");
 const list = await get(app, env, "/api/forum/threads?category=banter");
-ok(list.json.threads.length === 1 && list.json.threads[0].category === "banter", "thread list by category");
+ok(list.json.threads.length === 1 && list.json.threads[0].category === "banter" && list.json.threads[0].author === "Alice", "thread list by category + author");
+// react to the OP, then confirm the tally comes back on the next read
+const rx = await post(app, env, "/api/reactions", { target_type: "thread", target_id: String(th.json.id), emoji: "🔥" }, H(tokA));
+ok(rx.json.ok && rx.json.reacted === true, "reaction added");
+const tv2 = await get(app, env, "/api/forum/threads/" + th.json.id, H(tokA));
+ok((tv2.json.thread.reactions || []).some((r) => r.emoji === "🔥" && r.n === 1) && (tv2.json.thread.myReactions || []).indexOf("🔥") !== -1, "thread view carries reaction tally + mine");
 ok((await app.request("/api/forum/posts/" + rep.json.id, { method: "DELETE", headers: H(tokA) }, env)).status === 403, "L1 cannot delete post");
 ok((await app.request("/api/forum/posts/" + rep.json.id, { method: "DELETE", headers: H(tokB) }, env)).status === 200, "L5 deletes post");
 

@@ -93,6 +93,50 @@
     return '<span class="deco-name' + (accent ? " name-accent-" + accent : "") + '">' + U.esc(display) + "</span>" + (flair ? ' <span class="deco-flair">' + U.esc(flair) + "</span>" : "");
   }
 
+  /* Relative "2h ago" timestamps for chat + forum. */
+  function timeAgo(iso) {
+    if (!iso) return "";
+    var d = new Date(iso), s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (isNaN(s)) return U.fmtDate(iso);
+    if (s < 45) return "just now";
+    var m = Math.round(s / 60); if (m < 60) return m + "m ago";
+    var h = Math.round(m / 60); if (h < 24) return h + "h ago";
+    var days = Math.round(h / 24); if (days < 7) return days + "d ago";
+    return U.fmtDate(iso);
+  }
+  function levelChip(level) {
+    return Number(level) >= 9 ? '<span class="level-chip level-admin">ADMIN</span>'
+         : Number(level) >= 5 ? '<span class="level-chip level-mod">MOD</span>' : "";
+  }
+  function authorLine(display, level, flair, accent, iso) {
+    return '<div class="post-meta"><span class="post-author">' + decoName(display || "Member", flair, accent) + "</span>" +
+      levelChip(level) + '<span class="post-time">' + timeAgo(iso) + "</span></div>";
+  }
+
+  /* Reaction bar — a fixed emoji set with live counts; highlights the caller's. */
+  var REACTS = ["👍", "❤️", "😂", "🔥", "😮"];
+  function reactionBar(targetType, targetId, reactions, mine) {
+    mine = mine || [];
+    var counts = {}; (reactions || []).forEach(function (r) { counts[r.emoji] = r.n; });
+    return '<div class="react-bar">' + REACTS.map(function (e) {
+      var n = counts[e] || 0, on = mine.indexOf(e) !== -1;
+      return '<button class="react-btn' + (on ? " react-on" : "") + '" type="button" data-tt="' + targetType + '" data-ti="' + U.esc(targetId) + '" data-emoji="' + e + '">' +
+        e + (n ? ' <span class="react-n">' + n + "</span>" : "") + "</button>";
+    }).join("") + "</div>";
+  }
+  /* Wire every reaction button under `container`; `after` re-renders on success. */
+  function wireReactions(container, after) {
+    U.$$(".react-btn", container).forEach(function (b) {
+      b.addEventListener("click", function (e) {
+        e.preventDefault(); e.stopPropagation();
+        if (!NET.me) { openAuth(); return; }
+        NET.react(b.getAttribute("data-tt"), b.getAttribute("data-ti"), b.getAttribute("data-emoji")).then(function (r) {
+          if (r && r.ok && typeof after === "function") after();
+        });
+      });
+    });
+  }
+
   function renderAccount() {
     var bar = U.$("#account-bar");
     if (NET.me) {
@@ -654,7 +698,8 @@
       var chips = '<div class="forum-cats">' +
         '<button class="forum-cat' + (forumCat === "" ? " active" : "") + '" data-cat="">All</button>' +
         cats.map(function (c) {
-          return '<button class="forum-cat' + (forumCat === c.key ? " active" : "") + '" data-cat="' + U.esc(c.key) + '">' + U.esc(c.name) + "</button>";
+          return '<button class="forum-cat' + (forumCat === c.key ? " active" : "") + '" data-cat="' + U.esc(c.key) + '">' + U.esc(c.name) +
+            (c.threads ? ' <span class="forum-cat-n">' + c.threads + "</span>" : "") + "</button>";
         }).join("") + "</div>";
       var newBox = NET.me ? '<div class="panel"><div class="field-row">' +
         '<label class="field"><span class="field-label">Category</span><select id="fc-cat">' + cats.map(function (c) { return '<option value="' + U.esc(c.key) + '"' + (c.key === forumCat ? " selected" : "") + ">" + U.esc(c.name) + "</option>"; }).join("") + "</select></label>" +
@@ -662,10 +707,11 @@
         '<textarea id="fc-body" rows="3" placeholder="Say your piece…" maxlength="4000"></textarea>' +
         '<div class="admin-actions"><button class="btn btn-primary btn-small" id="fc-post">Post thread</button><span class="admin-inline-note" id="fc-msg"></span></div></div>' : "";
       var threadsHtml = (res.threads || []).length ? (res.threads).map(function (t) {
-        return '<a class="result-row forum-thread-row" href="#thread/' + t.id + '">' +
-          (t.pinned ? '<span class="news-pin">📌</span>' : "") +
-          '<span class="result-opp">' + U.esc(t.title) + "</span>" +
-          '<span class="result-meta">' + U.esc(t.category_name || "") + " · " + t.replies + " replies · " + U.fmtDate(t.last_iso) + "</span></a>";
+        return '<a class="forum-thread" href="#thread/' + t.id + '">' +
+          '<div class="forum-thread-main">' + (t.pinned ? '<span class="news-pin">📌</span> ' : "") +
+            '<span class="forum-thread-title">' + U.esc(t.title) + "</span>" +
+            '<span class="forum-thread-by">' + decoName(t.author, t.flair, t.accent) + " · " + U.esc(t.category_name || "") + "</span></div>" +
+          '<div class="forum-thread-side"><span class="forum-thread-replies">' + t.replies + " 💬</span><span class=\"forum-thread-when\">" + timeAgo(t.last_iso) + "</span></div></a>";
       }).join("") : U.emptyState("No threads here yet", "Be the first to post in this board.", "🗨");
       mt.innerHTML = chips + newBox + threadsHtml;
       U.$$(".forum-cat", mt).forEach(function (b) {
@@ -694,10 +740,30 @@
         var t = res.thread;
         var replyBox = NET.me ? '<div class="panel"><textarea id="th-reply" rows="3" placeholder="Reply…" maxlength="4000"></textarea>' +
           '<div class="admin-actions"><button class="btn btn-primary btn-small" id="th-send">Reply</button><span class="admin-inline-note" id="th-msg"></span></div></div>' : "";
+        var posts = res.posts || [];
         mt.innerHTML =
-          '<article class="panel"><h2>' + U.esc(t.title) + "</h2><p class=\"forum-post-body\">" + U.esc(t.body).replace(/\n/g, "<br>") + "</p></article>" +
-          (res.posts || []).map(function (p) { return '<article class="panel forum-post"><p>' + U.esc(p.body).replace(/\n/g, "<br>") + '</p><span class="admin-inline-note">' + U.fmtDateTime(p.created_iso) + "</span></article>"; }).join("") +
+          '<article class="panel forum-op">' +
+            authorLine(t.author, t.author_level, t.flair, t.accent, t.created_iso) +
+            "<h2>" + U.esc(t.title) + "</h2>" +
+            '<p class="forum-post-body">' + U.esc(t.body).replace(/\n/g, "<br>") + "</p>" +
+            reactionBar("thread", t.id, t.reactions, t.myReactions) +
+          "</article>" +
+          '<div class="section-label">' + posts.length + (posts.length === 1 ? " reply" : " replies") + "</div>" +
+          (posts.length ? posts.map(function (p) {
+            return '<article class="panel forum-post">' +
+              (NET.isMod() ? '<button class="chat-del forum-del" data-id="' + U.esc(p.id) + '" title="Remove">×</button>' : "") +
+              authorLine(p.author, p.author_level, p.flair, p.accent, p.created_iso) +
+              "<p>" + U.esc(p.body).replace(/\n/g, "<br>") + "</p>" +
+              reactionBar("post", p.id, p.reactions, p.myReactions) +
+            "</article>";
+          }).join("") : '<p class="screen-intro">No replies yet — get the conversation going.</p>') +
           replyBox;
+        wireReactions(mt, function () { PAGES.thread.enter(arg); });
+        U.$$(".forum-del", mt).forEach(function (b) {
+          b.addEventListener("click", function () {
+            NET.forumDeletePost(b.getAttribute("data-id")).then(function (r) { if (r && r.ok) { U.toast("Removed."); PAGES.thread.enter(arg); } });
+          });
+        });
         var sb = U.$("#th-send");
         if (sb) sb.addEventListener("click", function () {
           var text = U.$("#th-reply").value.trim();
@@ -729,8 +795,9 @@
             return '<div class="chat-msg' + (mine ? " chat-mine" : "") + '">' +
               '<div class="chat-meta"><span class="chat-name' + (m.accent ? " name-accent-" + U.esc(m.accent) : "") + '">' + U.esc(m.display) + "</span>" +
                 (m.flair ? ' <span class="deco-flair">' + U.esc(m.flair) + "</span>" : "") + lvl +
-                '<span class="chat-ts">' + U.fmtDateTime(m.created_iso) + "</span>" + del + "</div>" +
+                '<span class="chat-ts">' + timeAgo(m.created_iso) + "</span>" + del + "</div>" +
               '<div class="chat-text">' + U.esc(m.body) + "</div>" +
+              reactionBar("chat", m.id, m.reactions, m.myReactions) +
             "</div>";
           }).join("")
         : U.emptyState("Quiet in here", "First word wins the moral high ground.", "💬");
@@ -742,6 +809,7 @@
           });
         });
       });
+      wireReactions(list, fetchChatMessages);
       if (stick) list.scrollTop = list.scrollHeight;
     });
   }

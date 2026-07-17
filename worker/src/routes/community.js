@@ -30,6 +30,21 @@ com.get("/chat", async (c) => {
   const page = list.slice(0, limit);
   const cos = await cosmeticsFor(c.env, page.map((m) => m.user_id));
   for (const m of page) { const cm = cos[m.user_id] || {}; m.flair = cm.flair || null; m.accent = cm.accent || null; }
+  // Reaction tallies per message + what the caller reacted to.
+  if (page.length) {
+    const ids = page.map((m) => String(m.id));
+    const ph = ids.map(() => "?").join(",");
+    const rx = rows(await c.env.DB.prepare(
+      `SELECT target_id, emoji, COUNT(*) n FROM reactions WHERE target_type='chat' AND target_id IN (${ph}) GROUP BY target_id, emoji`
+    ).bind(...ids).all());
+    const mx = rows(await c.env.DB.prepare(
+      `SELECT target_id, emoji FROM reactions WHERE target_type='chat' AND user_id=? AND target_id IN (${ph})`
+    ).bind(u.id, ...ids).all());
+    const rmap = {}, mine = {};
+    for (const r of rx) (rmap[r.target_id] = rmap[r.target_id] || []).push({ emoji: r.emoji, n: r.n });
+    for (const r of mx) (mine[r.target_id] = mine[r.target_id] || []).push(r.emoji);
+    for (const m of page) { m.reactions = rmap[String(m.id)] || []; m.myReactions = mine[String(m.id)] || []; }
+  }
   return c.json({ ok: true, messages: page, nextCursor: hasMore ? page[page.length - 1].id : null });
 });
 
@@ -54,7 +69,11 @@ com.delete("/chat/:id", async (c) => {
 
 /* ---------------- FORUM ---------------- */
 com.get("/forum/categories", async (c) => {
-  const list = rows(await c.env.DB.prepare("SELECT id,key,name,sort FROM forum_categories ORDER BY sort ASC").all());
+  const list = rows(await c.env.DB.prepare(
+    `SELECT c.id, c.key, c.name, c.sort, COUNT(t.id) AS threads
+     FROM forum_categories c LEFT JOIN forum_threads t ON t.category_id=c.id AND t.deleted_iso IS NULL
+     GROUP BY c.id ORDER BY c.sort ASC`
+  ).all());
   return c.json({ ok: true, categories: list });
 });
 
@@ -66,32 +85,71 @@ com.get("/forum/threads", async (c) => {
   if (cat) { conds.push("c.key = ?"); args.push(cat); }
   if (cursorTs) { conds.push("t.last_iso < ?"); args.push(cursorTs); }
   const list = rows(await c.env.DB.prepare(
-    `SELECT t.id,t.title,t.user_id,t.created_iso,t.last_iso,t.replies,t.pinned,c.key AS category, c.name AS category_name
+    `SELECT t.id,t.title,t.user_id,t.created_iso,t.last_iso,t.replies,t.pinned,c.key AS category, c.name AS category_name,
+            u.display AS author, u.level AS author_level
      FROM forum_threads t JOIN forum_categories c ON c.id=t.category_id
+     LEFT JOIN users u ON u.id=t.user_id
      WHERE ${conds.join(" AND ")}
      ORDER BY t.pinned DESC, t.last_iso DESC LIMIT ?`
   ).bind(...args, limit + 1).all());
   const hasMore = list.length > limit;
   const page = list.slice(0, limit);
+  const cos = await cosmeticsFor(c.env, page.map((t) => t.user_id));
+  for (const t of page) { const cm = cos[t.user_id] || {}; t.flair = cm.flair || null; t.accent = cm.accent || null; }
   return c.json({ ok: true, threads: page, nextCursor: hasMore ? page[page.length - 1].last_iso : null });
 });
 
 com.get("/forum/threads/:id", async (c) => {
   const id = parseInt(c.req.param("id"), 10);
   const t = await c.env.DB.prepare(
-    `SELECT t.*, c.key AS category, c.name AS category_name FROM forum_threads t
-     JOIN forum_categories c ON c.id=t.category_id WHERE t.id=? AND t.deleted_iso IS NULL`
+    `SELECT t.*, c.key AS category, c.name AS category_name, u.display AS author, u.level AS author_level
+     FROM forum_threads t JOIN forum_categories c ON c.id=t.category_id
+     LEFT JOIN users u ON u.id=t.user_id WHERE t.id=? AND t.deleted_iso IS NULL`
   ).bind(id).first();
   if (!t) return deny(c, "not_found", 404);
   const limit = clampLimit(c.req.query("limit"), 30, 100);
   const cursor = parseInt(c.req.query("cursor"), 10);
-  const where = isFinite(cursor) ? "AND id > ?" : "";
+  const where = isFinite(cursor) ? "AND p.id > ?" : "";
   const args = isFinite(cursor) ? [id, cursor, limit + 1] : [id, limit + 1];
   const posts = rows(await c.env.DB.prepare(
-    `SELECT id,user_id,body,created_iso FROM forum_posts WHERE thread_id=? AND deleted_iso IS NULL ${where} ORDER BY id ASC LIMIT ?`
+    `SELECT p.id, p.user_id, p.body, p.created_iso, u.display AS author, u.level AS author_level
+     FROM forum_posts p LEFT JOIN users u ON u.id=p.user_id
+     WHERE p.thread_id=? AND p.deleted_iso IS NULL ${where} ORDER BY p.id ASC LIMIT ?`
   ).bind(...args).all());
   const hasMore = posts.length > limit;
   const page = posts.slice(0, limit);
+
+  // Author cosmetics for the OP + everyone on the page.
+  const cos = await cosmeticsFor(c.env, [t.user_id].concat(page.map((p) => p.user_id)));
+  const oc = cos[t.user_id] || {}; t.flair = oc.flair || null; t.accent = oc.accent || null;
+  for (const p of page) { const cm = cos[p.user_id] || {}; p.flair = cm.flair || null; p.accent = cm.accent || null; }
+
+  // Reaction tallies for the OP (thread) + each post, plus what the caller reacted to.
+  const me = await currentUser(c);
+  const targets = [["thread", String(id)]].concat(page.map((p) => ["post", String(p.id)]));
+  const rmap = {}, mine = {};
+  if (targets.length) {
+    const tph = targets.map(() => "(?,?)").join(",");
+    const flat = [];
+    for (const [tt, ti] of targets) { flat.push(tt, ti); }
+    const rx = rows(await c.env.DB.prepare(
+      `SELECT target_type, target_id, emoji, COUNT(*) n FROM reactions
+       WHERE (target_type, target_id) IN (${tph}) GROUP BY target_type, target_id, emoji`
+    ).bind(...flat).all());
+    for (const r of rx) (rmap[r.target_type + ":" + r.target_id] = rmap[r.target_type + ":" + r.target_id] || []).push({ emoji: r.emoji, n: r.n });
+    if (me) {
+      const mx = rows(await c.env.DB.prepare(
+        `SELECT target_type, target_id, emoji FROM reactions WHERE user_id=? AND (target_type, target_id) IN (${tph})`
+      ).bind(me.id, ...flat).all());
+      for (const r of mx) mine[r.target_type + ":" + r.target_id + ":" + r.emoji] = 1;
+    }
+  }
+  t.reactions = rmap["thread:" + id] || [];
+  t.myReactions = Object.keys(mine).filter((k) => k.indexOf("thread:" + id + ":") === 0).map((k) => k.split(":")[2]);
+  for (const p of page) {
+    p.reactions = rmap["post:" + p.id] || [];
+    p.myReactions = Object.keys(mine).filter((k) => k.indexOf("post:" + p.id + ":") === 0).map((k) => k.split(":")[2]);
+  }
   return c.json({ ok: true, thread: t, posts: page, nextCursor: hasMore ? page[page.length - 1].id : null });
 });
 
