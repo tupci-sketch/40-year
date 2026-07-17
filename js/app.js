@@ -410,8 +410,51 @@
     });
   }
 
+  /* Build a probable XI for a match that has no saved teamsheet: place the
+     players who actually have a stat line (the named side) by position fit,
+     then bot-fill the rest to 11 using the preset formation. Never adds a human
+     who wasn't named. Donovan sits when Amy (Whimsy) is on the sheet. */
+  function reconstructLineup(m, stats) {
+    var fkey = (m.formation && window.FORMATIONS[m.formation]) ? m.formation : window.DEFAULT_FORMATION;
+    var f = window.FORMATIONS[fkey];
+    if (!f) return null;
+    var byId = {}; (window.SQUAD || []).forEach(function (p) { byId[p.id] = p; });
+    var namedIds = (stats || []).map(function (s) { return s.player_id; }).filter(function (id) { return byId[id]; });
+    var namedSet = {}; namedIds.forEach(function (id) { namedSet[id] = 1; });
+    var amyActive = !!namedSet.amy;
+    var named = namedIds.filter(function (id) { return !(amyActive && id === "donovan"); });
+    var slots = f.slots.map(function () { return null; });
+    var used = {};
+    function place(i, id) { if (id && byId[id] && !used[id]) { slots[i] = id; used[id] = 1; return true; } return false; }
+    // Named players first — by exact role, then position group, then anywhere.
+    ["exact", "group", "any"].forEach(function (level) {
+      f.slots.forEach(function (s, i) {
+        if (slots[i]) return;
+        for (var k = 0; k < named.length; k++) { var id = named[k]; if (used[id]) continue;
+          if (level === "any" || U.posFit(byId[id], s.pos) === level) { place(i, id); break; } }
+      });
+    });
+    // Bot-fill the rest to a full XI — only AI players, never an un-named human.
+    var bots = (window.SQUAD || []).filter(function (p) {
+      return !p.isHuman && !p.permaBench && !(amyActive && p.id === "donovan") && !used[p.id];
+    }).map(function (p) { return p.id; });
+    ["exact", "group", "any"].forEach(function (level) {
+      f.slots.forEach(function (s, i) {
+        if (slots[i]) return;
+        for (var k = 0; k < bots.length; k++) { var id = bots[k]; if (used[id]) continue;
+          if (level === "any" || U.posFit(byId[id], s.pos) === level) { place(i, id); break; } }
+      });
+    });
+    var players = [];
+    slots.forEach(function (id, i) { if (id) players.push({ player_id: id, is_sub: 0, slot_index: i }); });
+    named.forEach(function (id) { if (!used[id]) players.push({ player_id: id, is_sub: 1 }); });
+    if (!players.some(function (p) { return !p.is_sub; })) return null;
+    return { formation: fkey, players: players, captain_player_id: m.captain_player_id, reconstructed: true };
+  }
+
   function miniPitch(m) {
     var lu = m.lineup;
+    if ((!lu || !lu.players || !lu.players.length) && m.reconstructFrom) lu = reconstructLineup(m.match || m, m.reconstructFrom);
     if (!lu || !lu.players || !lu.players.length || !window.FORMATIONS[lu.formation]) {
       return '<p class="mr-nolineup">No teamsheet recorded for this game' + (NET.isMod() ? " — add one in Housekeeping." : ".") + "</p>";
     }
@@ -428,9 +471,10 @@
         '<span class="mr-shirt">' + num + cap + '</span><span class="mr-name">' + U.esc(nm) + "</span></div>";
     }).join("");
     var subsLine = subs.map(function (s) { var p = U.playerById(s.player_id); return p ? U.esc(U.surname(p)) : U.esc(s.player_id); }).join(", ");
-    return '<div class="section-label">The XI · ' + U.esc(lu.formation) + "</div>" +
+    return '<div class="section-label">' + (lu.reconstructed ? "Likely XI" : "The XI") + " · " + U.esc(lu.formation) + "</div>" +
       '<div class="mr-pitch-wrap"><div class="mr-pitch"><div class="pitch-lines"><div class="pl-halfway"></div><div class="pl-centre"></div></div>' + tokens + "</div></div>" +
-      (subsLine ? '<p class="mr-subs">Subs: ' + subsLine + "</p>" : "");
+      (subsLine ? '<p class="mr-subs">Subs: ' + subsLine + "</p>" : "") +
+      (lu.reconstructed ? '<p class="mr-nolineup">Reconstructed from who played + the preset shape — AI fills the gaps, no un-named humans added.</p>' : "");
   }
 
   function statsTable(stats) {
@@ -477,7 +521,7 @@
               (scorers ? '<div class="mr-scorers">⚽ ' + scorers + "</div>" : "") +
               (motmP ? '<div class="mr-motm">🌟 Man of the Match — <a href="#player/' + motmP.id + '">' + U.esc(motmP.name) + "</a></div>" : "") +
             "</div>" +
-            miniPitch({ lineup: res.lineup }) +
+            miniPitch({ lineup: res.lineup, match: m, reconstructFrom: res.stats }) +
             (res.stats && res.stats.length ? statsTable(res.stats) : "") +
             (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "") +
             (NET.isMod() ? '<div class="admin-actions"><button class="btn btn-ghost btn-small" id="mr-edit">Edit in Housekeeping →</button></div>' : "") +
@@ -547,7 +591,7 @@
             return '<div class="tile-row">' + U.statTile("Apps", U.num(base.apps)) + U.statTile("Goals", U.num(base.goals)) +
               U.statTile("Assists", U.num(base.assists)) + U.statTile("Avg rating", base.avg_rating != null ? Number(base.avg_rating).toFixed(1) : "—") + "</div>" +
               '<p class="screen-intro">Full verified career total' + (base.source ? " (" + U.esc(base.source) + ")" : "") +
-              " — includes the pre-recording era" + (games.length ? ". The " + games.length + " games with full match detail are listed below" : "") + ".</p>";
+              " — includes the pre-recording era" + (games.length ? ". The " + games.length + (games.length === 1 ? " game" : " games") + " with full match detail " + (games.length === 1 ? "is" : "are") + " listed below" : "") + ".</p>";
           }
           return '<div class="tile-row">' + U.statTile("Apps", U.num(rec.apps) || 0) + U.statTile("Goals", U.num(rec.goals) || 0) +
             U.statTile("Assists", U.num(rec.assists) || 0) + U.statTile("Avg rating", rec.avg_rating != null ? Number(rec.avg_rating).toFixed(1) : "—") +
@@ -571,9 +615,11 @@
             }).join("") + "</tbody></table></div>"
           : '<p class="screen-intro">No individual match stats recorded for ' + U.esc(p.name) + " yet.</p>";
 
+        var titleEl = U.$("#screen-player .screen-title");
+        if (titleEl) titleEl.textContent = p.name;
         mt.innerHTML =
           '<div class="player-dossier">' +
-            '<img class="player-portrait" src="' + U.esc(U.cardSrc(p)) + '" alt="' + U.esc(p.name) + '" onerror="this.onerror=null;this.src=\'assets/img/crest.png\'">' +
+            '<div class="card-tile player-portrait-card"><img src="' + U.esc(U.cardSrc(p)) + '" alt="' + U.esc(p.name) + '" loading="eager" fetchpriority="high" decoding="async" onerror="this.onerror=null;this.src=\'assets/img/crest.png\'"></div>' +
             "<h2>" + U.esc(p.name) + " <span class=\"player-num\">#" + p.number + "</span></h2>" +
             '<p class="player-meta">' + U.esc(pos) + " · " + U.chips(p) + "</p>" +
             (p.flavour ? '<p class="player-flavour">' + U.esc(p.flavour) + "</p>" : "") +

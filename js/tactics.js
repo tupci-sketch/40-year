@@ -47,6 +47,10 @@
     var byId = {}; players.forEach(function (p) { byId[p.id] = p; });
     var slots = f.slots.map(function () { return null; });
     var used = {};
+    // Whimsy/Donovan rule: since Amy Whimsy made her debut, the retired AI
+    // Donovan doesn't play. If Amy's in the squad, Donovan is bench-only.
+    var amyActive = players.some(function (p) { return p.id === "amy" && !p.permaBench; });
+    function benchOnly(p) { return p.permaBench || (amyActive && p.id === "donovan"); }
     function place(i, id) { if (id && byId[id] && !used[id]) { slots[i] = id; used[id] = 1; return true; } return false; }
 
     if (seed && seed.slots) f.slots.forEach(function (s, i) { place(i, seed.slots[i]); });
@@ -66,16 +70,21 @@
       if (idx !== -1) place(idx, fp.id);
     });
 
-    var avail = players.filter(function (p) { return !p.permaBench; }).map(function (p) { return p.id; });
+    var avail = players.filter(function (p) { return !benchOnly(p); }).map(function (p) { return p.id; });
+    // Fill by position fit first (exact role, then position group) so nobody
+    // is auto-placed somewhere they can't play while a fit is still on the bench.
     ["exact", "group"].forEach(function (level) {
       f.slots.forEach(function (s, i) {
         if (slots[i]) return;
         for (var k = 0; k < avail.length; k++) { var id = avail[k]; if (!used[id] && U.posFit(byId[id], s.pos) === level) { place(i, id); break; } }
       });
     });
+    // Last resort only: any remaining position-fit before a true mismatch.
     f.slots.forEach(function (s, i) {
       if (slots[i]) return;
-      for (var k = 0; k < avail.length; k++) { var id = avail[k]; if (!used[id]) { place(i, id); break; } }
+      for (var k = 0; k < avail.length; k++) { var id = avail[k]; if (!used[id] && U.posFit(byId[id], s.pos) !== "no") { place(i, id); break; } }
+      if (slots[i]) return;
+      for (var j = 0; j < avail.length; j++) { var id2 = avail[j]; if (!used[id2]) { place(i, id2); break; } }
     });
 
     var bench = players.map(function (p) { return p.id; }).filter(function (id) { return !used[id]; });

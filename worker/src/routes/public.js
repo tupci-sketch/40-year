@@ -48,6 +48,10 @@ pub.get("/players/:id", async (c) => {
   const id = c.req.param("id");
   const p = await c.env.DB.prepare("SELECT * FROM players WHERE id=?").bind(id).first();
   if (!p) return c.json({ ok: false, error: "not_found", code: 404 }, 404);
+  // Latest active uploaded card (R2) so dossiers show it, same as the squad grid.
+  const cardRow = await c.env.DB.prepare(
+    "SELECT public_url FROM player_card_assets WHERE player_id=? AND status='active' ORDER BY version DESC LIMIT 1"
+  ).bind(id).first();
   const base = await c.env.DB.prepare("SELECT * FROM player_career_baselines WHERE player_id=?").bind(id).first();
   // "Recorded" = every game this club has a stat line for (the same set the
   // match-by-match log lists). The verified baseline is the complete career
@@ -74,7 +78,7 @@ pub.get("/players/:id", async (c) => {
     ok: true,
     player: { id: p.id, number: p.number, name: p.name, slug: p.slug, controlledBy: p.controlled_by,
       isHuman: !!p.is_human, retiredAI: !!p.retired_ai, linkedTo: p.linked_to || null,
-      positions: parsePositions(p.positions_json), flavour: p.flavour },
+      positions: parsePositions(p.positions_json), flavour: p.flavour, card: cardRow ? cardRow.public_url : null },
     baseline: base || null,
     recorded: rec,
     games: games
