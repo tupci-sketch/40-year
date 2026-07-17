@@ -1822,7 +1822,7 @@
         sessionChecked = true;
         renderAccount();
         var page = parseHash().name;
-        if (["admin", "inbox", "conversation", "clubhouse", "tickets", "profile", "matchday"].indexOf(page) !== -1) route();
+        if (["admin", "inbox", "conversation", "clubhouse", "tickets", "profile", "matchday", "floor"].indexOf(page) !== -1) route();
       });
       unreadTimer = setInterval(function () { if (NET.me) refreshUnread(); }, 45000);
     } else {

@@ -621,6 +621,43 @@
   }
 
   /* ============================================================
+     POINTS (L9): add / remove / set a member's Virgil Points
+     ============================================================ */
+  function renderPoints(body) {
+    body.innerHTML = U.emptyState("Loading…", "", "🪙");
+    NET.adminUsers().then(function (res) {
+      var list = (res && res.users) || [];
+      body.innerHTML = '<div class="admin-sublist">' + list.map(function (u) {
+        return '<div class="admin-row admin-row-stack"><div class="admin-row-top"><span class="admin-row-main">' + esc(u.display) +
+            ' · L' + u.level + '</span><span class="pts-bal" data-id="' + u.id + '">🪙 ' + (u.points != null ? u.points : 0) + "</span></div>" +
+          '<div class="admin-row-link">' +
+            '<input type="number" class="pts-amt" data-id="' + u.id + '" placeholder="amount" style="width:90px">' +
+            '<button class="btn btn-ghost btn-small pts-add" data-id="' + u.id + '" data-sign="1">+ Add</button>' +
+            '<button class="btn btn-ghost btn-small pts-add" data-id="' + u.id + '" data-sign="-1">− Remove</button>' +
+            '<button class="btn btn-ghost btn-small pts-set" data-id="' + u.id + '">Set to</button></div></div>';
+      }).join("") + "</div>";
+      function adjust(id, payload) {
+        NET.adminUserPoints(id, payload).then(function (r) {
+          if (r && r.ok) { U.toast("Points updated."); var el = body.querySelector('.pts-bal[data-id="' + id + '"]'); if (el) el.textContent = "🪙 " + r.balance; }
+          else U.toast("✗ couldn't update");
+        });
+      }
+      U.$$(".pts-add", body).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-id"), amt = Number(body.querySelector('.pts-amt[data-id="' + id + '"]').value) || 0;
+          if (!amt) return; adjust(id, { delta: amt * Number(btn.getAttribute("data-sign")), reason: "admin adjustment" });
+        });
+      });
+      U.$$(".pts-set", body).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-id"), amt = Number(body.querySelector('.pts-amt[data-id="' + id + '"]').value) || 0;
+          adjust(id, { mode: "set", amount: amt, reason: "admin set" });
+        });
+      });
+    });
+  }
+
+  /* ============================================================
      TITLES (L9)
      ============================================================ */
   function renderTitles(body) {
