@@ -10,6 +10,9 @@ import { awardPoints, getBalance } from "../lib/points.js";
 
 const shop = new Hono();
 function rows(r) { return (r && r.results) || []; }
+// Guarded query: returns [] if the engagement tables aren't migrated in yet,
+// so the wallet/shop/tickets endpoints degrade to empty instead of 500ing.
+async function tryRows(env, sql, args) { try { return rows(await env.DB.prepare(sql).bind(...(args || [])).all()); } catch (e) { return []; } }
 function deny(c, code, status) { return c.json({ ok: false, error: code, code }, status); }
 async function requireUser(c) { return await currentUser(c); }
 
@@ -17,23 +20,17 @@ async function requireUser(c) { return await currentUser(c); }
 shop.get("/me/points", async (c) => {
   const u = await requireUser(c); if (!u) return deny(c, "auth", 401);
   const bal = await getBalance(c.env, u.id);
-  const events = rows(await c.env.DB.prepare(
-    "SELECT delta, reason, created_iso FROM point_events WHERE user_id=? ORDER BY id DESC LIMIT 20"
-  ).bind(u.id).all());
-  const inventory = rows(await c.env.DB.prepare(
-    "SELECT id, sku, kind, payload, fixture_id, cost, created_iso FROM user_purchases WHERE user_id=? ORDER BY id DESC"
-  ).bind(u.id).all());
+  const events = await tryRows(c.env, "SELECT delta, reason, created_iso FROM point_events WHERE user_id=? ORDER BY id DESC LIMIT 20", [u.id]);
+  const inventory = await tryRows(c.env, "SELECT id, sku, kind, payload, fixture_id, cost, created_iso FROM user_purchases WHERE user_id=? ORDER BY id DESC", [u.id]);
   return c.json({ ok: true, balance: bal.balance, lifetime: bal.lifetime, events, inventory });
 });
 
 /* ---- shop catalogue (cosmetics only; tickets are bought per-fixture) ---- */
 shop.get("/shop", async (c) => {
-  const items = rows(await c.env.DB.prepare(
-    "SELECT id, sku, name, description, kind, payload, cost, sort FROM shop_items WHERE active=1 ORDER BY sort ASC, cost ASC"
-  ).all());
+  const items = await tryRows(c.env, "SELECT id, sku, name, description, kind, payload, cost, sort FROM shop_items WHERE active=1 ORDER BY sort ASC, cost ASC");
   let owned = [];
   const u = await requireUser(c);
-  if (u) owned = rows(await c.env.DB.prepare("SELECT DISTINCT sku FROM user_purchases WHERE user_id=?").bind(u.id).all()).map((r) => r.sku);
+  if (u) owned = (await tryRows(c.env, "SELECT DISTINCT sku FROM user_purchases WHERE user_id=?", [u.id])).map((r) => r.sku);
   return c.json({ ok: true, items, owned });
 });
 
@@ -80,11 +77,10 @@ shop.post("/tickets/claim", async (c) => {
 /* ---- my tickets (upcoming, joined to fixtures) ---- */
 shop.get("/tickets", async (c) => {
   const u = await requireUser(c); if (!u) return deny(c, "auth", 401);
-  const list = rows(await c.env.DB.prepare(
+  const list = await tryRows(c.env,
     `SELECT p.id, p.fixture_id, p.created_iso, f.opponent, f.date_iso, f.kind, f.stage
      FROM user_purchases p LEFT JOIN fixtures f ON f.id=p.fixture_id
-     WHERE p.user_id=? AND p.kind='ticket' ORDER BY p.id DESC`
-  ).bind(u.id).all());
+     WHERE p.user_id=? AND p.kind='ticket' ORDER BY p.id DESC`, [u.id]);
   return c.json({ ok: true, tickets: list, cost: TICKET_COST });
 });
 

@@ -5,7 +5,7 @@
    ============================================================ */
 import { Hono } from "hono";
 import { currentUser, nowISO } from "../lib/auth.js";
-import { awardPoints, awardOnce } from "../lib/points.js";
+import { awardPoints, awardOnce, cosmeticsFor } from "../lib/points.js";
 
 const com = new Hono();
 
@@ -23,12 +23,13 @@ com.get("/chat", async (c) => {
   const where = isFinite(cursor) ? "AND id < ?" : "";
   const args = isFinite(cursor) ? [cursor, limit + 1] : [limit + 1];
   const list = rows(await c.env.DB.prepare(
-    `SELECT m.id, m.user_id, m.display, m.level, m.body, m.created_iso, up.flair, up.accent
-     FROM chat_messages m LEFT JOIN user_profiles up ON up.user_id=m.user_id
-     WHERE m.deleted_iso IS NULL ${where.replace(/\bid\b/, "m.id")} ORDER BY m.id DESC LIMIT ?`
+    `SELECT id, user_id, display, level, body, created_iso FROM chat_messages
+     WHERE deleted_iso IS NULL ${where} ORDER BY id DESC LIMIT ?`
   ).bind(...args).all());
   const hasMore = list.length > limit;
   const page = list.slice(0, limit);
+  const cos = await cosmeticsFor(c.env, page.map((m) => m.user_id));
+  for (const m of page) { const cm = cos[m.user_id] || {}; m.flair = cm.flair || null; m.accent = cm.accent || null; }
   return c.json({ ok: true, messages: page, nextCursor: hasMore ? page[page.length - 1].id : null });
 });
 

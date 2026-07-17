@@ -55,4 +55,19 @@ ok((await post(app, env, "/api/tickets/claim", { fixtureId: "fxt" }, H(tok))).st
 const tix = await get(app, env, "/api/tickets", H(tok));
 ok(tix.json.tickets.length === 1 && tix.json.tickets[0].opponent === "Rivals", "my tickets lists the claimed ticket");
 
+// ---- resilience: engagement tables not migrated in yet ----
+// A fresh DB with the points tables dropped must NOT break core endpoints
+// (chat, profile, members) that now touch cosmetics/points.
+const env2 = makeEnv();
+const DB2 = env2.DB;
+for (const t of ["user_points", "point_events", "shop_items", "user_purchases"]) DB2.prepare("DROP TABLE IF EXISTS " + t).run();
+const tok2 = (await post(app, env2, "/api/auth/register", { name: "Pre", pass: "secret123" })).json.token;
+const H2 = (t) => ({ Authorization: "Bearer " + t });
+ok((await post(app, env2, "/api/chat", { text: "hi" }, H2(tok2))).json.ok, "chat still posts with points tables absent");
+ok((await patchReq(app, env2, "/api/me/profile", { bio: "hello" }, H2(tok2))).json.ok, "profile bio still saves with points tables absent");
+ok((await get(app, env2, "/api/chat", H2(tok2))).json.ok, "chat still reads with points tables absent");
+ok((await get(app, env2, "/api/profiles/pre")).json.ok, "public profile still loads with points tables absent");
+const wallet2 = await get(app, env2, "/api/me/points", H2(tok2));
+ok(wallet2.json.ok && wallet2.json.balance === 0 && wallet2.json.events.length === 0, "wallet degrades to zero when tables absent");
+
 done();
