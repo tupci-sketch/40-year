@@ -273,19 +273,55 @@
     var loading = document.createElement("div");
     loading.innerHTML = U.emptyState("Loading…", "", "⏱");
     list.appendChild(loading);
-    NET.matches(q).then(function (res) {
+    Promise.all([NET.matches(q), loadSquad()]).then(function (rs) {
+      var res = rs[0];
       loading.remove();
       var block = liveBlock(res, "the archive");
       if (block) { if (reset) list.innerHTML = block; return; }
       if (reset && !res.matches.length) { list.innerHTML = U.emptyState("No matches yet", "", "📋"); return; }
-      res.matches.forEach(function (m) {
-        var row = document.createElement("a");
+      var canEdit = NET.isMod();
+      res.matches.forEach(function (m, i) {
+        var stage = STAGE_LABEL[m.stage] || "League";
+        var stageTag = U.esc(stage) + (m.comp_name ? " · " + U.esc(m.comp_name) : "");
+        var scorers = U.scorersLine((m.scorers || []).map(function (s) {
+          var p = U.playerById(s.id); return { name: p ? p.name : s.id, goals: s.goals };
+        }));
+        var motmP = m.motm_player_id ? U.playerById(m.motm_player_id) : null;
+        var detailed = (m.players || []).slice().sort(function (a, b) { return (Number(b.rating) || 0) - (Number(a.rating) || 0); });
+        var anyGK = detailed.some(function (t) { return (Number(t.saves) || 0) > 0 || (Number(t.conceded) || 0) > 0; });
+        var statsPanel = detailed.length
+          ? '<details class="opp-panel"><summary>Player stats · ' + detailed.length + " on record</summary>" +
+              '<div class="table-scroll"><table class="opp-table opp-table-wide"><thead><tr><th>Player</th><th>G</th><th>A</th><th>R</th><th>Sh</th><th>Tk</th><th>Pass</th>' +
+              (anyGK ? "<th>Sv</th><th>GA</th>" : "") + "</tr></thead><tbody>" +
+              detailed.map(function (t) {
+                var p = U.playerById(t.player_id);
+                var nm = p ? '<a href="#player/' + p.id + '">' + U.esc(p.name) + "</a>" : U.esc(t.player_id);
+                var isGK = p && (p.positions || [])[0] === "GK";
+                return "<tr><td>" + nm + "</td><td>" + (t.goals != null ? t.goals : "—") + "</td><td>" + (t.assists != null ? t.assists : "—") +
+                  "</td><td>" + (t.rating != null ? Number(t.rating).toFixed(1) : "—") + "</td><td>" + (t.shots != null ? t.shots : "—") +
+                  "</td><td>" + (t.tackles != null ? t.tackles : "—") + "</td><td>" + (t.passes_made != null ? t.passes_made + "/" + t.pass_attempts : "—") + "</td>" +
+                  (anyGK ? "<td>" + (isGK && t.saves != null ? t.saves : "—") + "</td><td>" + (isGK && t.conceded != null ? t.conceded : "—") + "</td>" : "") + "</tr>";
+              }).join("") + "</tbody></table></div>" +
+              (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "") + "</details>"
+          : (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "");
+        var row = document.createElement("article");
         row.className = "result-row";
-        row.href = "#match/" + m.id;
-        row.innerHTML = U.pill(m.result) +
-          '<span class="result-opp">' + U.esc(m.opponent) + "</span>" +
-          '<span class="result-score">' + (m.our_score != null ? m.our_score : "–") + "–" + (m.their_score != null ? m.their_score : "–") + "</span>" +
-          '<span class="result-meta">' + U.esc(STAGE_LABEL[m.stage] || "Match") + (m.date_iso ? " · " + U.fmtDate(m.date_iso) : "") + "</span>";
+        row.style.animationDelay = Math.min(i * 40, 400) + "ms";
+        row.innerHTML =
+          '<div class="result-main">' + U.pill(m.result) +
+            '<div class="result-mid">' +
+              '<span class="result-line"><strong>The 40Yr Virgil</strong> <span class="result-score">' +
+                (m.our_score != null ? m.our_score : "–") + " — " + (m.their_score != null ? m.their_score : "–") +
+                '</span> <a class="result-opp" href="#opponent/' + encodeURIComponent(m.opponent || "") + '">' + U.esc(m.opponent || "Unknown") + "</a></span>" +
+              (scorers ? '<span class="result-scorers">⚽ ' + scorers + "</span>" : "") +
+              (motmP ? '<span class="result-motm">🌟 MOTM ' + U.esc(U.surname(motmP)) + "</span>" : "") +
+            "</div>" +
+            '<div class="result-side"><span class="result-date">Match ' + m.id + (m.date_iso ? " · " + U.fmtDate(m.date_iso) : "") + "</span>" +
+              '<span class="result-tag">' + stageTag + "</span>" +
+              '<a class="result-report" href="#match/' + m.id + '">Report →</a>' +
+              (canEdit ? '<a class="result-report" href="#admin">✎ Edit</a>' : "") +
+            "</div>" +
+          "</div>" + statsPanel;
         list.appendChild(row);
       });
       archiveState.cursor = res.nextCursor;

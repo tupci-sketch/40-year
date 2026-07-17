@@ -993,9 +993,7 @@ body.nav-open #site-nav { display: block; }
 /* ---------- RESULTS ---------- */
 #results-list, #archive-list { display: flex; flex-direction: column; gap: 10px; }
 .result-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: block;
   background: var(--panel-grad);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
@@ -1004,9 +1002,20 @@ body.nav-open #site-nav { display: block; }
   animation: viewIn 0.4s ease backwards;
   text-decoration: none;
 }
-.result-opp { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--white); }
+.result-opp { color: var(--white); }
 .result-opp:hover { color: var(--gold-bright); }
-.result-meta { font-size: 0.74rem; color: var(--silver); white-space: nowrap; flex: none; }
+.result-report { font-family: var(--font-sub); font-size: 0.72rem; letter-spacing: 0.04em; color: var(--gold-bright); text-decoration: none; white-space: nowrap; }
+.result-report:hover { text-decoration: underline; }
+.result-scorers { font-size: 0.82rem; color: var(--silver); }
+.result-motm { font-size: 0.78rem; color: var(--gold-bright); }
+.result-note { font-size: 0.82rem; color: var(--silver); margin-top: 8px; }
+.opp-panel { margin-top: 10px; }
+.opp-panel summary { cursor: pointer; font-family: var(--font-sub); font-size: 0.82rem; color: var(--silver); padding: 4px 0; }
+.opp-panel summary:hover { color: var(--white); }
+/* Forum thread rows stay the simple single-line flex layout. */
+.forum-thread-row { display: flex; align-items: center; gap: 10px; }
+.forum-thread-row .result-opp { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-meta { font-size: 0.74rem; color: var(--silver); white-space: nowrap; }
 .result-main {
   display: flex;
   align-items: center;

@@ -90,11 +90,30 @@ pub.get("/matches", async (c) => {
   if (q.cursor) { conds.push("m.id < ?"); args.push(parseInt(q.cursor, 10) || 0); }
   const where = conds.length ? "WHERE " + conds.join(" AND ") : "";
   const list = rows(await c.env.DB.prepare(
-    `SELECT m.id,m.season_id,m.stage,m.date_iso,m.opponent,m.our_score,m.their_score,m.result,m.comp_name,m.venue
+    `SELECT m.id,m.season_id,m.stage,m.date_iso,m.opponent,m.our_score,m.their_score,m.result,m.comp_name,m.venue,m.note,m.motm_player_id
      FROM matches m ${where} ORDER BY m.id DESC LIMIT ?`
   ).bind(...args, limit + 1).all());
   const hasMore = list.length > limit;
   const page = list.slice(0, limit);
+
+  // Attach scorers + per-player stat lines for the page in two batched
+  // queries, so the archive can render the old rich rows (scorers inline +
+  // an expandable per-match stats panel) without an N+1 fan-out.
+  if (page.length) {
+    const ids = page.map((m) => m.id);
+    const ph = ids.map(() => "?").join(",");
+    const sc = rows(await c.env.DB.prepare(
+      `SELECT match_id, player_id, goals, ord FROM match_scorers WHERE match_id IN (${ph}) ORDER BY ord ASC`
+    ).bind(...ids).all());
+    const st = rows(await c.env.DB.prepare(
+      `SELECT match_id, player_id, goals, assists, rating, shots, tackles, passes_made, pass_attempts, red_cards, saves, conceded
+       FROM match_player_stats WHERE match_id IN (${ph})`
+    ).bind(...ids).all());
+    const scByMatch = {}, stByMatch = {};
+    for (const r of sc) (scByMatch[r.match_id] = scByMatch[r.match_id] || []).push({ id: r.player_id, goals: r.goals });
+    for (const r of st) (stByMatch[r.match_id] = stByMatch[r.match_id] || []).push(r);
+    for (const m of page) { m.scorers = scByMatch[m.id] || []; m.players = stByMatch[m.id] || []; }
+  }
   return c.json({ ok: true, matches: page, nextCursor: hasMore ? page[page.length - 1].id : null });
 });
 
