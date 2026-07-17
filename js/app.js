@@ -1191,49 +1191,95 @@
         var fun = window.FUN_DEFAULTS;
         var squad = (window.SQUAD || []).filter(function (p) { return p.active !== false; });
         function firstName(p) { return String(p.name || "").split(" ")[0]; }
+        function fillTpl(t, p, opp) { return String(t).replace(/\{full\}/g, p ? p.name : "—").replace(/\{name\}/g, p ? firstName(p) : "—").replace(/\{opp\}/g, opp || ""); }
 
+        // Each feature is its own thing with its own interaction — a full-page
+        // wheel and a scripture, an ask-and-answer oracle, a copyable chant, an
+        // awards ceremony, a running rumour feed, a hero pick — not six
+        // identical spin buttons.
         mt.innerHTML =
-          '<p class="screen-intro">The club’s toy box. Everything here spins. Contract length: one click.</p>' +
-          '<div class="fun-grid">' +
-            funCard("gaffer", "🎩", "The Manager Spin", "The wheel appoints a gaffer from the names and the squad. No CV required.", "Appoint the gaffer") +
-            funCard("xi", "🎲", "The XI the Gaffer Picked", "One tap throws out a starting eleven. Tactical merit not guaranteed.", "Pick the XI") +
-            funCard("chant", "📣", "Matchday Chant Machine", "Terrace poetry, generated on demand. Best sung badly.", "Give us a song") +
-            funCard("super", "🏅", "Squad Superlatives", "The club’s least official awards, handed to random names.", "Hand out awards") +
-            funCard("oracle", "🔮", "The Oracle", "Ask it anything. It answers in the club’s voice: unreliably.", "Consult the Oracle") +
-            funCard("rumour", "📰", "Transfer Rumour Mill", "Definitely-real gossip from sources close to the sofa.", "Start a rumour") +
+          '<p class="screen-intro">Six little corners of the club, each its own thing. Some you play with here; two have rooms of their own.</p>' +
+          '<div class="fun-features">' +
+            '<a class="fun-feature" href="#gaffer"><span class="fun-feature-ic">🎩</span><span class="fun-feature-t">The Gaffer Wheel</span><span class="fun-feature-s">Spin up a manager on the full stage — animation, quote and all.</span><span class="fun-feature-go">Open the dugout →</span></a>' +
+            '<a class="fun-feature" href="#book"><span class="fun-feature-ic">📖</span><span class="fun-feature-t">The Book of Tüpci</span><span class="fun-feature-s">Ten commandments, the prayers, the scripture of the system.</span><span class="fun-feature-go">Read the scripture →</span></a>' +
           "</div>" +
-          '<div class="fun-links"><a class="btn btn-ghost btn-small" href="#gaffer">🎩 Full manager wheel →</a>' +
-            '<a class="btn btn-ghost btn-small" href="#book">📖 The Book of Tüpci →</a></div>';
+          '<div class="fun-grid">' +
+            // Oracle — you ASK it something
+            '<div class="fun-card panel fun-oracle-card"><div class="fun-card-head"><span class="fun-icon">🔮</span><span class="fun-title">The Oracle</span></div>' +
+              '<p class="fun-blurb">Type a question. It answers in the club’s voice — which is to say, unreliably.</p>' +
+              '<input type="text" id="fun-oracle-q" class="fun-input" maxlength="90" placeholder="Will we win on Saturday?">' +
+              '<div class="fun-out" id="fun-out-oracle"></div>' +
+              '<div class="fun-actions"><button class="btn btn-gold btn-small" id="fun-btn-oracle">Consult the Oracle</button></div></div>' +
+            // Chant — you COPY it
+            '<div class="fun-card panel"><div class="fun-card-head"><span class="fun-icon">📣</span><span class="fun-title">Chant Machine</span></div>' +
+              '<p class="fun-blurb">Terrace poetry on demand. Best sung badly, at volume.</p>' +
+              '<div class="fun-out" id="fun-out-chant"></div>' +
+              '<div class="fun-actions"><button class="btn btn-gold btn-small" id="fun-btn-chant">Give us a song</button><button class="btn btn-ghost btn-small" id="fun-copy-chant" hidden>Copy</button></div></div>' +
+            // Superlatives — a whole CEREMONY at once
+            '<div class="fun-card panel"><div class="fun-card-head"><span class="fun-icon">🏅</span><span class="fun-title">The Awards Ceremony</span></div>' +
+              '<p class="fun-blurb">Roll the red carpet — the club’s least official honours, all handed out at once.</p>' +
+              '<div class="fun-out" id="fun-out-super"></div>' +
+              '<div class="fun-actions"><button class="btn btn-gold btn-small" id="fun-btn-super">Hold the ceremony</button></div></div>' +
+            // Rumour mill — an accumulating FEED
+            '<div class="fun-card panel"><div class="fun-card-head"><span class="fun-icon">📰</span><span class="fun-title">Rumour Mill</span></div>' +
+              '<p class="fun-blurb">Definitely-real gossip from sources close to the sofa. Keeps rolling.</p>' +
+              '<div class="fun-feed" id="fun-out-rumour"></div>' +
+              '<div class="fun-actions"><button class="btn btn-gold btn-small" id="fun-btn-rumour">Start a rumour</button></div></div>' +
+            // Player of the matchday — a hero CARD
+            '<div class="fun-card panel"><div class="fun-card-head"><span class="fun-icon">⭐</span><span class="fun-title">Player of the Matchday</span></div>' +
+              '<p class="fun-blurb">The wheel appoints a hero. No stats were consulted.</p>' +
+              '<div class="fun-out" id="fun-out-motm"></div>' +
+              '<div class="fun-actions"><button class="btn btn-gold btn-small" id="fun-btn-motm">Name the hero</button></div></div>' +
+          "</div>";
 
         function out(id) { return U.$("#fun-out-" + id, mt); }
         function fill(id, html) { var o = out(id); if (o) { o.innerHTML = html; o.classList.add("fun-out-shown"); } }
 
-        U.$("#fun-btn-gaffer", mt).addEventListener("click", function () {
-          var names = fun.gaffer.names.concat(squad.map(function (p) { return p.name; }));
-          fill("gaffer", "🎩 <strong>" + U.esc(randOf(names)) + "</strong> — " + U.esc(randOf(fun.gaffer.quotes)));
+        // Oracle: echoes your question, then answers.
+        U.$("#fun-btn-oracle", mt).addEventListener("click", function () {
+          var q = (U.$("#fun-oracle-q", mt) || {}).value || "";
+          fill("oracle", (q ? '<p class="fun-oracle-q">“' + U.esc(q.trim()) + '”</p>' : "") + '<p class="fun-oracle-a">🔮 ' + U.esc(randOf(fun.oracle)) + "</p>");
         });
-        U.$("#fun-btn-xi", mt).addEventListener("click", function () {
-          var gks = squad.filter(function (p) { return U.posGroup(p) === "GK"; });
-          var others = shuffle(squad.filter(function (p) { return U.posGroup(p) !== "GK"; }));
-          var xi = (gks.length ? [randOf(gks)] : []).concat(others.slice(0, 10));
-          fill("xi", xi.map(function (p) { return "#" + p.number + " " + U.esc(p.name); }).join(" · "));
-        });
+        // Chant: generate + reveal copy button.
+        var lastChant = "";
         U.$("#fun-btn-chant", mt).addEventListener("click", function () {
           if (!squad.length) return fill("chant", "Sign someone first.");
-          var p = randOf(squad);
-          fill("chant", U.esc(randOf(fun.chants).replace(/\{full\}/g, p.name).replace(/\{name\}/g, firstName(p))));
+          lastChant = fillTpl(randOf(fun.chants), randOf(squad));
+          fill("chant", '<p class="fun-chant">“' + U.esc(lastChant) + '”</p>');
+          U.$("#fun-copy-chant", mt).hidden = false;
         });
+        U.$("#fun-copy-chant", mt).addEventListener("click", function () {
+          if (!lastChant) return;
+          try { navigator.clipboard.writeText(lastChant).then(function () { U.toast("Copied. Go on, share it."); }, function () { U.toast("Couldn’t copy."); }); }
+          catch (e) { U.toast("Couldn’t copy."); }
+        });
+        // Awards: hand out five at once, ceremony style.
         U.$("#fun-btn-super", mt).addEventListener("click", function () {
-          var picks = shuffle(fun.superlatives).slice(0, 3).map(function (s) {
-            return '<div class="fun-award"><span class="fun-award-name">' + U.esc(randOf(squad).name || "—") + "</span> — " + U.esc(s) + "</div>";
-          });
-          fill("super", picks.join(""));
+          var awards = shuffle(fun.superlatives).slice(0, 5), people = shuffle(squad);
+          fill("super", '<ul class="fun-awards">' + awards.map(function (a, i) {
+            var who = people[i % people.length];
+            return '<li><span class="fun-award-title">🏅 ' + U.esc(a) + '</span><span class="fun-award-name">' + U.esc(who ? who.name : "—") + "</span></li>";
+          }).join("") + "</ul>");
         });
-        U.$("#fun-btn-oracle", mt).addEventListener("click", function () { fill("oracle", "🔮 " + U.esc(randOf(fun.oracle))); });
+        // Rumour: prepend to a running feed with a mock reliability %.
         U.$("#fun-btn-rumour", mt).addEventListener("click", function () {
-          if (!squad.length) return fill("rumour", "No squad, no gossip.");
-          var p = randOf(squad), opp = randOf(fun.rumourClubs);
-          fill("rumour", "📰 " + U.esc(randOf(fun.rumours).replace(/\{full\}/g, p.name).replace(/\{name\}/g, firstName(p)).replace(/\{opp\}/g, opp)));
+          if (!squad.length) return;
+          var txt = fillTpl(randOf(fun.rumours), randOf(squad), randOf(fun.rumourClubs));
+          var rel = 40 + Math.floor(Math.random() * 60);
+          var feed = out("rumour");
+          var item = document.createElement("div");
+          item.className = "fun-rumour-item";
+          item.innerHTML = '<span class="fun-rumour-rel">' + rel + '% reliable</span><span class="fun-rumour-txt">' + U.esc(txt) + "</span>";
+          feed.insertBefore(item, feed.firstChild);
+          feed.classList.add("fun-out-shown");
+        });
+        // Player of the matchday: a little hero card.
+        var heroLines = ["carried the whole side and refused to make it weird.", "was everywhere. The router could not cope.",
+          "did something the algorithm will study for years.", "gets the nod. The screenshot is already framed.",
+          "ran the game from a position nobody asked them to play."];
+        U.$("#fun-btn-motm", mt).addEventListener("click", function () {
+          var who = randOf(squad);
+          fill("motm", who ? '<div class="fun-hero"><span class="fun-hero-num">#' + who.number + '</span><strong>' + U.esc(who.name) + "</strong><span class=\"fun-hero-line\">" + U.esc(randOf(heroLines)) + "</span></div>" : "");
         });
       });
     }
