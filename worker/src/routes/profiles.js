@@ -17,7 +17,7 @@ function deny(c, code, status) { return c.json({ ok: false, error: code, code },
    IP/private prefs/DMs. Linked player only shown when the user opted in. */
 async function buildPublicProfile(env, user) {
   const prof = await env.DB.prepare(
-    "SELECT bio, primary_identity_id, linked_player_id, show_linked FROM user_profiles WHERE user_id=?"
+    "SELECT bio, primary_identity_id, linked_player_id, show_linked, flair, accent FROM user_profiles WHERE user_id=?"
   ).bind(user.id).first();
   const priv = await env.DB.prepare("SELECT profile_public, show_join FROM user_privacy WHERE user_id=?").bind(user.id).first();
   if (priv && Number(priv.profile_public) === 0) return null;
@@ -44,7 +44,9 @@ async function buildPublicProfile(env, user) {
     bio: prof ? prof.bio : null,
     identity: identity,
     titles: titles,
-    linkedPlayer: linkedPlayer
+    linkedPlayer: linkedPlayer,
+    flair: prof ? prof.flair : null,
+    accent: prof ? prof.accent : null
   };
 }
 
@@ -68,7 +70,7 @@ pro.get("/members", async (c) => {
   if (identity) { conds.push("up.primary_identity_id = (SELECT id FROM user_identity_types WHERE name=?)"); args.push(identity); }
   if (isFinite(cursor)) { conds.push("u.id > ?"); args.push(cursor); }
   const list = rows(await c.env.DB.prepare(
-    `SELECT u.id, u.username, u.display, u.created_iso, up.primary_identity_id
+    `SELECT u.id, u.username, u.display, u.created_iso, up.primary_identity_id, up.flair, up.accent
      FROM users u LEFT JOIN user_profiles up ON up.user_id=u.id LEFT JOIN user_privacy pv ON pv.user_id=u.id
      WHERE ${conds.join(" AND ")} ORDER BY u.id ASC LIMIT ?`
   ).bind(...args, limit + 1).all());
@@ -88,12 +90,33 @@ pro.get("/me/profile", async (c) => {
 pro.patch("/me/profile", async (c) => {
   const u = await currentUser(c); if (!u) return deny(c, "auth", 401);
   const b = await c.req.json().catch(() => ({}));
-  const bio = clean(b.bio, 280);
-  const showLinked = b.showLinked ? 1 : 0;
+  const existing = await c.env.DB.prepare("SELECT bio, show_linked, flair, accent FROM user_profiles WHERE user_id=?").bind(u.id).first();
+  const bio = "bio" in b ? clean(b.bio, 280) : (existing ? existing.bio : "");
+  const showLinked = "showLinked" in b ? (b.showLinked ? 1 : 0) : (existing ? existing.show_linked : 0);
+
+  // Cosmetics can only be equipped if the member owns them; "" clears the slot.
+  let flair = existing ? existing.flair : null;
+  if ("flair" in b) {
+    if (!b.flair) flair = null;
+    else {
+      const owned = await c.env.DB.prepare("SELECT payload FROM user_purchases WHERE user_id=? AND kind='flair' AND payload=?").bind(u.id, String(b.flair).slice(0, 8)).first();
+      if (!owned) return deny(c, "not_owned", 400);
+      flair = owned.payload;
+    }
+  }
+  let accent = existing ? existing.accent : null;
+  if ("accent" in b) {
+    if (!b.accent) accent = null;
+    else {
+      const owned = await c.env.DB.prepare("SELECT payload FROM user_purchases WHERE user_id=? AND kind='accent' AND payload=?").bind(u.id, String(b.accent).slice(0, 16)).first();
+      if (!owned) return deny(c, "not_owned", 400);
+      accent = owned.payload;
+    }
+  }
   await c.env.DB.prepare(
-    `INSERT INTO user_profiles (user_id,bio,show_linked) VALUES (?,?,?)
-     ON CONFLICT(user_id) DO UPDATE SET bio=excluded.bio, show_linked=excluded.show_linked`
-  ).bind(u.id, bio, showLinked).run();
+    `INSERT INTO user_profiles (user_id,bio,show_linked,flair,accent) VALUES (?,?,?,?,?)
+     ON CONFLICT(user_id) DO UPDATE SET bio=excluded.bio, show_linked=excluded.show_linked, flair=excluded.flair, accent=excluded.accent`
+  ).bind(u.id, bio, showLinked, flair, accent).run();
   return c.json({ ok: true });
 });
 

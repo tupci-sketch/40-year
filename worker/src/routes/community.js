@@ -5,6 +5,7 @@
    ============================================================ */
 import { Hono } from "hono";
 import { currentUser, nowISO } from "../lib/auth.js";
+import { awardPoints, awardOnce } from "../lib/points.js";
 
 const com = new Hono();
 
@@ -22,8 +23,9 @@ com.get("/chat", async (c) => {
   const where = isFinite(cursor) ? "AND id < ?" : "";
   const args = isFinite(cursor) ? [cursor, limit + 1] : [limit + 1];
   const list = rows(await c.env.DB.prepare(
-    `SELECT id, user_id, display, level, body, created_iso FROM chat_messages
-     WHERE deleted_iso IS NULL ${where} ORDER BY id DESC LIMIT ?`
+    `SELECT m.id, m.user_id, m.display, m.level, m.body, m.created_iso, up.flair, up.accent
+     FROM chat_messages m LEFT JOIN user_profiles up ON up.user_id=m.user_id
+     WHERE m.deleted_iso IS NULL ${where.replace(/\bid\b/, "m.id")} ORDER BY m.id DESC LIMIT ?`
   ).bind(...args).all());
   const hasMore = list.length > limit;
   const page = list.slice(0, limit);
@@ -38,6 +40,7 @@ com.post("/chat", async (c) => {
   const res = await c.env.DB.prepare(
     "INSERT INTO chat_messages (user_id, display, level, body, created_iso) VALUES (?,?,?,?,?)"
   ).bind(u.id, u.display, Number(u.level) || 1, text, nowISO()).run();
+  await awardPoints(c.env, u.id, 1, "chat message");
   return c.json({ ok: true, id: res.meta.last_row_id });
 });
 
@@ -103,6 +106,7 @@ com.post("/forum/threads", async (c) => {
     `INSERT INTO forum_threads (category_id,user_id,title,body,created_iso,last_iso,replies,pinned)
      VALUES (?,?,?,?,?,?,0,0)`
   ).bind(cat.id, u.id, title, text, ts, ts).run();
+  await awardPoints(c.env, u.id, 5, "started a thread");
   return c.json({ ok: true, id: res.meta.last_row_id });
 });
 
@@ -119,6 +123,7 @@ com.post("/forum/threads/:id/posts", async (c) => {
     "INSERT INTO forum_posts (thread_id,user_id,body,created_iso) VALUES (?,?,?,?)"
   ).bind(id, u.id, text, ts).run();
   await c.env.DB.prepare("UPDATE forum_threads SET replies=replies+1, last_iso=? WHERE id=?").bind(ts, id).run();
+  await awardPoints(c.env, u.id, 2, "forum reply");
   return c.json({ ok: true, id: res.meta.last_row_id });
 });
 
@@ -145,6 +150,7 @@ com.post("/fixtures/:id/availability", async (c) => {
       `INSERT INTO availability (fixture_id,user_id,status,updated_iso) VALUES (?,?,?,?)
        ON CONFLICT(fixture_id,user_id) DO UPDATE SET status=excluded.status, updated_iso=excluded.updated_iso`
     ).bind(fid, u.id, status, nowISO()).run();
+    await awardOnce(c.env, u.id, 3, "rsvp:" + fid);
   } else {
     await c.env.DB.prepare("DELETE FROM availability WHERE fixture_id=? AND user_id=?").bind(fid, u.id).run();
   }

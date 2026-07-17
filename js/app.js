@@ -88,6 +88,11 @@
   /* ========================================================
      ACCOUNT / AUTH
      ======================================================== */
+  /* A member's name with their equipped cosmetics (accent colour + flair). */
+  function decoName(display, flair, accent) {
+    return '<span class="deco-name' + (accent ? " name-accent-" + accent : "") + '">' + U.esc(display) + "</span>" + (flair ? ' <span class="deco-flair">' + U.esc(flair) + "</span>" : "");
+  }
+
   function renderAccount() {
     var bar = U.$("#account-bar");
     if (NET.me) {
@@ -722,7 +727,8 @@
             var del = NET.isMod() ? '<button class="chat-del" data-id="' + U.esc(m.id) + '" title="Remove message">×</button>' : "";
             var mine = NET.me && m.display === NET.me.name;
             return '<div class="chat-msg' + (mine ? " chat-mine" : "") + '">' +
-              '<div class="chat-meta"><span class="chat-name">' + U.esc(m.display) + "</span>" + lvl +
+              '<div class="chat-meta"><span class="chat-name' + (m.accent ? " name-accent-" + U.esc(m.accent) : "") + '">' + U.esc(m.display) + "</span>" +
+                (m.flair ? ' <span class="deco-flair">' + U.esc(m.flair) + "</span>" : "") + lvl +
                 '<span class="chat-ts">' + U.fmtDateTime(m.created_iso) + "</span>" + del + "</div>" +
               '<div class="chat-text">' + U.esc(m.body) + "</div>" +
             "</div>";
@@ -776,7 +782,7 @@
       var block = liveBlock(res, "members");
       if (block) { mt.innerHTML = block; return; }
       mt.innerHTML = (res.members || []).map(function (m) {
-        return '<a class="result-row" href="#profile/' + U.esc(m.username) + '"><span class="result-opp">' + U.esc(m.display) + '</span><span class="result-meta">' + U.fmtDate(m.created_iso) + "</span></a>";
+        return '<a class="result-row forum-thread-row" href="#profile/' + U.esc(m.username) + '"><span class="result-opp">' + decoName(m.display, m.flair, m.accent) + '</span><span class="result-meta">' + U.fmtDate(m.created_iso) + "</span></a>";
       }).join("") || U.emptyState("No members yet", "", "—");
     });
   }
@@ -848,22 +854,98 @@
       NET.profile(arg).then(function (res) {
         if (!res || !res.ok) { mt.innerHTML = U.emptyState(res && res.error === "private" ? "Private profile" : "Member not found", "", "🔒"); return; }
         var p = res.profile;
+        var mine = NET.me && NET.me.username === p.username;
         U.$("#profile-title").textContent = p.display;
         mt.innerHTML =
-          '<div class="panel">' +
-            "<h2>" + U.esc(p.display) + "</h2>" +
+          '<div class="panel profile-card">' +
+            '<h2>' + decoName(p.display, p.flair, p.accent) + "</h2>" +
             (p.joinDate ? '<p class="admin-inline-note">Joined ' + U.fmtDate(p.joinDate) + "</p>" : "") +
             (p.identity ? '<p><span class="badge badge-human">' + U.esc(p.identity.name) + "</span></p>" : "") +
             (p.titles && p.titles.length ? '<p>' + p.titles.map(function (t) { return '<span class="pill">' + U.esc(t.icon || "") + " " + U.esc(t.name) + "</span>"; }).join(" ") + "</p>" : "") +
             (p.bio ? "<p>" + U.esc(p.bio) + "</p>" : "") +
             (p.linkedPlayer ? '<p><a href="#player/' + p.linkedPlayer.id + '">On the pitch: ' + U.esc(p.linkedPlayer.name) + " #" + p.linkedPlayer.number + "</a></p>" : "") +
-            (NET.me && NET.me.username !== p.username ? '<button class="btn btn-primary btn-small" id="prof-dm">Message</button>' : "") +
-          "</div>";
+            (NET.me && !mine ? '<button class="btn btn-primary btn-small" id="prof-dm">Message</button>' : "") +
+          "</div>" +
+          (mine ? '<div id="profile-clubhouse"></div>' : "");
         var dmb = U.$("#prof-dm");
         if (dmb) dmb.addEventListener("click", function () { NET.dmStart(p.username).then(function (r) { if (r && r.ok) location.hash = "#conversation/" + r.id; else U.toast("Couldn't start a conversation."); }); });
+        if (mine) renderClubhousePanel(U.$("#profile-clubhouse", mt), p);
       });
     }
   };
+
+  /* The owner-only "My Clubhouse" block: Virgil Points wallet, the shop, and
+     cosmetic customisation (equip only what you own). */
+  function renderClubhousePanel(box, profile) {
+    if (!box) return;
+    box.innerHTML = U.emptyState("Counting your points…", "", "🪙");
+    Promise.all([NET.mePoints(), NET.shop()]).then(function (r) {
+      var w = r[0] || {}, s = r[1] || {};
+      var bal = U.num(w.balance) || 0, owned = s.owned || [], items = s.items || [];
+      var inv = w.inventory || [];
+      var flairsOwned = inv.filter(function (i) { return i.kind === "flair"; });
+      var accentsOwned = inv.filter(function (i) { return i.kind === "accent"; });
+      var equippedFlair = profile.flair || "", equippedAccent = profile.accent || "";
+
+      function chip(v, label, cls) { return '<button class="cos-chip' + (cls || "") + '">' + v + "</button>"; }
+
+      box.innerHTML =
+        '<div class="panel wallet-panel">' +
+          '<div class="wallet-head"><span class="wallet-ic">🪙</span><span class="wallet-bal">' + bal + '</span><span class="wallet-lab">Virgil Points</span>' +
+            '<a class="account-link" href="#tickets">🎟️ Tickets</a></div>' +
+          '<p class="admin-inline-note">Earn points around the club — chatting, posting, RSVPing, calling scores — then spend them here.</p>' +
+        "</div>" +
+        // Customise: equip owned cosmetics
+        '<div class="section-label">Customise your name</div>' +
+        '<div class="panel">' +
+          '<p class="cos-preview">Preview: ' + decoName(profile.display, equippedFlair, equippedAccent) + "</p>" +
+          '<div class="cos-row"><span class="cos-lab">Flair</span><div class="cos-chips" id="cos-flairs">' +
+            '<button class="cos-chip' + (!equippedFlair ? " cos-on" : "") + '" data-type="flair" data-val="">none</button>' +
+            flairsOwned.map(function (i) { return '<button class="cos-chip' + (equippedFlair === i.payload ? " cos-on" : "") + '" data-type="flair" data-val="' + U.esc(i.payload) + '">' + U.esc(i.payload) + "</button>"; }).join("") +
+          "</div></div>" +
+          '<div class="cos-row"><span class="cos-lab">Name colour</span><div class="cos-chips" id="cos-accents">' +
+            '<button class="cos-chip' + (!equippedAccent ? " cos-on" : "") + '" data-type="accent" data-val="">default</button>' +
+            accentsOwned.map(function (i) { return '<button class="cos-chip name-accent-' + U.esc(i.payload) + (equippedAccent === i.payload ? " cos-on" : "") + '" data-type="accent" data-val="' + U.esc(i.payload) + '">' + U.esc(i.payload) + "</button>"; }).join("") +
+          "</div></div>" +
+          (flairsOwned.length || accentsOwned.length ? "" : '<p class="admin-inline-note">Nothing owned yet — grab something from the shop below.</p>') +
+        "</div>" +
+        // Shop
+        '<div class="section-label">The club shop</div>' +
+        '<div class="shop-grid">' + items.map(function (it) {
+          var own = owned.indexOf(it.sku) !== -1;
+          return '<div class="shop-item panel"><div class="shop-item-top"><span class="shop-item-pay">' +
+            (it.kind === "accent" ? '<span class="shop-accent name-accent-' + U.esc(it.payload) + '">Aa</span>' : U.esc(it.payload)) + "</span>" +
+            '<span class="shop-item-cost">' + it.cost + " pts</span></div>" +
+            '<div class="shop-item-name">' + U.esc(it.name) + "</div>" +
+            '<p class="shop-item-desc">' + U.esc(it.description || "") + "</p>" +
+            (own ? '<span class="shop-owned">✓ Owned</span>'
+                 : '<button class="btn btn-gold btn-small shop-buy" data-sku="' + U.esc(it.sku) + '" data-cost="' + it.cost + '"' + (bal < it.cost ? " disabled" : "") + ">Buy</button>") +
+          "</div>";
+        }).join("") + "</div>";
+
+      // equip cosmetics
+      U.$$(".cos-chip", box).forEach(function (btn) {
+        if (!btn.getAttribute("data-type")) return;
+        btn.addEventListener("click", function () {
+          var body = {}; body[btn.getAttribute("data-type")] = btn.getAttribute("data-val");
+          NET.saveMeProfile(body).then(function (rr) {
+            if (rr && rr.ok) { U.toast("Look updated."); PAGES.profile.enter(profile.username); }
+            else U.toast("✗ couldn't equip");
+          });
+        });
+      });
+      // buy
+      U.$$(".shop-buy", box).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          btn.disabled = true;
+          NET.shopBuy(btn.getAttribute("data-sku")).then(function (rr) {
+            if (rr && rr.ok) { U.toast("Bought! Equip it above."); PAGES.profile.enter(profile.username); }
+            else { btn.disabled = false; U.toast(rr && rr.error === "insufficient" ? "Not enough points yet." : "✗ purchase failed"); }
+          });
+        });
+      });
+    });
+  }
 
   /* ========================================================
      STATS / HONOURS / GAFFER / NEWS / SOCIAL / SEARCH / ABOUT
@@ -1167,7 +1249,47 @@
       lore.hidden = true; lore.innerHTML = "";
     }
   };
-  PAGES.tickets = { enter: function () { U.$("#tickets-view").innerHTML = U.emptyState("No fixtures on sale", "Check Matchday for what's coming up.", "🎟️"); } };
+  PAGES.tickets = {
+    enter: function () {
+      var mt = U.$("#tickets-view");
+      mt.innerHTML = U.emptyState("Opening the box office…", "", "🎟️");
+      if (!NET.me) {
+        mt.innerHTML = '<div class="ch-card">' + U.emptyState("Sign in for tickets", "Claim a matchday ticket with your Virgil Points — earn them by getting stuck in around the club.", "🎟️") + "</div>";
+        return;
+      }
+      Promise.all([NET.fixtures(), NET.tickets(), NET.mePoints()]).then(function (r) {
+        var fx = (r[0] && r[0].fixtures) || [], mine = (r[1] && r[1].tickets) || [], cost = (r[1] && r[1].cost) || 25, bal = U.num(r[2] && r[2].balance) || 0;
+        var haveFor = {}; mine.forEach(function (t) { haveFor[t.fixture_id] = 1; });
+        mt.innerHTML =
+          '<div class="panel wallet-panel wallet-slim"><span class="wallet-ic">🪙</span><span class="wallet-bal">' + bal + '</span><span class="wallet-lab">Virgil Points</span></div>' +
+          '<div class="section-label">Get your ticket · ' + cost + ' pts each</div>' +
+          (fx.length ? fx.map(function (f) {
+            var isMatch = f.kind !== "session", when = f.date_iso ? U.fmtDate(f.date_iso) : "Date TBC";
+            var got = haveFor[f.id];
+            return '<div class="ticket-row panel"><div class="ticket-info"><span class="fixture-badge">' + (isMatch ? U.esc(STAGE_LABEL[f.stage] || "Match") : "Session") + "</span>" +
+              '<span class="ticket-opp">' + (isMatch && f.opponent ? "vs " + U.esc(f.opponent) : "Club session") + "</span>" +
+              '<span class="ticket-when">' + when + "</span></div>" +
+              (got ? '<span class="ticket-have">🎟️ Claimed</span>'
+                   : '<button class="btn btn-gold btn-small ticket-claim" data-fid="' + U.esc(f.id) + '"' + (bal < cost ? " disabled" : "") + ">Claim (" + cost + ")</button>") +
+            "</div>";
+          }).join("") : U.emptyState("No fixtures on sale", "When a game or session is booked, tickets open up here.", "🎟️")) +
+          (mine.length ? '<div class="section-label">Your tickets</div>' + mine.map(function (t) {
+            return '<div class="ticket-stub"><span class="ticket-stub-ic">🎟️</span><span class="ticket-stub-main"><strong>' +
+              (t.opponent ? "vs " + U.esc(t.opponent) : "Club session") + "</strong><span class=\"ticket-stub-when\">" + (t.date_iso ? U.fmtDate(t.date_iso) : "") + "</span></span>" +
+              '<span class="ticket-stub-tag">ADMIT ONE</span></div>';
+          }).join("") : "");
+        U.$$(".ticket-claim", mt).forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            btn.disabled = true;
+            NET.ticketClaim(btn.getAttribute("data-fid")).then(function (rr) {
+              if (rr && rr.ok) { U.toast("Ticket claimed. See you there."); PAGES.tickets.enter(); }
+              else { btn.disabled = false; U.toast(rr && rr.error === "insufficient" ? "Not enough points yet." : "✗ couldn't claim"); }
+            });
+          });
+        });
+      });
+    }
+  };
   PAGES.more = { enter: function () {} };
   function shuffle(a) {
     a = a.slice();
@@ -1386,7 +1508,7 @@
         sessionChecked = true;
         renderAccount();
         var page = parseHash().name;
-        if (["admin", "inbox", "conversation", "clubhouse"].indexOf(page) !== -1) route();
+        if (["admin", "inbox", "conversation", "clubhouse", "tickets", "profile", "matchday"].indexOf(page) !== -1) route();
       });
       unreadTimer = setInterval(function () { if (NET.me) refreshUnread(); }, 45000);
     } else {

@@ -19,6 +19,7 @@ import admin from "./routes/admin.js";
 import media from "./routes/media.js";
 import profiles, { proAdmin } from "./routes/profiles.js";
 import dm, { dmAdmin } from "./routes/dm.js";
+import shop from "./routes/shop.js";
 
 const app = new Hono();
 
@@ -66,6 +67,7 @@ app.route("/api", profiles);
 app.route("/api/admin", proAdmin);
 app.route("/api/dm", dm);
 app.route("/api/admin", dmAdmin);
+app.route("/api", shop);
 
 /* Predictable JSON for anything unmatched. */
 app.notFound((c) => c.json({ ok: false, error: "not_found", code: 404 }, 404));

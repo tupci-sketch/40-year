@@ -2026,6 +2026,56 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 .fun-hero strong { font-size: 1.1rem; color: var(--white); }
 .fun-hero-line { color: var(--silver); font-size: 0.86rem; font-style: italic; }
 
+/* ============================================================
+   Virgil Points: wallet, shop, cosmetics, tickets
+   ============================================================ */
+/* Name cosmetics — accent colours + flair, used club-wide. */
+.deco-name { font-weight: 600; }
+.deco-flair { font-size: 0.95em; }
+.name-accent-gold { color: var(--gold-bright); }
+.name-accent-electric { color: var(--purple-electric); }
+.name-accent-win { color: var(--win); }
+
+.wallet-panel { display: flex; flex-direction: column; gap: 6px; }
+.wallet-head { display: flex; align-items: center; gap: 8px; }
+.wallet-ic { font-size: 1.5rem; }
+.wallet-bal { font-family: var(--font-display); font-size: 1.8rem; color: var(--gold-bright); line-height: 1; }
+.wallet-lab { font-family: var(--font-sub); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--silver); }
+.wallet-head .account-link { margin-left: auto; }
+.wallet-slim { flex-direction: row; align-items: center; }
+
+.cos-preview { font-size: 1.05rem; margin: 0 0 8px; }
+.cos-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.cos-lab { font-family: var(--font-sub); font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--silver); min-width: 90px; }
+.cos-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cos-chip { padding: 6px 12px; border-radius: 999px; background: rgba(7, 3, 11, 0.5); border: 1px solid var(--line); color: var(--white); cursor: pointer; font-size: 0.95rem; transition: border-color 0.15s ease, transform 0.15s ease; }
+.cos-chip:hover { transform: translateY(-1px); border-color: var(--gold-bright); }
+.cos-chip.cos-on { border-color: var(--gold-bright); background: rgba(242, 180, 92, 0.16); }
+
+.shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (min-width: 640px) { .shop-grid { grid-template-columns: repeat(3, 1fr); } }
+.shop-item { display: flex; flex-direction: column; gap: 4px; padding: 14px; }
+.shop-item-top { display: flex; align-items: center; justify-content: space-between; }
+.shop-item-pay { font-size: 1.6rem; }
+.shop-accent { font-family: var(--font-display); font-size: 1.2rem; }
+.shop-item-cost { font-family: var(--font-sub); font-size: 0.74rem; color: var(--gold-bright); letter-spacing: 0.04em; }
+.shop-item-name { font-family: var(--font-sub); font-weight: 600; font-size: 0.9rem; color: var(--white); }
+.shop-item-desc { font-size: 0.78rem; color: var(--silver); margin: 0; flex: 1; }
+.shop-owned { color: var(--win); font-size: 0.82rem; font-weight: 600; margin-top: 4px; }
+.shop-buy { margin-top: 4px; }
+
+.ticket-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; margin-bottom: 8px; }
+.ticket-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ticket-opp { font-weight: 600; color: var(--white); }
+.ticket-when { font-size: 0.78rem; color: var(--silver); }
+.ticket-have { color: var(--gold-bright); font-weight: 600; font-size: 0.86rem; }
+.ticket-stub { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 8px; border-radius: var(--radius);
+  background: linear-gradient(100deg, rgba(242, 180, 92, 0.14), rgba(7, 3, 11, 0.55)); border: 1px dashed rgba(242, 180, 92, 0.5); }
+.ticket-stub-ic { font-size: 1.5rem; }
+.ticket-stub-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ticket-stub-when { font-size: 0.76rem; color: var(--silver); }
+.ticket-stub-tag { font-family: var(--font-sub); font-size: 0.64rem; letter-spacing: 0.14em; color: var(--gold-bright); border: 1px solid rgba(242, 180, 92, 0.5); border-radius: 4px; padding: 3px 6px; }
+
 /* ---- Housekeeping: Fun & Games editors ---- */
 .fun-edit { width: 100%; padding: 8px 10px; background: rgba(7, 3, 11, 0.5); border: 1px solid var(--line); border-radius: 8px; color: var(--white); font-family: var(--font-body); font-size: 0.9rem; resize: vertical; }
 

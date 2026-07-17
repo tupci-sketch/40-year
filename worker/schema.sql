@@ -56,7 +56,9 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   bio                TEXT,
   primary_identity_id INTEGER REFERENCES user_identity_types(id),
   linked_player_id   TEXT REFERENCES players(id),
-  show_linked        INTEGER NOT NULL DEFAULT 0
+  show_linked        INTEGER NOT NULL DEFAULT 0,
+  flair              TEXT,   -- equipped emoji cosmetic (must be owned)
+  accent             TEXT    -- equipped name-colour token (must be owned)
 );
 
 CREATE TABLE IF NOT EXISTS user_titles (
@@ -438,3 +440,62 @@ INSERT OR IGNORE INTO forum_categories (id, key, name, sort) VALUES
 INSERT OR IGNORE INTO site_settings (key, value) VALUES
   ('current_season','fc26'),
   ('schema_version','1');
+
+-- ============================================================
+--  Engagement: Virgil Points, the club shop, and match tickets
+-- ============================================================
+
+-- Running balance + lifetime earned per member.
+CREATE TABLE IF NOT EXISTS user_points (
+  user_id     INTEGER PRIMARY KEY,
+  balance     INTEGER NOT NULL DEFAULT 0,
+  lifetime    INTEGER NOT NULL DEFAULT 0,
+  updated_iso TEXT
+);
+
+-- Every credit/debit, so the ledger is auditable and shown to the member.
+CREATE TABLE IF NOT EXISTS point_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL,
+  delta       INTEGER NOT NULL,
+  reason      TEXT,
+  created_iso TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pointevents_user ON point_events(user_id, id DESC);
+
+-- The club shop: cosmetics (flair emoji, name accent) + matchday tickets.
+CREATE TABLE IF NOT EXISTS shop_items (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  sku         TEXT UNIQUE,
+  name        TEXT NOT NULL,
+  description TEXT,
+  kind        TEXT,     -- 'flair' | 'accent' | 'ticket'
+  payload     TEXT,     -- emoji, colour token, etc.
+  cost        INTEGER NOT NULL DEFAULT 0,
+  active      INTEGER NOT NULL DEFAULT 1,
+  sort        INTEGER DEFAULT 0
+);
+
+-- Inventory / receipts. Cosmetics are owned once; tickets carry a fixture_id.
+CREATE TABLE IF NOT EXISTS user_purchases (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL,
+  item_id     INTEGER,
+  sku         TEXT,
+  kind        TEXT,
+  payload     TEXT,
+  fixture_id  TEXT,
+  cost        INTEGER,
+  created_iso TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_purchases_user ON user_purchases(user_id, id DESC);
+
+INSERT OR IGNORE INTO shop_items (sku, name, description, kind, payload, cost, sort) VALUES
+  ('flair_ball','Match Ball flair','A ⚽ next to your name across the club.','flair','⚽',50,10),
+  ('flair_fire','On Fire flair','You are 🔥. Everyone can see it.','flair','🔥',80,20),
+  ('flair_crown','Crown flair','A 👑 for the big-time charlie.','flair','👑',150,30),
+  ('flair_goat','GOAT flair','Settle the debate with a 🐐.','flair','🐐',150,40),
+  ('flair_purple','Purple Heart flair','💜 up the Virgil.','flair','💜',60,50),
+  ('accent_gold','Gold name','Your name shines gold club-wide.','accent','gold',120,60),
+  ('accent_electric','Electric name','Your name in Virgil purple.','accent','electric',120,70),
+  ('accent_win','Green name','Your name in winner''s green.','accent','win',100,80);

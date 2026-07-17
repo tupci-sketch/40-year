@@ -113,6 +113,11 @@
     /* ---------- member (signed-in) ---------- */
     meProfile:      function () { return this.get("/me/profile"); },
     saveMeProfile:  function (b) { return this.patch("/me/profile", b); },
+    mePoints:       function () { return this.get("/me/points"); },
+    shop:           function () { return this.get("/shop"); },
+    shopBuy:        function (sku) { return this.post("/shop/buy", { sku: sku }); },
+    ticketClaim:    function (fixtureId) { return this.post("/tickets/claim", { fixtureId: fixtureId }); },
+    tickets:        function () { return this.get("/tickets"); },
     savePrivacy:    function (b) { return this.patch("/me/privacy", b); },
     chatFetch:      function (q) { return this.get("/chat" + qs(q)); },
     chatPost:       function (text) { return this.post("/chat", { text: text }); },

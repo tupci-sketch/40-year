@@ -6,6 +6,7 @@
    ============================================================ */
 import { Hono } from "hono";
 import { requireLevel, nowISO } from "../lib/auth.js";
+import { awardPoints } from "../lib/points.js";
 
 const admin = new Hono();
 function rows(r) { return (r && r.results) || []; }
@@ -31,6 +32,8 @@ async function settlePredictions(env, fixtureId, our, their) {
       `INSERT INTO prediction_scores (user_id,points,exact,correct,played) VALUES (?,?,?,?,1)
        ON CONFLICT(user_id) DO UPDATE SET points=points+?, exact=exact+?, correct=correct+?, played=played+1`
     ).bind(p.user_id, pts, pts === 3 ? 1 : 0, pts === 1 ? 1 : 0, pts, pts === 3 ? 1 : 0, pts === 1 ? 1 : 0).run();
+    // Correct predictions also pay out Virgil Points (exact = bonus).
+    if (pts > 0) await awardPoints(env, p.user_id, pts === 3 ? 20 : 8, pts === 3 ? "exact prediction" : "correct prediction");
   }
   await env.DB.prepare("DELETE FROM predictions WHERE fixture_id=?").bind(fixtureId).run();
   await env.DB.prepare("DELETE FROM availability WHERE fixture_id=?").bind(fixtureId).run();
