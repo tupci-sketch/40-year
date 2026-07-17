@@ -335,9 +335,14 @@ pub.get("/stats", async (c) => {
   return c.json({
     ok: true,
     clubRecord: {
-      // Games played = the most-capped ever-present player's verified apps (the
-      // club's true total games); the stored record is only the W/D/L record.
-      played: Math.max(Number(baseline.played) || derived.played, bases.reduce((m, b) => Math.max(m, Number(b.apps) || 0), 0)),
+      // Games played = most-capped player's verified apps + matches logged since
+      // that total (auto-grows per new match); stored record is only the W/D/L.
+      played: Math.max(Number(baseline.played) || derived.played, (() => {
+        const top = bases.slice().sort((a, b) => (Number(b.apps) || 0) - (Number(a.apps) || 0))[0];
+        if (!top) return 0;
+        const since = matches.filter((m) => Number(m.id) > (Number(top.as_of_seq) || 0)).length;
+        return (Number(top.apps) || 0) + since;
+      })()),
       wins: Number(baseline.wins) || derived.wins,
       draws: Number(baseline.draws) || derived.draws, losses: Number(baseline.losses) || derived.losses,
       goalsFor: Number(baseline.goalsFor) || derived.goalsFor, goalsAgainst: Number(baseline.goalsAgainst) || derived.goalsAgainst,
@@ -405,13 +410,16 @@ pub.get("/home", async (c) => {
             COALESCE(SUM(our_score),0) goalsFor, COALESCE(SUM(their_score),0) goalsAgainst FROM matches`
   ).first();
   // Total games the club has EVER played = the most-capped ever-present
-  // player's verified apps (Tüpci is ever-present, so his 564 apps = the club's
-  // total games). The stored club record (392) is only the competitive W/D/L
-  // record, not the games-played total — so "played" takes the larger figure.
-  const maxAppsRow = await c.env.DB.prepare("SELECT MAX(apps) m FROM player_career_baselines").first();
-  const maxApps = maxAppsRow && maxAppsRow.m ? Number(maxAppsRow.m) : 0;
+  // player's verified apps (Tüpci, ever-present) PLUS any matches logged since
+  // that verified total — so the figure ticks up automatically the moment a new
+  // match is recorded, without re-verifying player totals. The stored club
+  // record (392) is only the competitive W/D/L record, not games-played.
+  const topBase = await c.env.DB.prepare("SELECT apps, as_of_seq FROM player_career_baselines ORDER BY apps DESC LIMIT 1").first();
+  const maxApps = topBase ? Number(topBase.apps) : 0;
+  const sinceRow = await c.env.DB.prepare("SELECT COUNT(*) n FROM matches WHERE id > ?").bind(topBase ? Number(topBase.as_of_seq) : 0).first();
+  const totalGames = maxApps + (sinceRow ? Number(sinceRow.n) : 0);
   const recordAll = {
-    played: Math.max(Number(bl.played) || derivedAll.played, maxApps),
+    played: Math.max(Number(bl.played) || derivedAll.played, totalGames),
     wins: Number(bl.wins) || derivedAll.wins,
     draws: Number(bl.draws) || derivedAll.draws, losses: Number(bl.losses) || derivedAll.losses,
     goalsFor: Number(bl.goalsFor) || derivedAll.goalsFor, goalsAgainst: Number(bl.goalsAgainst) || derivedAll.goalsAgainst

@@ -84,7 +84,7 @@ const home = await get(app, env, "/api/home");
 ok(home.json.latestResult.id === 3 && home.json.form.join("") === "WDW", "home: latest result + form");
 ok(home.json.nextFixture && home.json.nextFixture.opponent === "Delta City", "home: next fixture");
 ok(home.json.news.length === 1, "home: news");
-ok(home.json.recordAll && home.json.recordAll.played === 392 && home.json.recordAll.wins === 2, "home: all-time played = most-capped player's apps (392), record from derived");
+ok(home.json.recordAll && home.json.recordAll.played === 395 && home.json.recordAll.wins === 2, "home: all-time played = top apps (392, as-of seq 0) + 3 matches logged since = 395");
 
 // socials: defaults, then editable via admin settings
 const soc0 = await get(app, env, "/api/socials");

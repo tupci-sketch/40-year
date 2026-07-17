@@ -489,8 +489,7 @@
       var res = results[0];
       var list = (res && res.users) || [];
       var admin9 = NET.isAdmin();
-      body.innerHTML = '<p class="screen-intro">Set access levels, ban/unban, and (L9) link an account to the squad player it belongs to.</p>' +
-        '<div class="admin-sublist">' + list.map(function (u) {
+      body.innerHTML = '<div class="admin-sublist">' + list.map(function (u) {
         return '<div class="admin-row admin-row-stack">' +
           '<div class="admin-row-top"><span class="admin-row-main">' + esc(u.display) + " · L" + u.level + (u.banned ? " · BANNED" : "") +
             (u.linked_player_name ? ' <span class="admin-inline-note">↔ ' + esc(u.linked_player_name) + "</span>" : "") + "</span>" +
@@ -578,7 +577,6 @@
       "</div>" +
       '<div class="panel">' +
         '<div class="section-label">League standing</div>' +
-        '<p class="admin-inline-note">Division/Position/Points are set here manually — they don’t follow predictably from win/loss counts (promotion, playoff seeding, points deductions). Played and Form on the home card auto-track the current season’s recorded matches and need no input.</p>' +
         field("Division", '<input type="text" id="st-league-division" maxlength="60" placeholder="e.g. Division 2">') +
         field("Position", '<input type="text" id="st-league-position" maxlength="60" placeholder="e.g. 1 Chance Rem">') +
         field("Points", '<input type="text" id="st-league-points" maxlength="30" placeholder="e.g. 12/16">') +
@@ -586,7 +584,6 @@
       "</div>" +
       '<div class="panel">' +
         '<div class="section-label">Social links</div>' +
-        '<p class="admin-inline-note">Update the club’s socials here so the Social page always points at the right accounts — no code, no typos to worry about. Just the handle/username (or paste a full link for YouTube).</p>' +
         field("TikTok handle", '<input type="text" id="st-tiktok" maxlength="60" placeholder="danwhizzy">') +
         field("Twitch channel", '<input type="text" id="st-twitch" maxlength="60" placeholder="40yrvirgil">') +
         field("YouTube", '<input type="text" id="st-youtube" maxlength="120" placeholder="@handle or full channel/video link">') +

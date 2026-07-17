@@ -286,7 +286,6 @@
                 '<button class="tab' + (scope === "season" ? " active" : "") + '" data-scope="season">This season</button>' +
               "</div></div>" +
             recordTiles() +
-            (scope === "all" ? '<p class="home-scope-note">Every game the club has ever played — the full verified run. Wins/draws/losses are the recorded competitive record. Switch to <em>This season</em> for the current campaign.</p>' : "") +
             '<div class="stat-tile stat-tile-wide home-form-tile"><span class="stat-tile-label">Recent form</span><div class="form-pills form-pills-center">' + (form || "—") + "</div></div>" +
             (next ? '<a class="stat-tile stat-tile-wide" href="#matchday"><span class="stat-tile-label">Next up</span><span class="stat-tile-value" style="font-size:1.1rem">' +
               (next.opponent ? U.esc(next.opponent) : "Club session") + (next.date_iso ? " · " + U.fmtDate(next.date_iso) : "") + "</span></a>" : "");
@@ -473,8 +472,7 @@
     var subsLine = subs.map(function (s) { var p = U.playerById(s.player_id); return p ? U.esc(U.surname(p)) : U.esc(s.player_id); }).join(", ");
     return '<div class="section-label">' + (lu.reconstructed ? "Likely XI" : "The XI") + " · " + U.esc(lu.formation) + "</div>" +
       '<div class="mr-pitch-wrap"><div class="mr-pitch"><div class="pitch-lines"><div class="pl-halfway"></div><div class="pl-centre"></div></div>' + tokens + "</div></div>" +
-      (subsLine ? '<p class="mr-subs">Subs: ' + subsLine + "</p>" : "") +
-      (lu.reconstructed ? '<p class="mr-nolineup">Reconstructed from who played + the preset shape — AI fills the gaps, no un-named humans added.</p>' : "");
+      (subsLine ? '<p class="mr-subs">Subs: ' + subsLine + "</p>" : "");
   }
 
   function statsTable(stats) {
@@ -589,14 +587,11 @@
         function totalsTiles(which) {
           if (which === "full" && base) {
             return '<div class="tile-row">' + U.statTile("Apps", U.num(base.apps)) + U.statTile("Goals", U.num(base.goals)) +
-              U.statTile("Assists", U.num(base.assists)) + U.statTile("Avg rating", base.avg_rating != null ? Number(base.avg_rating).toFixed(1) : "—") + "</div>" +
-              '<p class="screen-intro">Full verified career total' + (base.source ? " (" + U.esc(base.source) + ")" : "") +
-              " — includes the pre-recording era" + (games.length ? ". The " + games.length + (games.length === 1 ? " game" : " games") + " with full match detail " + (games.length === 1 ? "is" : "are") + " listed below" : "") + ".</p>";
+              U.statTile("Assists", U.num(base.assists)) + U.statTile("Avg rating", base.avg_rating != null ? Number(base.avg_rating).toFixed(1) : "—") + "</div>";
           }
           return '<div class="tile-row">' + U.statTile("Apps", U.num(rec.apps) || 0) + U.statTile("Goals", U.num(rec.goals) || 0) +
             U.statTile("Assists", U.num(rec.assists) || 0) + U.statTile("Avg rating", rec.avg_rating != null ? Number(rec.avg_rating).toFixed(1) : "—") +
-            (rec.saves > 0 || rec.conceded > 0 ? U.statTile("Saves", U.num(rec.saves) || 0) + U.statTile("Conceded", U.num(rec.conceded) || 0) : "") + "</div>" +
-            '<p class="screen-intro">Only the games this club has recorded — every one of them listed below.</p>';
+            (rec.saves > 0 || rec.conceded > 0 ? U.statTile("Saves", U.num(rec.saves) || 0) + U.statTile("Conceded", U.num(rec.conceded) || 0) : "") + "</div>";
         }
 
         var anyGK = games.some(function (g) { return (Number(g.saves) || 0) > 0 || (Number(g.conceded) || 0) > 0; });
@@ -694,7 +689,6 @@
               (f.note ? '<p class="ch-fx-note">' + U.esc(f.note) + "</p>" : "") +
               '<div class="ch-avail-slot" data-fid="' + U.esc(f.id) + '">' + availBlock(f, f.availability || []) + "</div>" +
               (isMatch && NET.me ? predictBlock(f) : "") +
-              (!isMatch ? '<p class="ch-session-note">Casual session — RSVP only, no scoreline to call.</p>' : "") +
             "</div>";
           }).join("");
         });
@@ -1028,7 +1022,6 @@
         '<div class="panel wallet-panel">' +
           '<div class="wallet-head"><span class="wallet-ic">🪙</span><span class="wallet-bal">' + bal + '</span><span class="wallet-lab">Virgil Points</span>' +
             '<a class="account-link" href="#tickets">🎟️ Tickets</a></div>' +
-          '<p class="admin-inline-note">Earn points around the club — chatting, posting, RSVPing, calling scores — then spend them here.</p>' +
         "</div>" +
         // Customise: equip owned cosmetics
         '<div class="section-label">Customise your name</div>' +
@@ -1126,8 +1119,7 @@
             U.statTile("Conceded", U.num(rc.goalsAgainst)) +
             U.statTile("Longest win run", U.num(rc.winStreak), { accent: "win" }) +
             U.statTile("Longest unbeaten", U.num(rc.unbeaten), { accent: "electric" }) +
-          "</div>" +
-          '<p class="sync-note">All-time totals = the EA-era baseline plus every match logged since. The recorded games are the slice with full match-by-match detail.</p>';
+          "</div>";
         U.runCountUps(clubBox);
 
         /* ---- leaderboards ---- */
@@ -1155,8 +1147,7 @@
             lbPanel("Man of the Match", b.motm, f0) +
             lbPanel("Hat-tricks", b.hatTricks, f0) +
             lbPanel("Discipline · red cards", b.reds, f0) +
-          "</div>" +
-          '<p class="sync-note">Recorded-game boards count everyone — including the algorithms. Career boards fold each player’s verified all-time total into everything logged since.</p>';
+          "</div>";
 
         /* ---- career table for the humans ---- */
         // Every player carrying the "human" tag belongs here — Amy included —
@@ -1339,7 +1330,6 @@
 
         mt.innerHTML =
           '<div class="section-label">@' + U.esc(handle) + " on TikTok</div>" +
-          '<p class="screen-intro">The golden boot moonlights as a content machine. Latest uploads, straight from the source — this updates itself every time he posts.</p>' +
           '<div class="social-embed">' +
             '<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@' + U.esc(handle) + '" data-unique-id="' + U.esc(handle) + '" data-embed-type="creator" style="max-width:780px;min-width:288px;">' +
               '<section class="tiktok-card">' +
@@ -1350,10 +1340,8 @@
               "</section>" +
             "</blockquote>" +
           "</div>" +
-          '<p class="social-fallback">Feed not loading? TikTok’s profile widget can be temperamental — <a href="https://www.tiktok.com/@' + U.esc(handle) + '" target="_blank" rel="noopener">open @' + U.esc(handle) + " on TikTok →</a></p>" +
           (yt ?
             '<div class="section-label">The 40Yr Virgil on YouTube</div>' +
-            '<p class="screen-intro">Full-length uploads, highlights and the odd rant — the club’s YouTube home.</p>' +
             (yt.videoId ?
               '<div class="twitch-embed-wrap"><iframe class="twitch-player" src="https://www.youtube.com/embed/' + U.esc(yt.videoId) + '" title="YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen frameborder="0"></iframe></div>' : "") +
             '<div class="twitch-card twitch-card-slim social-yt">' +
@@ -1362,7 +1350,6 @@
               '<a class="btn btn-primary btn-small" target="_blank" rel="noopener" href="' + U.esc(yt.url) + '">Open on YouTube →</a>' +
             "</div>" : "") +
           '<div class="section-label">' + U.esc(twitch) + " on Twitch</div>" +
-          '<p class="screen-intro">When the club’s live, the stream plays right here. When it’s not, Twitch shows the offline screen — hit follow so you don’t miss kickoff.</p>' +
           '<div class="twitch-embed-wrap">' +
             '<iframe class="twitch-player" src="' + twitchSrc + '" title="' + U.esc(twitch) + ' on Twitch" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen scrolling="no" frameborder="0"></iframe>' +
           "</div>" +
