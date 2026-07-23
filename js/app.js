@@ -43,6 +43,27 @@
     "funhouse", "book", "more", "stats", "honours", "gaffer", "news", "social",
     "search", "about", "tickets", "floor", "admin"];
 
+  /* Per-route browser tab titles. The full site title is kept for Home;
+     every other page names itself so bookmarks, history and shared browser
+     links are distinguishable. Dynamic pages (player/match/opponent/profile/
+     thread) show a placeholder here, then refine to the real name once their
+     data loads. */
+  var BASE_TITLE = document.title;
+  var ROUTE_TITLES = {
+    archive: "The Archive", match: "Match Report", opponent: "Head to Head",
+    squad: "The Squad", player: "Player Dossier", tactics: "Tactics Board",
+    matchday: "Matchday", clubhouse: "The Clubhouse", thread: "Thread",
+    inbox: "Inbox", conversation: "Conversation", profile: "Member Profile",
+    funhouse: "The Funhouse", book: "The Book of Tüpci", more: "More",
+    stats: "Stats Centre", honours: "Honours", gaffer: "The Gaffer",
+    news: "The Gazette", social: "Socials", search: "Search",
+    about: "About the Club", tickets: "Tickets", floor: "Clubhouse Floor",
+    admin: "Housekeeping"
+  };
+  function setDocTitle(part) {
+    document.title = part ? part + " · The 40Yr Virgil" : BASE_TITLE;
+  }
+
   function parseHash() {
     var h = (location.hash || "#home").replace(/^#/, "");
     var parts = h.split("/");
@@ -65,6 +86,7 @@
     if (currentPage && PAGES[currentPage] && PAGES[currentPage].leave) PAGES[currentPage].leave();
     currentPage = r.name;
     currentArg = r.arg;
+    setDocTitle(ROUTE_TITLES[r.name]);
 
     U.$$(".screen").forEach(function (s) { s.classList.remove("active"); });
     var scr = U.$("#screen-" + r.name);
@@ -520,6 +542,7 @@
         var res = results[0];
         if (!res || !res.ok) { mt.innerHTML = U.emptyState("No such match", "It may have been struck from the books.", "—"); return; }
         var m = res.match;
+        setDocTitle("Match " + m.id + " vs " + (m.opponent || "Unknown"));
         var stage = STAGE_LABEL[m.stage] || "Match";
         var venueLabel = m.venue === "H" ? "Home" : m.venue === "A" ? "Away" : m.venue === "N" ? "Neutral" : "";
         var scorers = U.scorersLine((res.scorers || []).map(function (s) { var p = U.playerById(s.player_id); return { name: p ? p.name : s.player_id, goals: s.goals }; }));
@@ -557,6 +580,7 @@
       var mt = U.$("#opponent-view");
       mt.innerHTML = U.emptyState("Loading…", "", "⏱");
       U.$("#screen-opponent .screen-title").textContent = name || "Head to Head";
+      setDocTitle(name ? "vs " + name : "Head to Head");
       NET.matches({ opponent: name, limit: 50 }).then(function (res) {
         var block = liveBlock(res, "these fixtures");
         if (block) { mt.innerHTML = block; return; }
@@ -631,6 +655,7 @@
 
         var titleEl = U.$("#screen-player .screen-title");
         if (titleEl) titleEl.textContent = p.name;
+        setDocTitle(p.name);
         mt.innerHTML =
           '<div class="player-dossier">' +
             '<div class="card-tile player-portrait-card"><img src="' + U.esc(U.cardSrc(p)) + '" alt="' + U.esc(p.name) + '" loading="eager" fetchpriority="high" decoding="async" onerror="this.onerror=null;this.src=\'assets/img/crest.png\'"></div>' +
@@ -820,6 +845,7 @@
       NET.forumThread(arg, { limit: 50 }).then(function (res) {
         if (!res || !res.ok) { mt.innerHTML = U.emptyState("No such thread", "", "—"); return; }
         var t = res.thread;
+        setDocTitle(t.title);
         var replyBox = NET.me ? '<div class="panel"><textarea id="th-reply" rows="3" placeholder="Reply…" maxlength="4000"></textarea>' +
           '<div class="admin-actions"><button class="btn btn-primary btn-small" id="th-send">Reply</button><span class="admin-inline-note" id="th-msg"></span></div></div>' : "";
         var posts = res.posts || [];
@@ -1084,6 +1110,7 @@
         var p = res.profile;
         var mine = NET.me && NET.me.username === p.username;
         U.$("#profile-title").textContent = p.display;
+        setDocTitle(p.display);
         mt.innerHTML =
           '<div class="panel profile-card">' +
             '<h2>' + decoName(p.display, p.flair, p.accent) + "</h2>" +
