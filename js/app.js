@@ -142,6 +142,23 @@
     return Number(level) >= 9 ? '<span class="level-chip level-admin">ADMIN</span>'
          : Number(level) >= 5 ? '<span class="level-chip level-mod">MOD</span>' : "";
   }
+
+  /* Share the current page: native share sheet on mobile, copy-to-clipboard
+     fallback on desktop, URL toast as a last resort. */
+  function shareLink(title) {
+    var url = location.href;
+    if (navigator.share) { navigator.share({ title: title, url: url }).catch(function () {}); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function () { U.toast("Link copied"); }, function () { U.toast(url); });
+      return;
+    }
+    U.toast(url);
+  }
+  var SHARE_BTN = '<button class="btn btn-ghost btn-small share-btn" type="button">↗ Share</button>';
+  function wireShare(container, title) {
+    var b = U.$(".share-btn", container);
+    if (b) { b.setAttribute("aria-label", "Share: " + title); b.addEventListener("click", function () { shareLink(title); }); }
+  }
   function authorLine(display, level, flair, accent, iso) {
     return '<div class="post-meta"><span class="post-author">' + decoName(display || "Member", flair, accent) + "</span>" +
       levelChip(level) + '<span class="post-time">' + timeAgo(iso) + "</span></div>";
@@ -565,10 +582,12 @@
             (res.stats && res.stats.length ? statsTable(res.stats) : "") +
             (m.note ? '<p class="result-note">📝 ' + U.esc(m.note) + "</p>" : "") +
             (NET.isMod() ? '<div class="admin-actions"><button class="btn btn-ghost btn-small" id="mr-edit">Edit in Housekeeping →</button></div>' : "") +
+            '<div style="margin:6px 0 2px">' + SHARE_BTN + "</div>" +
             '<a class="back-link" href="#archive">← All results</a>' +
           "</article>";
         var eb = U.$("#mr-edit", mt);
         if (eb) eb.addEventListener("click", function () { try { sessionStorage.setItem("v40.editseq", String(m.id)); } catch (e) {} location.hash = "#admin"; });
+        wireShare(mt, "Match " + m.id + " vs " + (m.opponent || "Unknown") + " · The 40Yr Virgil");
         U.runCountUps(mt);
       });
     }
@@ -662,6 +681,7 @@
             "<h2>" + U.esc(p.name) + " <span class=\"player-num\">#" + p.number + "</span></h2>" +
             '<p class="player-meta">' + U.esc(pos) + " · " + U.chips(p) + "</p>" +
             (p.flavour ? '<p class="player-flavour">' + U.esc(p.flavour) + "</p>" : "") +
+            '<div style="margin:4px 0 14px">' + SHARE_BTN + "</div>" +
             (base ? '<div class="stat-toggle"><button class="tab active" data-view="full">Full career</button><button class="tab" data-view="recorded">Recorded only</button></div>' : "") +
             '<div id="player-totals">' + totalsTiles(base ? "full" : "recorded") + "</div>" +
             gameLog +
@@ -675,6 +695,7 @@
             U.runCountUps(U.$("#player-totals", mt));
           });
         });
+        wireShare(mt, p.name + " · The 40Yr Virgil");
         U.runCountUps(mt);
       });
     }
