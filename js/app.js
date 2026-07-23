@@ -85,6 +85,18 @@
     U.$("#nav-toggle").addEventListener("click", function () { document.body.classList.toggle("nav-open"); });
   }
 
+  /* Skip-to-content: move focus (and scroll) to <main> without changing the
+     hash — a bare "#main" would hit the router and bounce to Home. */
+  function bindSkipLink() {
+    var link = U.$("#skip-link"), main = U.$("#main");
+    if (!link || !main) return;
+    link.addEventListener("click", function (e) {
+      e.preventDefault();
+      main.focus();
+      main.scrollIntoView();
+    });
+  }
+
   /* ========================================================
      ACCOUNT / AUTH
      ======================================================== */
@@ -1882,6 +1894,7 @@
     NET.init();
     bindNav();
     bindAuth();
+    bindSkipLink();
     renderAccount();
     window.addEventListener("hashchange", route);
     route();

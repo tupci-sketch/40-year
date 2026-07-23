@@ -8,8 +8,10 @@
   "orientation": "portrait",
   "background_color": "#07030B",
   "theme_color": "#07030B",
+  "categories": ["sports", "entertainment"],
+  "lang": "en-GB",
   "icons": [
     { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
-    { "src": "apple-touch-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "assets/img/crest.png", "sizes": "360x360", "type": "image/png", "purpose": "any" }
   ]
 }
