@@ -218,6 +218,29 @@
       U.$("#me-player-add", box).addEventListener("click", function () { addPlayerRow(null); });
       U.$("#me-cancel", box).addEventListener("click", function () { box.innerHTML = ""; });
 
+      // Player ids already present as stat rows (used to de-dupe the sync).
+      function statRowIds() {
+        var ids = {};
+        U.$$(".me-player select", box).forEach(function (sel) { if (sel.value) ids[sel.value] = 1; });
+        return ids;
+      }
+      // Pull everyone named in the XI into the stat sheet, in teamsheet order,
+      // tagged with their position. Non-destructive: only adds missing rows,
+      // never removes one (so typed stats are safe).
+      function syncXiToStats() {
+        var have = statRowIds();
+        U.$$(".me-xi-sel", box).forEach(function (sel) {
+          var id = sel.value;
+          if (!id || have[id]) return;
+          have[id] = 1;
+          addPlayerRow({ id: id, pos: sel.getAttribute("data-pos") });
+        });
+      }
+      // Delegated: reselecting any XI slot drops that player into the stat sheet.
+      U.$("#me-xi", box).addEventListener("change", function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains("me-xi-sel")) syncXiToStats();
+      });
+
       function renderXI(fkey, seedXi) {
         var f = window.FORMATIONS[fkey];
         if (!f) return;
@@ -228,10 +251,14 @@
         }).join("");
       }
       renderXI(U.$("#me-formation", box).value, (lineup && lineup.players && lineup.players.filter(function (p) { return !p.is_sub; })) || []);
+      // Re-opening a match that has a saved XI but no recorded stats yet: seed
+      // the stat sheet straight from the lineup so there's nothing to re-enter.
+      if (lineup && lineup.players && lineup.players.length && !stats.length) syncXiToStats();
       U.$("#me-formation", box).addEventListener("change", function () { renderXI(this.value, []); });
       U.$("#me-xi-auto", box).addEventListener("click", function () {
         var fkey = U.$("#me-formation", box).value;
         renderXI(fkey, autoXI(fkey).map(function (id) { return { id: id }; }));
+        syncXiToStats();
       });
 
       U.$("#me-save", box).addEventListener("click", function () {
@@ -292,7 +319,9 @@
           (step ? 'step="' + step + '" max="10"' : 'max="999"') + ' value="' + (val === "" ? "" : val) + '" placeholder="0"></label>';
       }
       row.innerHTML =
-        '<div class="field-row"><label class="field"><span class="field-label">Player</span><select>' + playerOptions(p.id) + "</select></label>" +
+        '<div class="field-row"><label class="field"><span class="field-label">Player' +
+          (p.pos ? ' <span style="color:var(--gold-bright,#F2B45C)">· ' + esc(p.pos) + "</span>" : "") +
+          '</span><select>' + playerOptions(p.id) + "</select></label>" +
           '<button class="btn btn-ghost btn-small me-row-del" type="button">✕</button></div>' +
         '<div class="me-statgrid">' +
           mini("G", "mp-g", n(p.goals)) + mini("A", "mp-a", n(p.assists)) + mini("Rating", "mp-r", n(p.rating), "0.1") +
