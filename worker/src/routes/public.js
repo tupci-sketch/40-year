@@ -25,7 +25,12 @@ async function computeClubRecord(env) {
   const baseRows = rows(await env.DB.prepare("SELECT key,value FROM club_record_baselines").all());
   const b = {}; for (const r of baseRows) b[r.key] = r.value;
   const n = (x) => Math.max(0, Number(x) || 0);
-  const seq = n(b.baseline_seq);
+  // seq: use the stamped baseline_seq if present. If a baseline exists but was
+  // never stamped (old prod, pre-migration), treat it as already covering the
+  // whole archive (seq = +∞) so only friendlies add — the record can't inflate.
+  // With no baseline at all (fresh DB), seq = 0 so the record derives from the log.
+  const hasBaseline = b.wins != null || b.draws != null || b.losses != null;
+  const seq = b.baseline_seq != null ? n(b.baseline_seq) : (hasBaseline ? Number.MAX_SAFE_INTEGER : 0);
   // The EA baseline covers league+playoff up to the sync point. Add: (1) every
   // match logged AFTER the sync point (any stage), and (2) the friendly-stage
   // matches AT/BEFORE the sync point — EA never counts friendlies, so the two
