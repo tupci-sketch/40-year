@@ -117,4 +117,22 @@ const gid = (await get(app, env, "/api/gaffers")).json.gaffers.find((x) => x.nam
 ok((await patch("/api/admin/gaffers/" + gid, modTok, { name: "New Name" })).status === 403, "L5 cannot rename gaffer");
 ok((await patch("/api/admin/gaffers/" + gid, adminTok, { name: "The Hairdryer" })).json.ok, "L9 renames gaffer");
 
+// ---- one-off: retire Peter Nkuah, split his games to Pancake + Ye Yu ----
+// (yeyu already seeded above; add Peter + Pancake)
+await DB.prepare("INSERT INTO players (id,number,name,controlled_by,is_human,active) VALUES ('lewban',12,'Peter Nkuah','human',1,1),('pmqdr0yan',84,'Pancake','bot',0,1)").run();
+for (const m of [261, 262, 263, 269, 276, 277, 278]) {
+  await DB.prepare("INSERT INTO matches (id,stage,opponent,our_score,their_score,result) VALUES (?,'league','Opp',1,1,'D')").bind(m).run();
+  await DB.prepare("INSERT INTO match_player_stats (match_id,player_id,saves,conceded) VALUES (?, 'lewban', 2, 1)").bind(m).run();
+}
+await DB.prepare("INSERT INTO match_player_stats (match_id,player_id,goals) VALUES (261,'yeyu',0)").run(); // Ye Yu already in 261
+ok((await post(app, env, "/api/admin/reassign-peter", {}, H(modTok))).status === 403, "L5 cannot reassign Peter");
+ok((await post(app, env, "/api/admin/reassign-peter", {}, H(adminTok))).json.done === true, "L9 retires Peter + reassigns");
+const gone = await DB.prepare("SELECT id FROM players WHERE id='lewban'").first();
+ok(!gone, "Peter removed");
+const pan = (await DB.prepare("SELECT match_id FROM match_player_stats WHERE player_id='pmqdr0yan' ORDER BY match_id").all()).results.map((r) => r.match_id);
+const yey = (await DB.prepare("SELECT match_id FROM match_player_stats WHERE player_id='yeyu' ORDER BY match_id").all()).results.map((r) => r.match_id);
+ok(pan.join(",") === "261,263,276,278", "Pancake got 261,263,276,278");
+ok(yey.join(",") === "261,262,269,277", "Ye Yu kept 261 + gained 262,269,277");
+ok((await post(app, env, "/api/admin/reassign-peter", {}, H(adminTok))).json.alreadyDone === true, "reassign is idempotent");
+
 done();

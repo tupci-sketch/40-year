@@ -181,6 +181,7 @@
     adminClubRecordSync: function (fields) { return this.post("/admin/club-record", fields); },
     gafferWheel: function () { return this.get("/gaffer-wheel"); },
     adminGafferWheel: function (names) { return this.post("/admin/gaffer-wheel", { names: names }); },
+    adminReassignPeter: function () { return this.post("/admin/reassign-peter", {}); },
     adminSettings:    function (key, value) { return this.post("/admin/settings", { key: key, value: value }); },
     adminPlayerSave:  function (p) { return this.post("/admin/players", p); },
     adminPlayerDeactivate: function (id) { return this.del("/admin/players/" + id); },

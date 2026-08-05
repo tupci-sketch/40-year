@@ -400,6 +400,42 @@ admin.post("/club-record", async (c) => {
   return c.json({ ok: true, baselineSeq: set.baseline_seq });
 });
 
+/* One-off (L9): retire Peter Nkuah ('lewban') and split his 7 keeper games
+   evenly between Pancake the Octopus ('pmqdr0yan') and Ye Yu II ('yeyu') —
+   never two of them in one game. Mirrors migrate/peter-nkuah.sql; idempotent
+   (no-op once he's gone). */
+admin.post("/reassign-peter", async (c) => {
+  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const exists = await c.env.DB.prepare("SELECT id FROM players WHERE id='lewban'").first();
+  if (!exists) return c.json({ ok: true, alreadyDone: true });
+  const plan = [["pmqdr0yan", [261, 263, 276, 278]], ["yeyu", [262, 269, 277]]];
+  const q = (sql, ...b) => c.env.DB.prepare(sql).bind(...b).run();
+  for (const [target, ms] of plan) {
+    for (const m of ms) {
+      await q("UPDATE match_player_stats SET player_id=? WHERE player_id='lewban' AND match_id=?", target, m);
+      await q("UPDATE OR IGNORE match_scorers SET player_id=? WHERE player_id='lewban' AND match_id=?", target, m);
+      await q("UPDATE OR IGNORE match_lineup_players SET player_id=? WHERE player_id='lewban' AND match_id=?", target, m);
+      await q("UPDATE matches SET motm_player_id=? WHERE motm_player_id='lewban' AND id=?", target, m);
+      await q("UPDATE matches SET captain_player_id=? WHERE captain_player_id='lewban' AND id=?", target, m);
+      await q("UPDATE match_lineups SET captain_player_id=? WHERE captain_player_id='lewban' AND match_id=?", target, m);
+    }
+  }
+  // Residual cleanup (any slot skipped on conflict), then remove Peter.
+  for (const sql of [
+    "DELETE FROM match_player_stats WHERE player_id='lewban'",
+    "DELETE FROM match_scorers WHERE player_id='lewban'",
+    "DELETE FROM match_lineup_players WHERE player_id='lewban'",
+    "UPDATE matches SET motm_player_id=NULL WHERE motm_player_id='lewban'",
+    "UPDATE matches SET captain_player_id=NULL WHERE captain_player_id='lewban'",
+    "UPDATE match_lineups SET captain_player_id=NULL WHERE captain_player_id='lewban'",
+    "UPDATE user_profiles SET linked_player_id=NULL WHERE linked_player_id='lewban'",
+    "DELETE FROM player_card_assets WHERE player_id='lewban'",
+    "DELETE FROM players WHERE id='lewban'",
+  ]) await c.env.DB.prepare(sql).run();
+  await audit(c.env, g.user.id, "reassign_peter", "player", "lewban", { pancake: plan[0][1], yeyu: plan[1][1] });
+  return c.json({ ok: true, done: true });
+});
+
 /* ---------------- SEASONS ---------------- */
 admin.post("/seasons", async (c) => {
   const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);

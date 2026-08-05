@@ -799,7 +799,13 @@
         }).join("") + "</div>" +
         '<div class="field-row">' + field("Points", '<input type="number" min="0" id="lg-points">') + field("Target (blank = ∞)", '<input type="number" min="0" id="lg-target">') + field("Chances left", '<input type="number" min="0" id="lg-chances">') + "</div>" +
         '<div class="admin-actions"><button class="btn btn-gold btn-small" id="lg-save">Save league standing</button><span class="admin-inline-note" id="lg-msg"></span></div>' +
-      "</div>";
+      "</div>" +
+      (NET.isAdmin() ?
+        '<div class="panel">' +
+          '<div class="section-label">Data cleanup <span class="admin-inline-note">one-off admin actions</span></div>' +
+          '<p class="admin-inline-note">Retire Peter Nkuah and split his 7 keeper games between Pancake the Octopus (261, 263, 276, 278) and Ye Yu II (262, 269, 277). Safe to click once; does nothing if already done.</p>' +
+          '<div class="admin-actions"><button class="btn btn-ghost btn-small" id="cl-peter">Retire Peter Nkuah → split stats</button><span class="admin-inline-note" id="cl-peter-msg"></span></div>' +
+        "</div>" : "");
 
     function gv(id) { var el = U.$("#" + id, body); return el ? el.value : ""; }
     function iv(id) { return parseInt(gv(id), 10) || 0; }
@@ -836,6 +842,18 @@
         divisionId: selDiv || "", points: gv("lg-points"), target: gv("lg-target"), chances: ch,
         division: div ? div.label : "", position: ch ? (ch + " Chances Remaining") : ""
       }).then(function (r) { if (r && r.ok) U.toast("League standing saved."); else U.$("#lg-msg", body).textContent = "✗ failed"; });
+    });
+
+    var peterBtn = U.$("#cl-peter", body);
+    if (peterBtn) peterBtn.addEventListener("click", function () {
+      if (!confirm("Retire Peter Nkuah and reassign his 7 games to Pancake + Ye Yu? This can't be undone.")) return;
+      peterBtn.disabled = true;
+      var msg = U.$("#cl-peter-msg", body); msg.textContent = "Working…";
+      NET.adminReassignPeter().then(function (r) {
+        peterBtn.disabled = false;
+        if (r && r.ok) { msg.textContent = r.alreadyDone ? "Already done — Peter's gone." : "✓ Done — Peter retired, stats reassigned."; U.toast("Peter Nkuah retired."); }
+        else msg.textContent = "✗ " + ((r && r.code) || "failed");
+      });
     });
   }
 
