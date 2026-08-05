@@ -93,9 +93,16 @@ ok((await get(app, env, "/api/home")).json.banner.text === "We're live", "banner
 
 // ---- league status (manual: division/position/points; NOT derived from matches) ----
 ok((await get(app, env, "/api/home")).json.leagueStatus === null, "no league status set yet → null");
-ok((await post(app, env, "/api/admin/league-status", { division: "Division 2", position: "1 Chance Rem", points: "12/16" }, H(modTok))).json.ok, "league status set (L5)");
+ok((await post(app, env, "/api/admin/league-status", { divisionId: "elite", points: 1, target: 0, chances: 3, division: "Elite", position: "3 Chances Remaining" }, H(modTok))).json.ok, "league status set (L5, structured)");
 const homeLs = (await get(app, env, "/api/home")).json;
-ok(homeLs.leagueStatus.division === "Division 2" && homeLs.leagueStatus.position === "1 Chance Rem" && homeLs.leagueStatus.points === "12/16", "home: league status round-trips exactly");
+ok(homeLs.leagueStatus.divisionId === "elite" && homeLs.leagueStatus.points === 1 && homeLs.leagueStatus.chances === 3, "home: structured league status round-trips");
+ok(homeLs.leagueStatus.division === "Elite", "home: legacy league fields kept for fallback");
+// Club record editor: sync from EA (L5, so Dan can). No matches in this DB, so
+// the record reconciles to exactly the baseline and adds up.
+ok((await post(app, env, "/api/admin/club-record", { wins: 305, draws: 87, losses: 293, goalsFor: 1932, goalsAgainst: 1861, leagueApps: 638, playoffApps: 47 }, H(modTok))).json.ok, "club record synced (L5)");
+const stCr = (await get(app, env, "/api/stats")).json;
+ok(stCr.clubRecord && stCr.clubRecord.played === 685 && stCr.clubRecord.wins === 305, "stats: club record = baseline (685) and adds up");
+ok(stCr.clubRecord.played === stCr.clubRecord.wins + stCr.clubRecord.draws + stCr.clubRecord.losses, "stats: club record adds up (played = W+D+L)");
 
 // ---- users (L9) ----
 ok((await get(app, env, "/api/admin/users", H(modTok))).json.users.length === 3, "L5 can view users");

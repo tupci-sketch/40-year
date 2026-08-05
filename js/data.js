@@ -187,3 +187,15 @@ window.FUN_DEFAULTS = {
     "FC Router Disaster", "Pub League United", "the away end", "Betfred Arena's rivals"
   ]
 };
+
+/* EA Pro Clubs division ladder (5 → 1 → Elite). Rendered as on-brand SVG
+   shields (see divBadge in app.js); the current division + points are set in
+   Housekeeping → League. */
+window.DIVISIONS = [
+  { id: "div5", label: "Division 5", tier: 5 },
+  { id: "div4", label: "Division 4", tier: 4 },
+  { id: "div3", label: "Division 3", tier: 3 },
+  { id: "div2", label: "Division 2", tier: 2 },
+  { id: "div1", label: "Division 1", tier: 1 },
+  { id: "elite", label: "Elite",     tier: 0 }
+];

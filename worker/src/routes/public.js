@@ -14,6 +14,38 @@ function clampLimit(v, def = 20, max = 50) {
 function rows(r) { return (r && r.results) || []; }
 function parsePositions(p) { try { return p ? JSON.parse(p) : []; } catch (e) { return []; } }
 
+/* The club's all-time record. Reconciled to EA's official Overall Record at a
+   sync point (an owner-set baseline in club_record_baselines) PLUS the results
+   of every match logged after that point — so it always adds up (played =
+   W+D+L) and grows automatically with each new match, without touching any
+   individual player stats. Owner edits the baseline in Housekeeping → League.
+   EA excludes a couple of the club's friendlies, so the site total can sit a
+   game or two above EA by design. */
+async function computeClubRecord(env) {
+  const baseRows = rows(await env.DB.prepare("SELECT key,value FROM club_record_baselines").all());
+  const b = {}; for (const r of baseRows) b[r.key] = r.value;
+  const n = (x) => Math.max(0, Number(x) || 0);
+  const seq = n(b.baseline_seq);
+  // The EA baseline covers league+playoff up to the sync point. Add: (1) every
+  // match logged AFTER the sync point (any stage), and (2) the friendly-stage
+  // matches AT/BEFORE the sync point — EA never counts friendlies, so the two
+  // German friendlies land on top of EA's total without double-counting the
+  // league/playoff games already inside the baseline.
+  const add = await env.DB.prepare(
+    `SELECT COALESCE(SUM(result='W'),0) w, COALESCE(SUM(result='D'),0) d, COALESCE(SUM(result='L'),0) l,
+            COALESCE(SUM(our_score),0) gf, COALESCE(SUM(their_score),0) ga,
+            COALESCE(SUM(id>? AND stage='league'),0) la, COALESCE(SUM(id>? AND stage='playoff'),0) pa
+       FROM matches WHERE id > ? OR stage='friendly'`
+  ).bind(seq, seq, seq).first();
+  const wins = n(b.wins) + n(add.w), draws = n(b.draws) + n(add.d), losses = n(b.losses) + n(add.l);
+  return {
+    played: wins + draws + losses, wins, draws, losses,
+    goalsFor: n(b.goalsFor) + n(add.gf), goalsAgainst: n(b.goalsAgainst) + n(add.ga),
+    leagueApps: n(b.leagueApps) + n(add.la), playoffApps: n(b.playoffApps) + n(add.pa),
+    badge: b.badge || ""
+  };
+}
+
 /* ---- seasons ---- */
 pub.get("/seasons", async (c) => {
   const list = rows(await c.env.DB.prepare(
@@ -203,13 +235,8 @@ pub.get("/leaderboards", async (c) => {
    baseline seq (same honest model as the player page); "recorded" boards use
    only the games with a full stat line on file. */
 pub.get("/stats", async (c) => {
-  // Club record: verified baseline (k/v) with the archive-derived totals as fallback.
-  const baseRows = rows(await c.env.DB.prepare("SELECT key,value FROM club_record_baselines").all());
-  const baseline = {}; for (const r of baseRows) baseline[r.key] = r.value;
-  const derived = await c.env.DB.prepare(
-    `SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses,
-            COALESCE(SUM(our_score),0) goalsFor, COALESCE(SUM(their_score),0) goalsAgainst FROM matches`
-  ).first();
+  // Club record: EA-synced baseline + everything logged since (always adds up).
+  const clubRecord = await computeClubRecord(c.env);
 
   // Chronological result stream for streaks + opposition head-to-head.
   const matches = rows(await c.env.DB.prepare(
@@ -334,20 +361,8 @@ pub.get("/stats", async (c) => {
 
   return c.json({
     ok: true,
-    clubRecord: {
-      // Games played = most-capped player's verified apps + matches logged since
-      // that total (auto-grows per new match); stored record is only the W/D/L.
-      played: Math.max(Number(baseline.played) || derived.played, (() => {
-        const top = bases.slice().sort((a, b) => (Number(b.apps) || 0) - (Number(a.apps) || 0))[0];
-        if (!top) return 0;
-        const since = matches.filter((m) => Number(m.id) > (Number(top.as_of_seq) || 0)).length;
-        return (Number(top.apps) || 0) + since;
-      })()),
-      wins: Number(baseline.wins) || derived.wins,
-      draws: Number(baseline.draws) || derived.draws, losses: Number(baseline.losses) || derived.losses,
-      goalsFor: Number(baseline.goalsFor) || derived.goalsFor, goalsAgainst: Number(baseline.goalsAgainst) || derived.goalsAgainst,
-      badge: baseline.badge || ""
-    },
+    // EA-synced club record (baseline + matches logged since); always adds up.
+    clubRecord,
     recorded: { count: matches.length, wins: logW, draws: logD, losses: logL, goalsFor: logGF, goalsAgainst: logGA, winStreak: winBest, unbeaten: unbBest },
     extremes: { bestWin, worstLoss, cleanSheets, goalFests, hatTricks: hats.reduce((a, h) => a + Number(h.n), 0) },
     boards, players, opposition
@@ -400,30 +415,9 @@ pub.get("/home", async (c) => {
     `SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses FROM matches ${seasonWhere}`
   ).bind(...seasonArgs).first();
 
-  // Complete all-time record: the owner-verified baseline (the full 500+ era)
-  // with the archive-derived totals as a fallback. Lets the home card show the
-  // whole story by default, with the current-season slice a toggle away.
-  const baseRows = rows(await c.env.DB.prepare("SELECT key,value FROM club_record_baselines").all());
-  const bl = {}; for (const r of baseRows) bl[r.key] = r.value;
-  const derivedAll = await c.env.DB.prepare(
-    `SELECT COUNT(*) played, COALESCE(SUM(result='W'),0) wins, COALESCE(SUM(result='D'),0) draws, COALESCE(SUM(result='L'),0) losses,
-            COALESCE(SUM(our_score),0) goalsFor, COALESCE(SUM(their_score),0) goalsAgainst FROM matches`
-  ).first();
-  // Total games the club has EVER played = the most-capped ever-present
-  // player's verified apps (Tüpci, ever-present) PLUS any matches logged since
-  // that verified total — so the figure ticks up automatically the moment a new
-  // match is recorded, without re-verifying player totals. The stored club
-  // record (392) is only the competitive W/D/L record, not games-played.
-  const topBase = await c.env.DB.prepare("SELECT apps, as_of_seq FROM player_career_baselines ORDER BY apps DESC LIMIT 1").first();
-  const maxApps = topBase ? Number(topBase.apps) : 0;
-  const sinceRow = await c.env.DB.prepare("SELECT COUNT(*) n FROM matches WHERE id > ?").bind(topBase ? Number(topBase.as_of_seq) : 0).first();
-  const totalGames = maxApps + (sinceRow ? Number(sinceRow.n) : 0);
-  const recordAll = {
-    played: Math.max(Number(bl.played) || derivedAll.played, totalGames),
-    wins: Number(bl.wins) || derivedAll.wins,
-    draws: Number(bl.draws) || derivedAll.draws, losses: Number(bl.losses) || derivedAll.losses,
-    goalsFor: Number(bl.goalsFor) || derivedAll.goalsFor, goalsAgainst: Number(bl.goalsAgainst) || derivedAll.goalsAgainst
-  };
+  // Complete all-time record: EA-synced baseline + every match logged since, so
+  // it always adds up (played = W+D+L) and grows automatically per match.
+  const recordAll = await computeClubRecord(c.env);
 
   const leagueRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='league_status'").first();
   let leagueStatus = null; try { leagueStatus = leagueRow ? JSON.parse(leagueRow.value || "null") : null; } catch (e) {}

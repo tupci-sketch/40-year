@@ -25,7 +25,8 @@
     { name: "Matchday", items: [
       ["matches", "Matches", "⚽", 5, "Results, teamsheets & MOTM"],
       ["fixtures", "Fixtures", "📅", 5, "Upcoming games & sessions"],
-      ["gaffers", "Gaffers", "🎩", 5, "Manage the dugout"]
+      ["gaffers", "Gaffers", "🎩", 5, "Manage the dugout"],
+      ["league", "League & Record", "🏆", 5, "Division, points & the club record"]
     ] },
     { name: "The Club", items: [
       ["squad", "Squad & Cards", "👕", 5, "Players, positions & card uploads"],
@@ -109,8 +110,8 @@
     var body = U.$("#admin-body", root);
     body.innerHTML = U.emptyState("Loading…", "", "🗝");
     var fn = { matches: renderMatches, fixtures: renderFixtures, squad: renderSquad, gaffers: renderGaffers,
-      news: renderNews, seasons: renderSeasons, users: renderUsers, points: renderPoints, titles: renderTitles,
-      moderation: renderModeration, settings: renderSettings }[tab];
+      league: renderLeague, news: renderNews, seasons: renderSeasons, users: renderUsers, points: renderPoints,
+      titles: renderTitles, moderation: renderModeration, settings: renderSettings }[tab];
     if (fn) fn(body);
   }
 
@@ -741,6 +742,65 @@
   /* ============================================================
      SETTINGS (L9): banner + generic key/value
      ============================================================ */
+  function renderLeague(body) {
+    var DIVS = window.DIVISIONS || [];
+    body.innerHTML =
+      '<div class="panel">' +
+        '<div class="section-label">Club record</div>' +
+        '<p class="admin-inline-note">Synced from EA’s Overall Record. Played is always Won + Drawn + Lost, and grows as matches are logged — your friendlies EA doesn’t count are added on top. Individual player stats are untouched.</p>' +
+        '<div class="field-row">' + field("Won", '<input type="number" min="0" id="cr-w">') + field("Drawn", '<input type="number" min="0" id="cr-d">') + field("Lost", '<input type="number" min="0" id="cr-l">') + "</div>" +
+        '<div class="field-row">' + field("Goals for", '<input type="number" min="0" id="cr-gf">') + field("Goals against", '<input type="number" min="0" id="cr-ga">') + "</div>" +
+        '<div class="field-row">' + field("League apps", '<input type="number" min="0" id="cr-la">') + field("Playoff apps", '<input type="number" min="0" id="cr-pa">') + "</div>" +
+        '<div class="admin-inline-note" id="cr-total">Played: —</div>' +
+        '<div class="admin-actions"><button class="btn btn-gold btn-small" id="cr-save">Sync club record</button><span class="admin-inline-note" id="cr-msg"></span></div>' +
+      "</div>" +
+      '<div class="panel">' +
+        '<div class="section-label">League standing</div>' +
+        '<div class="div-picker" id="lg-divs">' + DIVS.map(function (d) {
+          return '<button type="button" class="div-opt" data-id="' + d.id + '">' + U.divBadge(d.id, 46) + "<span>" + esc(d.label) + "</span></button>";
+        }).join("") + "</div>" +
+        '<div class="field-row">' + field("Points", '<input type="number" min="0" id="lg-points">') + field("Target (blank = ∞)", '<input type="number" min="0" id="lg-target">') + field("Chances left", '<input type="number" min="0" id="lg-chances">') + "</div>" +
+        '<div class="admin-actions"><button class="btn btn-gold btn-small" id="lg-save">Save league standing</button><span class="admin-inline-note" id="lg-msg"></span></div>' +
+      "</div>";
+
+    function gv(id) { var el = U.$("#" + id, body); return el ? el.value : ""; }
+    function iv(id) { return parseInt(gv(id), 10) || 0; }
+    function setv(id, v) { var el = U.$("#" + id, body); if (el) el.value = (v == null ? "" : v); }
+    function updTotal() { U.$("#cr-total", body).textContent = "Played: " + (iv("cr-w") + iv("cr-d") + iv("cr-l")); }
+
+    NET.stats().then(function (res) {
+      var cr = (res && res.clubRecord) || {};
+      setv("cr-w", cr.wins); setv("cr-d", cr.draws); setv("cr-l", cr.losses);
+      setv("cr-gf", cr.goalsFor); setv("cr-ga", cr.goalsAgainst);
+      setv("cr-la", cr.leagueApps); setv("cr-pa", cr.playoffApps);
+      updTotal();
+    });
+    ["cr-w", "cr-d", "cr-l"].forEach(function (id) { U.$("#" + id, body).addEventListener("input", updTotal); });
+    U.$("#cr-save", body).addEventListener("click", function () {
+      NET.adminClubRecordSync({ wins: iv("cr-w"), draws: iv("cr-d"), losses: iv("cr-l"), goalsFor: iv("cr-gf"), goalsAgainst: iv("cr-ga"), leagueApps: iv("cr-la"), playoffApps: iv("cr-pa") })
+        .then(function (r) { if (r && r.ok) U.toast("Club record synced — played " + (iv("cr-w") + iv("cr-d") + iv("cr-l")) + "."); else U.$("#cr-msg", body).textContent = "✗ failed"; });
+    });
+
+    var selDiv = null;
+    function paintDivs() { U.$$(".div-opt", body).forEach(function (b) { b.classList.toggle("sel", b.getAttribute("data-id") === selDiv); }); }
+    U.$$(".div-opt", body).forEach(function (b) { b.addEventListener("click", function () { selDiv = b.getAttribute("data-id"); paintDivs(); }); });
+    NET.home().then(function (res) {
+      var ls = (res && res.leagueStatus) || {};
+      selDiv = ls.divisionId || null; paintDivs();
+      if (ls.points != null) setv("lg-points", ls.points);
+      if (ls.target != null) setv("lg-target", ls.target);
+      if (ls.chances != null) setv("lg-chances", ls.chances);
+    });
+    U.$("#lg-save", body).addEventListener("click", function () {
+      var div = (window.DIVISIONS || []).filter(function (x) { return x.id === selDiv; })[0];
+      var ch = gv("lg-chances");
+      NET.adminLeagueStatus({
+        divisionId: selDiv || "", points: gv("lg-points"), target: gv("lg-target"), chances: ch,
+        division: div ? div.label : "", position: ch ? (ch + " Chances Remaining") : ""
+      }).then(function (r) { if (r && r.ok) U.toast("League standing saved."); else U.$("#lg-msg", body).textContent = "✗ failed"; });
+    });
+  }
+
   function renderSettings(body) {
     body.innerHTML =
       '<div class="panel">' +
@@ -748,13 +808,6 @@
         field("Text", '<input type="text" id="st-banner-text" maxlength="200">') +
         '<label class="pers-toggle"><input type="checkbox" id="st-banner-active"><span class="pers-toggle-track"><span class="pers-toggle-dot"></span></span><span class="pers-toggle-label">Active</span></label>' +
         '<div class="admin-actions"><button class="btn btn-gold btn-small" id="st-banner-save">Save banner</button><span class="admin-inline-note" id="st-msg"></span></div>' +
-      "</div>" +
-      '<div class="panel">' +
-        '<div class="section-label">League standing</div>' +
-        field("Division", '<input type="text" id="st-league-division" maxlength="60" placeholder="e.g. Division 2">') +
-        field("Position", '<input type="text" id="st-league-position" maxlength="60" placeholder="e.g. 1 Chance Rem">') +
-        field("Points", '<input type="text" id="st-league-points" maxlength="30" placeholder="e.g. 12/16">') +
-        '<div class="admin-actions"><button class="btn btn-gold btn-small" id="st-league-save">Save league standing</button><span class="admin-inline-note" id="st-league-msg"></span></div>' +
       "</div>" +
       '<div class="panel">' +
         '<div class="section-label">Social links</div>' +
@@ -766,19 +819,6 @@
     U.$("#st-banner-save", body).addEventListener("click", function () {
       NET.adminBanner(U.$("#st-banner-text", body).value.trim(), U.$("#st-banner-active", body).checked)
         .then(function (r) { if (r && r.ok) U.toast("Banner saved."); else U.$("#st-msg", body).textContent = "✗ failed"; });
-    });
-    NET.home().then(function (res) {
-      var ls = res && res.leagueStatus || {};
-      U.$("#st-league-division", body).value = ls.division || "";
-      U.$("#st-league-position", body).value = ls.position || "";
-      U.$("#st-league-points", body).value = ls.points || "";
-    });
-    U.$("#st-league-save", body).addEventListener("click", function () {
-      NET.adminLeagueStatus(
-        U.$("#st-league-division", body).value.trim(),
-        U.$("#st-league-position", body).value.trim(),
-        U.$("#st-league-points", body).value.trim()
-      ).then(function (r) { if (r && r.ok) U.toast("League standing saved."); else U.$("#st-league-msg", body).textContent = "✗ failed"; });
     });
     NET.socials().then(function (res) {
       var s = (res && res.socials) || {};

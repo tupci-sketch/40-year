@@ -84,7 +84,10 @@ const home = await get(app, env, "/api/home");
 ok(home.json.latestResult.id === 3 && home.json.form.join("") === "WDW", "home: latest result + form");
 ok(home.json.nextFixture && home.json.nextFixture.opponent === "Delta City", "home: next fixture");
 ok(home.json.news.length === 1, "home: news");
-ok(home.json.recordAll && home.json.recordAll.played === 395 && home.json.recordAll.wins === 2, "home: all-time played = top apps (392, as-of seq 0) + 3 matches logged since = 395");
+ok(home.json.recordAll && home.json.recordAll.played === 3 && home.json.recordAll.wins === 2 && home.json.recordAll.draws === 1 && home.json.recordAll.losses === 0,
+  "home: all-time record from the log when no baseline (3 played = 2W/1D/0L)");
+ok(home.json.recordAll.played === home.json.recordAll.wins + home.json.recordAll.draws + home.json.recordAll.losses,
+  "home: all-time record adds up (played = W+D+L)");
 
 // socials: defaults, then editable via admin settings
 const soc0 = await get(app, env, "/api/socials");
@@ -107,5 +110,16 @@ ok(careerGoals[0].player_id === "tupci" && careerGoals[0].val === 353, "stats: c
 ok(stats.json.players.tupci.careerAssists === 438 && stats.json.players.tupci.careerGames === 395, "stats: tupci career assists/games folded");
 ok(stats.json.opposition.length === 3 && stats.json.opposition.every((o) => o.p === 1), "stats: opposition head-to-head (3 opponents)");
 ok(stats.json.boards.goldenBoot.length >= 2 && stats.json.boards.goldenBoot[0].val === 2, "stats: golden boot (recorded)");
+
+// Club record reconciliation: EA baseline (685) + friendlies EA doesn't count.
+// baseline_seq is high, so the league/playoff archive (ids 1-3) is already inside
+// the baseline and does NOT double-count; the two friendlies (any seq) land on top.
+for (const [k, v] of [["wins", 305], ["draws", 87], ["losses", 293], ["goalsFor", 1932], ["goalsAgainst", 1861], ["leagueApps", 638], ["playoffApps", 47], ["baseline_seq", 3000]])
+  await run("INSERT INTO club_record_baselines (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, String(v));
+await run("INSERT INTO matches (id,season_id,stage,opponent,our_score,their_score,result) VALUES (2001,'fc26','friendly','Germany A',2,2,'D')");
+await run("INSERT INTO matches (id,season_id,stage,opponent,our_score,their_score,result) VALUES (2002,'fc26','friendly','Germany B',1,0,'W')");
+const crRec = (await get(app, env, "/api/home")).json.recordAll;
+ok(crRec.played === 687 && crRec.wins === 306 && crRec.draws === 88 && crRec.losses === 293, "club record: EA 685 + 2 friendlies = 687, adds up");
+ok(crRec.played === crRec.wins + crRec.draws + crRec.losses, "club record: reconciled figure still adds up");
 
 done();

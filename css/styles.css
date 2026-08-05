@@ -2447,6 +2447,16 @@ body.konami { animation: konamiPulse 0.5s ease 3; }
 
 /* ---- League strip + news ---- */
 .league-strip { padding: 12px 16px; margin-bottom: 14px; }
+.league-strip-div { display: flex; align-items: center; gap: 16px; }
+.league-badge { flex: 0 0 auto; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+.div-badge { display: block; }
+.div-picker { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.div-opt { display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.02); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 8px 8px; min-width: 74px; cursor: pointer; color: var(--silver);
+  font-family: var(--font-sub); font-size: .74rem; letter-spacing: .02em; transition: border-color .15s, box-shadow .15s, color .15s; }
+.div-opt:hover { border-color: rgba(218,152,81,.5); color: var(--white); }
+.div-opt.sel { border-color: var(--gold-bright); color: var(--white); box-shadow: 0 0 0 1px var(--gold-bright), var(--glow-gold); }
 .league-row { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
 .league-cell { display: flex; flex-direction: column; gap: 2px; }
 .league-val { font-family: var(--font-display); font-size: 1.5rem; color: var(--gold-bright); line-height: 1; }

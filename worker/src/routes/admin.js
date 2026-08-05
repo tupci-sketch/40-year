@@ -373,18 +373,31 @@ admin.post("/players/:id/season-baseline", async (c) => {
   return c.json({ ok: true });
 });
 
-/* ---- club record baselines (verified overall club totals; L9) ---- */
+/* ---- club record: the EA-synced all-time baseline (L5 so Dan can sync) ----
+   Sync W/D/L/GF/GA (+ league/playoff apps) from EA's Overall Record page; we
+   stamp baseline_seq = the last logged match so the public record = these
+   figures + everything logged AFTER, plus the club's friendly-stage matches
+   EA never counts (adds up, grows per match, no double-counting, individual
+   player stats untouched). Legacy { values } payload still accepted. */
 admin.post("/club-record", async (c) => {
-  const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
   const b = await c.req.json().catch(() => ({}));
-  const entries = Object.entries(b.values || {});
-  for (const [key, value] of entries) {
+  const nn = (x) => Math.max(0, intOr(x, 0));
+  const hasStructured = ["wins", "draws", "losses", "goalsFor", "goalsAgainst"].some((k) => b[k] != null);
+  const top = await c.env.DB.prepare("SELECT COALESCE(MAX(id),0) seq FROM matches").first();
+  const set = hasStructured ? {
+    wins: nn(b.wins), draws: nn(b.draws), losses: nn(b.losses),
+    goalsFor: nn(b.goalsFor), goalsAgainst: nn(b.goalsAgainst),
+    leagueApps: nn(b.leagueApps), playoffApps: nn(b.playoffApps),
+    baseline_seq: top ? Number(top.seq) : 0,
+  } : (b.values || {});
+  for (const [k, v] of Object.entries(set)) {
     await c.env.DB.prepare(
       "INSERT INTO club_record_baselines (key,value,note) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, note=excluded.note"
-    ).bind(clean(key, 40), clean(String(value), 40), clean(b.note, 200)).run();
+    ).bind(clean(k, 40), clean(String(v), 40), clean(b.note, 200)).run();
   }
-  await audit(c.env, g.user.id, "club_record_update", "club_record", null, b.values);
-  return c.json({ ok: true });
+  await audit(c.env, g.user.id, "club_record", "club_record", null, set);
+  return c.json({ ok: true, baselineSeq: set.baseline_seq });
 });
 
 /* ---------------- SEASONS ---------------- */
@@ -467,10 +480,15 @@ admin.post("/banner", async (c) => {
 admin.post("/league-status", async (c) => {
   const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
   const b = await c.req.json().catch(() => ({}));
+  // Structured division fields (divisionId picks a badge; points/target/chances
+  // are numeric) plus legacy free-text kept for backward-compatible display.
   const val = JSON.stringify({
+    divisionId: clean(b.divisionId, 20),
+    points: b.points === "" || b.points == null ? null : intOr(b.points, 0),
+    target: b.target === "" || b.target == null ? null : intOr(b.target, 0),
+    chances: b.chances === "" || b.chances == null ? null : intOr(b.chances, 0),
     division: clean(b.division, 60),
     position: clean(b.position, 60),
-    points: clean(b.points, 30),
   });
   await c.env.DB.prepare("INSERT INTO site_settings (key,value) VALUES ('league_status',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(val).run();
   await audit(c.env, g.user.id, "league_status", "setting", "league_status", null);

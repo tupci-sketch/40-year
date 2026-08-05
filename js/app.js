@@ -311,14 +311,20 @@
         var form = (res.form || []).map(function (r) { return U.pill(r); }).join("");
         var next = res.nextFixture;
         var ls = res.leagueStatus || {};
-        function cell(v, lab) { return v ? '<div class="league-cell"><span class="league-val">' + U.esc(v) + '</span><span class="league-lab">' + lab + "</span></div>" : ""; }
-        var strip = (ls.division || ls.position || ls.points)
-          ? '<div class="league-strip panel">' +
-              '<div class="league-row">' +
-                cell(ls.division, "Division") + cell(ls.position, "Position") + cell(ls.points, "Points") +
-              "</div>" +
-            "</div>"
-          : "";
+        function cell(v, lab) { return (v != null && v !== "") ? '<div class="league-cell"><span class="league-val">' + U.esc(String(v)) + '</span><span class="league-lab">' + lab + "</span></div>" : ""; }
+        var lsDiv = (window.DIVISIONS || []).filter(function (x) { return x.id === ls.divisionId; })[0];
+        var strip;
+        if (lsDiv) {
+          var ptsStr = ls.points != null && ls.points !== "" ? (String(ls.points) + (ls.target ? " / " + ls.target : "")) : "";
+          var chStr = ls.chances != null && ls.chances !== "" ? (ls.chances + (Number(ls.chances) === 1 ? " chance" : " chances")) : "";
+          strip = '<div class="league-strip panel league-strip-div">' +
+            '<div class="league-badge">' + U.divBadge(lsDiv.id, 62) + "</div>" +
+            '<div class="league-row">' + cell(lsDiv.label, "Division") + cell(chStr, "Remaining") + cell(ptsStr, "Points") + "</div>" +
+          "</div>";
+        } else if (ls.division || ls.position || ls.points) {
+          strip = '<div class="league-strip panel"><div class="league-row">' +
+            cell(ls.division, "Division") + cell(ls.position, "Position") + cell(ls.points, "Points") + "</div></div>";
+        } else strip = "";
 
         // The complete verified record is the default; a toggle drops to the
         // current-season slice. Goals for/against only shown for all-time

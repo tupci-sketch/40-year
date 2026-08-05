@@ -249,10 +249,26 @@
     toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2600);
   }
 
+  /* On-brand SVG shield for an EA division (div5…div1, elite). Number for the
+     numbered tiers, a star for Elite; gold border, tier-tinted fill. */
+  function divBadge(id, size) {
+    size = size || 44;
+    var d = (window.DIVISIONS || []).filter(function (x) { return x.id === id; })[0];
+    if (!d) return "";
+    var fill = id === "elite" ? "#4a1d7a" : id === "div1" ? "#6e1f2a" : "#171226";
+    var glyph = id === "elite"
+      ? '<text x="50" y="70" text-anchor="middle" font-size="40" fill="#F2B45C">★</text>'
+      : '<text x="50" y="82" text-anchor="middle" font-family="Anton, \'Arial Black\', sans-serif" font-size="56" fill="#F2B45C">' + d.tier + '</text>';
+    return '<svg class="div-badge" viewBox="0 0 100 120" width="' + size + '" height="' + Math.round(size * 1.2) +
+      '" role="img" aria-label="' + esc(d.label) + '">' +
+      '<path d="M10 8 H90 V64 Q90 97 50 116 Q10 97 10 64 Z" fill="' + fill + '" stroke="#DA9851" stroke-width="6" stroke-linejoin="round"/>' +
+      glyph + '</svg>';
+  }
+
   window.UI = {
     $: $, $$: $$, el: el, esc: esc,
     fmtDate: fmtDate, fmtDateTime: fmtDateTime,
-    num: num, pick: pick, divisionLabel: divisionLabel, winPct: winPct,
+    num: num, pick: pick, divisionLabel: divisionLabel, winPct: winPct, divBadge: divBadge,
     playerById: playerById, posGroup: posGroup, surname: surname,
     canonPos: canonPos, positionsOf: positionsOf, posFit: posFit,
     controlBadge: controlBadge, captainBadge: captainBadge, chips: chips,
