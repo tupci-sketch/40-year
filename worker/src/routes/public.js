@@ -375,6 +375,15 @@ pub.get("/stats", async (c) => {
 });
 
 /* ---- socials (editable handles for the Social page) ---- */
+/* Editable name pool for the Funhouse manager-spin wheel (owner-managed in
+   Housekeeping → Gaffers). Empty until set; the client folds in squad names and
+   its own defaults. */
+pub.get("/gaffer-wheel", async (c) => {
+  const row = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='gaffer_wheel'").first();
+  let names = []; try { names = row ? JSON.parse(row.value || "[]") : []; } catch (e) {}
+  return c.json({ ok: true, names: Array.isArray(names) ? names : [] });
+});
+
 pub.get("/socials", async (c) => {
   const row = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='socials'").first();
   let socials = {}; try { socials = row ? JSON.parse(row.value || "{}") : {}; } catch (e) {}

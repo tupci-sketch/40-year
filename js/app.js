@@ -489,23 +489,23 @@
     var slots = f.slots.map(function () { return null; });
     var used = {};
     function place(i, id) { if (id && byId[id] && !used[id]) { slots[i] = id; used[id] = 1; return true; } return false; }
-    // Named players first — by exact role, then position group, then anywhere.
-    ["exact", "group", "any"].forEach(function (level) {
+    // Named players first — primary role, then secondary, then same area, then anywhere.
+    [0, 1, 2, "any"].forEach(function (level) {
       f.slots.forEach(function (s, i) {
         if (slots[i]) return;
         for (var k = 0; k < named.length; k++) { var id = named[k]; if (used[id]) continue;
-          if (level === "any" || U.posFit(byId[id], s.pos) === level) { place(i, id); break; } }
+          if (level === "any" || U.posRank(byId[id], s.pos) === level) { place(i, id); break; } }
       });
     });
     // Bot-fill the rest to a full XI — only AI players, never an un-named human.
     var bots = (window.SQUAD || []).filter(function (p) {
       return !p.isHuman && !p.permaBench && !(amyActive && p.id === "donovan") && !used[p.id];
     }).map(function (p) { return p.id; });
-    ["exact", "group", "any"].forEach(function (level) {
+    [0, 1, 2, "any"].forEach(function (level) {
       f.slots.forEach(function (s, i) {
         if (slots[i]) return;
         for (var k = 0; k < bots.length; k++) { var id = bots[k]; if (used[id]) continue;
-          if (level === "any" || U.posFit(byId[id], s.pos) === level) { place(i, id); break; } }
+          if (level === "any" || U.posRank(byId[id], s.pos) === level) { place(i, id); break; } }
       });
     });
     var players = [];
@@ -1441,11 +1441,13 @@
   PAGES.gaffer = {
     enter: function () {
       var mount = U.$("#gaffer-box");
-      loadSquad().then(function () {
+      Promise.all([loadSquad(), NET.gafferWheel().catch(function () { return null; })]).then(function (results) {
         var gf = window.FUN_DEFAULTS.gaffer;
         var pinned = gf.pinned;
+        var wheelRes = results[1];
+        var wheelNames = (wheelRes && wheelRes.ok && wheelRes.names && wheelRes.names.length) ? wheelRes.names : gf.names;
         function pool() {
-          return gf.names.concat((window.SQUAD || []).filter(function (p) { return p.active !== false; }).map(function (p) { return p.name; }));
+          return wheelNames.concat((window.SQUAD || []).filter(function (p) { return p.active !== false; }).map(function (p) { return p.name; }));
         }
         function quote() { return randOf(gf.quotes) || "“We go again.”"; }
 

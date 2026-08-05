@@ -123,24 +123,43 @@
      MATCHES
      ============================================================ */
   function renderMatches(body) {
-    NET.matches({ limit: 30 }).then(function (res) {
-      var matches = (res && res.matches) || [];
-      body.innerHTML =
-        '<div class="admin-actions"><button class="btn btn-gold btn-small" id="adm-match-new">+ Log a new match</button></div>' +
-        '<div id="adm-match-editor"></div>' +
-        '<div class="admin-sublist">' + matches.map(function (m) {
-          return '<div class="admin-row"><span class="admin-row-main">' + U.pill(m.result) + " " + esc(m.opponent) + " " + m.our_score + "–" + m.their_score +
-            '</span><button class="btn btn-ghost btn-small adm-match-edit" data-id="' + m.id + '">Edit</button></div>';
-        }).join("");
-      U.$("#adm-match-new", body).addEventListener("click", function () { openMatchEditor(null); });
+    body.innerHTML =
+      '<div class="admin-actions"><button class="btn btn-gold btn-small" id="adm-match-new">+ Log a new match</button></div>' +
+      '<div class="panel"><div class="field-row" style="align-items:flex-end">' +
+        field("Find any match (number or opponent)", '<input type="text" id="adm-match-find" placeholder="e.g. 687 or Jinglers">') +
+        '<button class="btn btn-ghost btn-small" id="adm-match-go" style="margin-bottom:2px">Open</button>' +
+      "</div><span class=\"admin-inline-note\">Any match, recorded or not — search by opponent, or type its number to jump straight in.</span></div>" +
+      '<div id="adm-match-editor"></div>' +
+      '<div class="section-label" id="adm-match-listlabel">Recent matches</div>' +
+      '<div class="admin-sublist" id="adm-match-list"></div>';
+
+    function edit(id) { NET.match(id).then(function (r) { if (r && r.ok) openMatchEditor(r); else U.toast("No match #" + id); }); }
+    function renderList(matches, label) {
+      U.$("#adm-match-listlabel", body).textContent = label;
+      U.$("#adm-match-list", body).innerHTML = matches.length ? matches.map(function (m) {
+        return '<div class="admin-row"><span class="admin-row-main">#' + m.id + " · " + U.pill(m.result) + " " + esc(m.opponent) + " " + (m.our_score != null ? m.our_score : "–") + "–" + (m.their_score != null ? m.their_score : "–") +
+          '</span><button class="btn btn-ghost btn-small adm-match-edit" data-id="' + m.id + '">Edit</button></div>';
+      }).join("") : '<p class="admin-inline-note">No matches found.</p>';
       U.$$(".adm-match-edit", body).forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          NET.match(btn.getAttribute("data-id")).then(function (r) { if (r && r.ok) openMatchEditor(r); });
-        });
+        btn.addEventListener("click", function () { edit(btn.getAttribute("data-id")); });
       });
+    }
+
+    U.$("#adm-match-new", body).addEventListener("click", function () { openMatchEditor(null); });
+    function doFind() {
+      var q = U.$("#adm-match-find", body).value.trim();
+      if (!q) { NET.matches({ limit: 30 }).then(function (r) { renderList((r && r.matches) || [], "Recent matches"); }); return; }
+      if (/^\d+$/.test(q)) { edit(q); return; }
+      NET.matches({ opponent: q, limit: 50 }).then(function (r) { renderList((r && r.matches) || [], "Results for “" + q + "”"); });
+    }
+    U.$("#adm-match-go", body).addEventListener("click", doFind);
+    U.$("#adm-match-find", body).addEventListener("keydown", function (e) { if (e.key === "Enter") doFind(); });
+
+    NET.matches({ limit: 30 }).then(function (res) {
+      renderList((res && res.matches) || [], "Recent matches");
       var jump = null;
       try { jump = sessionStorage.getItem("v40.editseq"); sessionStorage.removeItem("v40.editseq"); } catch (e) {}
-      if (jump) NET.match(jump).then(function (r) { if (r && r.ok) openMatchEditor(r); });
+      if (jump) edit(jump);
     });
   }
 
@@ -351,8 +370,10 @@
     f.slots.forEach(function (s, i) { if (camIdx === -1 && U.canonPos(s.pos) === "CAM") camIdx = i; });
     if (camIdx !== -1 && byId.tupci) { out[camIdx] = "tupci"; used.tupci = 1; }
     var ids = players.map(function (p) { return p.id; });
-    ["exact", "group"].forEach(function (level) {
-      f.slots.forEach(function (s, i) { if (out[i]) return; for (var k = 0; k < ids.length; k++) { var id = ids[k]; if (!used[id] && U.posFit(byId[id], s.pos) === level) { out[i] = id; used[id] = 1; break; } } });
+    // Primary-position matches first (rank 0), then secondary (1), then same-area
+    // (2) — so pure specialists claim their slot before versatile players do.
+    [0, 1, 2].forEach(function (level) {
+      f.slots.forEach(function (s, i) { if (out[i]) return; for (var k = 0; k < ids.length; k++) { var id = ids[k]; if (!used[id] && U.posRank(byId[id], s.pos) === level) { out[i] = id; used[id] = 1; break; } } });
     });
     f.slots.forEach(function (s, i) { if (out[i]) return; for (var k = 0; k < ids.length; k++) { var id = ids[k]; if (!used[id]) { out[i] = id; used[id] = 1; break; } } });
     return out;
@@ -488,12 +509,20 @@
     NET.gaffers().then(function (res) {
       var list = (res && res.gaffers) || [];
       body.innerHTML =
-        '<div class="panel">' + field("New gaffer name", '<input type="text" id="gf-name" maxlength="60">') +
-          '<div class="admin-actions"><button class="btn btn-gold btn-small" id="gf-add">Add</button><span class="admin-inline-note" id="gf-msg"></span></div></div>' +
-        '<div class="admin-sublist">' + list.map(function (g) {
-          return '<div class="admin-row"><span class="admin-row-main">' + esc(g.name) + '</span>' +
-            (NET.isAdmin() ? '<button class="btn btn-ghost btn-small gf-retire" data-id="' + g.id + '">Retire</button>' : "") + "</div>";
-        }).join("");
+        '<div class="panel">' +
+          '<div class="section-label">Match gaffers <span class="admin-inline-note">who managed games</span></div>' +
+          field("New gaffer name", '<input type="text" id="gf-name" maxlength="60">') +
+          '<div class="admin-actions"><button class="btn btn-gold btn-small" id="gf-add">Add</button><span class="admin-inline-note" id="gf-msg"></span></div>' +
+          '<div class="admin-sublist">' + list.map(function (g) {
+            return '<div class="admin-row"><span class="admin-row-main">' + esc(g.name) + '</span>' +
+              (NET.isAdmin() ? '<button class="btn btn-ghost btn-small gf-retire" data-id="' + g.id + '">Remove</button>' : "") + "</div>";
+          }).join("") + "</div>" +
+        "</div>" +
+        '<div class="panel">' +
+          '<div class="section-label">Manager-spin wheel <span class="admin-inline-note">names the Funhouse wheel can land on (one per line)</span></div>' +
+          '<textarea id="gw-names" rows="8" placeholder="One name per line…"></textarea>' +
+          '<div class="admin-actions"><button class="btn btn-gold btn-small" id="gw-save">Save wheel names</button><span class="admin-inline-note" id="gw-msg">Squad names are always included automatically.</span></div>' +
+        "</div>";
       U.$("#gf-add", body).addEventListener("click", function () {
         var name = U.$("#gf-name", body).value.trim();
         if (!name) return;
@@ -501,6 +530,15 @@
       });
       U.$$(".gf-retire", body).forEach(function (btn) {
         btn.addEventListener("click", function () { NET.adminGafferPatch(btn.getAttribute("data-id"), { active: false }).then(function () { renderTab("gaffers"); }); });
+      });
+      NET.gafferWheel().then(function (r) {
+        var names = (r && r.names) || [];
+        if (!names.length && window.FUN_DEFAULTS && window.FUN_DEFAULTS.gaffer) names = window.FUN_DEFAULTS.gaffer.names || [];
+        U.$("#gw-names", body).value = names.join("\n");
+      });
+      U.$("#gw-save", body).addEventListener("click", function () {
+        var names = U.$("#gw-names", body).value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+        NET.adminGafferWheel(names).then(function (r) { if (r && r.ok) U.toast("Wheel names saved."); else U.$("#gw-msg", body).textContent = "✗ failed"; });
       });
     });
   }

@@ -7,7 +7,7 @@
    the network so the archive is always live. Bump CACHE to ship a
    new shell (also evicts any stale v1/Apps-Script-era cache).
    ============================================================ */
-var CACHE = "v40-shell-v8";
+var CACHE = "v40-shell-v9";
 var SHELL = [
   "./",
   "./index.html",

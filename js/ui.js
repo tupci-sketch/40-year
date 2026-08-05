@@ -99,6 +99,21 @@
     return "no";
   }
 
+  /* Finer fit ranking for auto-picking an XI: prefer a player's PRIMARY position
+     over a secondary one, so a pure RM (Thunder) beats an RW who also lists RM
+     (Le Jeune) for the RM slot, and CDM-primary players fill DM before CMs do.
+       0 = primary position matches · 1 = a secondary position matches
+       2 = same area of the pitch · 3 = no fit */
+  function posRank(player, slotPos) {
+    var slot = canonPos(slotPos);
+    var mine = positionsOf(player).map(canonPos);
+    if (mine[0] === slot) return 0;
+    if (mine.indexOf(slot) !== -1) return 1;
+    var g = CGROUP[slot];
+    for (var i = 0; i < mine.length; i++) { if (CGROUP[mine[i]] === g) return 2; }
+    return 3;
+  }
+
   function surname(p) {
     var bits = p.name.trim().split(/\s+/);
     return bits[bits.length - 1];
@@ -270,7 +285,7 @@
     fmtDate: fmtDate, fmtDateTime: fmtDateTime,
     num: num, pick: pick, divisionLabel: divisionLabel, winPct: winPct, divBadge: divBadge,
     playerById: playerById, posGroup: posGroup, surname: surname,
-    canonPos: canonPos, positionsOf: positionsOf, posFit: posFit,
+    canonPos: canonPos, positionsOf: positionsOf, posFit: posFit, posRank: posRank,
     controlBadge: controlBadge, captainBadge: captainBadge, chips: chips,
     pill: pill, cardTile: cardTile, cardSrc: cardSrc, statTile: statTile, runCountUps: runCountUps,
     emptyState: emptyState, waitingState: waitingState, offlineState: offlineState,

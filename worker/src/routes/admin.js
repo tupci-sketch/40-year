@@ -477,6 +477,16 @@ admin.post("/banner", async (c) => {
    recorded match results — it doesn't reset or step predictably from win/loss
    counts (promotion, playoff seeding, points deductions), unlike Played/Form
    on the home card, which the /home route derives from matches directly. */
+/* Editable name pool for the Funhouse manager-spin wheel (L5). */
+admin.post("/gaffer-wheel", async (c) => {
+  const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const b = await c.req.json().catch(() => ({}));
+  const names = Array.isArray(b.names) ? b.names.map(function (x) { return clean(x, 60); }).filter(Boolean).slice(0, 100) : [];
+  await c.env.DB.prepare("INSERT INTO site_settings (key,value) VALUES ('gaffer_wheel',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(JSON.stringify(names)).run();
+  await audit(c.env, g.user.id, "gaffer_wheel", "setting", "gaffer_wheel", null);
+  return c.json({ ok: true, names: names });
+});
+
 admin.post("/league-status", async (c) => {
   const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
   const b = await c.req.json().catch(() => ({}));
