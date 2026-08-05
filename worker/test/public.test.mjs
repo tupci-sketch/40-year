@@ -60,6 +60,7 @@ ok(amy && amy.isHuman === true && amy.linkedTo === "donovan", "squad: Amy human 
 const player = await get(app, env, "/api/players/tupci");
 ok(player.json.baseline && player.json.baseline.goals === 351, "player: verified baseline present");
 ok(player.json.recorded.goals === 2 && player.json.recorded.apps === 3, "player: recorded contributions computed (baseline seq 0)");
+ok(player.json.allTime && player.json.allTime.apps === 395 && player.json.allTime.goals === 353, "player: full career = baseline + games logged since (grows, not frozen)");
 
 const matches = await get(app, env, "/api/matches?limit=2");
 ok(matches.json.matches.length === 2 && matches.json.matches[0].id === 3, "matches: newest first + limit");

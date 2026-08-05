@@ -650,12 +650,15 @@
         var res = results[0];
         if (!res || !res.ok) { mt.innerHTML = U.emptyState("No such player", "", "—"); return; }
         var p = res.player, base = res.baseline, rec = res.recorded || {}, games = res.games || [];
+        // Full career = verified baseline folded with games logged since it (grows
+        // as matches are recorded); falls back to the raw baseline if not provided.
+        var full = res.allTime || base;
         var pos = (p.positions || []).join(" / ") || "—";
 
         function totalsTiles(which) {
-          if (which === "full" && base) {
-            return '<div class="tile-row">' + U.statTile("Apps", U.num(base.apps)) + U.statTile("Goals", U.num(base.goals)) +
-              U.statTile("Assists", U.num(base.assists)) + U.statTile("Avg rating", base.avg_rating != null ? Number(base.avg_rating).toFixed(1) : "—") + "</div>";
+          if (which === "full" && full) {
+            return '<div class="tile-row">' + U.statTile("Apps", U.num(full.apps)) + U.statTile("Goals", U.num(full.goals)) +
+              U.statTile("Assists", U.num(full.assists)) + U.statTile("Avg rating", full.avg_rating != null ? Number(full.avg_rating).toFixed(1) : "—") + "</div>";
           }
           return '<div class="tile-row">' + U.statTile("Apps", U.num(rec.apps) || 0) + U.statTile("Goals", U.num(rec.goals) || 0) +
             U.statTile("Assists", U.num(rec.assists) || 0) + U.statTile("Avg rating", rec.avg_rating != null ? Number(rec.avg_rating).toFixed(1) : "—") +

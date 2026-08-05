@@ -111,12 +111,30 @@ pub.get("/players/:id", async (c) => {
      FROM match_player_stats mps JOIN matches m ON m.id=mps.match_id
      WHERE mps.player_id=? ORDER BY m.id DESC`
   ).bind(id).all());
+  // Full career = verified baseline + everything recorded AFTER its as-of seq,
+  // so the dossier's headline totals grow with each logged match (matching the
+  // Stats Centre career boards) instead of sitting frozen at the baseline.
+  let allTime = null;
+  if (base) {
+    const after = await c.env.DB.prepare(
+      `SELECT COUNT(*) apps, COALESCE(SUM(goals),0) goals, COALESCE(SUM(assists),0) assists
+       FROM match_player_stats WHERE player_id=? AND match_id > ?`
+    ).bind(id, Number(base.as_of_seq) || 0).first();
+    allTime = {
+      apps: (Number(base.apps) || 0) + (Number(after.apps) || 0),
+      goals: (Number(base.goals) || 0) + (Number(after.goals) || 0),
+      assists: (Number(base.assists) || 0) + (Number(after.assists) || 0),
+      avg_rating: base.avg_rating != null ? Number(base.avg_rating) : (rec && rec.avg_rating != null ? Number(rec.avg_rating) : null),
+      win_pct: base.win_pct != null ? Number(base.win_pct) : null
+    };
+  }
   return c.json({
     ok: true,
     player: { id: p.id, number: p.number, name: p.name, slug: p.slug, controlledBy: p.controlled_by,
       isHuman: !!p.is_human, retiredAI: !!p.retired_ai, linkedTo: p.linked_to || null,
       positions: parsePositions(p.positions_json), flavour: p.flavour, card: cardRow ? cardRow.public_url : null },
     baseline: base || null,
+    allTime: allTime,
     recorded: rec,
     games: games
   });
