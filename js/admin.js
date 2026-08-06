@@ -812,11 +812,15 @@
     function setv(id, v) { var el = U.$("#" + id, body); if (el) el.value = (v == null ? "" : v); }
     function updTotal() { U.$("#cr-total", body).textContent = "Played: " + (iv("cr-w") + iv("cr-d") + iv("cr-l")); }
 
+    // The editor holds EA's Overall Record figures (league+playoff, no
+    // friendlies). Prefill with the last-synced EA figures, or these known
+    // defaults for the first sync, so it's a one-tap reconcile.
+    var EA_DEFAULT = { wins: 305, draws: 87, losses: 293, goalsFor: 1932, goalsAgainst: 1861, leagueApps: 638, playoffApps: 47 };
     NET.stats().then(function (res) {
-      var cr = (res && res.clubRecord) || {};
-      setv("cr-w", cr.wins); setv("cr-d", cr.draws); setv("cr-l", cr.losses);
-      setv("cr-gf", cr.goalsFor); setv("cr-ga", cr.goalsAgainst);
-      setv("cr-la", cr.leagueApps); setv("cr-pa", cr.playoffApps);
+      var ea = (res && res.eaRecord) || EA_DEFAULT;
+      setv("cr-w", ea.wins); setv("cr-d", ea.draws); setv("cr-l", ea.losses);
+      setv("cr-gf", ea.goalsFor); setv("cr-ga", ea.goalsAgainst);
+      setv("cr-la", ea.leagueApps); setv("cr-pa", ea.playoffApps);
       updTotal();
     });
     ["cr-w", "cr-d", "cr-l"].forEach(function (id) { U.$("#" + id, body).addEventListener("input", updTotal); });
@@ -830,10 +834,21 @@
     U.$$(".div-opt", body).forEach(function (b) { b.addEventListener("click", function () { selDiv = b.getAttribute("data-id"); paintDivs(); }); });
     NET.home().then(function (res) {
       var ls = (res && res.leagueStatus) || {};
-      selDiv = ls.divisionId || null; paintDivs();
+      // Map an old free-text division (e.g. "Elite", "Division 2") onto the new
+      // picker so the legacy L9-settings entry carries over on first open.
+      selDiv = ls.divisionId || null;
+      if (!selDiv && ls.division) {
+        var txt = String(ls.division).toLowerCase();
+        var match = (window.DIVISIONS || []).filter(function (d) {
+          return txt === d.label.toLowerCase() || txt === d.id || (d.tier && txt.indexOf(String(d.tier)) !== -1 && txt.indexOf("division") !== -1) || (d.id === "elite" && txt.indexOf("elite") !== -1);
+        })[0];
+        if (match) selDiv = match.id;
+      }
+      paintDivs();
       if (ls.points != null) setv("lg-points", ls.points);
       if (ls.target != null) setv("lg-target", ls.target);
-      if (ls.chances != null) setv("lg-chances", ls.chances);
+      if (ls.chances != null && ls.chances !== "") setv("lg-chances", ls.chances);
+      else if (ls.position) { var mm = String(ls.position).match(/\d+/); if (mm) setv("lg-chances", mm[0]); }
     });
     U.$("#lg-save", body).addEventListener("click", function () {
       var div = (window.DIVISIONS || []).filter(function (x) { return x.id === selDiv; })[0];

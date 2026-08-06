@@ -384,20 +384,48 @@ admin.post("/club-record", async (c) => {
   const b = await c.req.json().catch(() => ({}));
   const nn = (x) => Math.max(0, intOr(x, 0));
   const hasStructured = ["wins", "draws", "losses", "goalsFor", "goalsAgainst"].some((k) => b[k] != null);
-  const top = await c.env.DB.prepare("SELECT COALESCE(MAX(id),0) seq FROM matches").first();
-  const set = hasStructured ? {
+  if (!hasStructured) {
+    // Legacy { values } passthrough (raw baseline write).
+    for (const [k, v] of Object.entries(b.values || {})) {
+      await c.env.DB.prepare("INSERT INTO club_record_baselines (key,value,note) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, note=excluded.note")
+        .bind(clean(k, 40), clean(String(v), 40), clean(b.note, 200)).run();
+    }
+    await audit(c.env, g.user.id, "club_record", "club_record", null, b.values || {});
+    return c.json({ ok: true });
+  }
+  // The entered figures are EA's overall (league+playoff, no friendlies). The
+  // PRE-TRACKING baseline = entered − the current tracked non-friendly archive,
+  // stored with baseline_seq=0 so the whole live archive (incl. friendlies)
+  // adds on top: record = baseline + archive = EA + friendlies (= 687), and it
+  // stays live as tracked games are added or edited. Tracked stats untouched.
+  const entered = {
     wins: nn(b.wins), draws: nn(b.draws), losses: nn(b.losses),
     goalsFor: nn(b.goalsFor), goalsAgainst: nn(b.goalsAgainst),
     leagueApps: nn(b.leagueApps), playoffApps: nn(b.playoffApps),
-    baseline_seq: top ? Number(top.seq) : 0,
-  } : (b.values || {});
-  for (const [k, v] of Object.entries(set)) {
-    await c.env.DB.prepare(
-      "INSERT INTO club_record_baselines (key,value,note) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, note=excluded.note"
-    ).bind(clean(k, 40), clean(String(v), 40), clean(b.note, 200)).run();
+  };
+  const t = await c.env.DB.prepare(
+    `SELECT COALESCE(SUM(result='W'),0) w, COALESCE(SUM(result='D'),0) d, COALESCE(SUM(result='L'),0) l,
+            COALESCE(SUM(our_score),0) gf, COALESCE(SUM(their_score),0) ga,
+            COALESCE(SUM(stage='league'),0) la, COALESCE(SUM(stage='playoff'),0) pa
+       FROM matches WHERE stage <> 'friendly'`
+  ).first();
+  const base = {
+    wins: Math.max(0, entered.wins - Number(t.w)), draws: Math.max(0, entered.draws - Number(t.d)),
+    losses: Math.max(0, entered.losses - Number(t.l)),
+    goalsFor: Math.max(0, entered.goalsFor - Number(t.gf)), goalsAgainst: Math.max(0, entered.goalsAgainst - Number(t.ga)),
+    leagueApps: Math.max(0, entered.leagueApps - Number(t.la)), playoffApps: Math.max(0, entered.playoffApps - Number(t.pa)),
+    baseline_seq: 0,
+  };
+  for (const [k, v] of Object.entries(base)) {
+    await c.env.DB.prepare("INSERT INTO club_record_baselines (key,value,note) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, note=excluded.note")
+      .bind(k, String(v), clean(b.note, 200)).run();
   }
-  await audit(c.env, g.user.id, "club_record", "club_record", null, set);
-  return c.json({ ok: true, baselineSeq: set.baseline_seq });
+  await c.env.DB.prepare("DELETE FROM club_record_baselines WHERE key='played'").run();
+  // Remember the entered EA figures so the editor round-trips them.
+  await c.env.DB.prepare("INSERT INTO site_settings (key,value) VALUES ('ea_record',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+    .bind(JSON.stringify(entered)).run();
+  await audit(c.env, g.user.id, "club_record", "club_record", null, { entered, base });
+  return c.json({ ok: true, entered, baseline: base });
 });
 
 /* One-off (L9): retire Peter Nkuah ('lewban') and split his 7 keeper games

@@ -103,6 +103,13 @@ ok((await post(app, env, "/api/admin/club-record", { wins: 305, draws: 87, losse
 const stCr = (await get(app, env, "/api/stats")).json;
 ok(stCr.clubRecord && stCr.clubRecord.played === 685 && stCr.clubRecord.wins === 305, "stats: club record = baseline (685) and adds up");
 ok(stCr.clubRecord.played === stCr.clubRecord.wins + stCr.clubRecord.draws + stCr.clubRecord.losses, "stats: club record adds up (played = W+D+L)");
+// Tracked games stay live: a new logged league win + a friendly loss grow the
+// record on top of the synced baseline (baseline + tracked model).
+await DB.prepare("INSERT INTO matches (id,stage,opponent,our_score,their_score,result) VALUES (5001,'league','New Op',3,0,'W')").run();
+await DB.prepare("INSERT INTO matches (id,stage,opponent,our_score,their_score,result) VALUES (5002,'friendly','Germany',1,2,'L')").run();
+const stCr2 = (await get(app, env, "/api/stats")).json;
+ok(stCr2.clubRecord.wins === 306 && stCr2.clubRecord.losses === 294 && stCr2.clubRecord.played === 687, "stats: tracked games (+ friendly) grow the record live to 687");
+ok(stCr2.eaRecord && stCr2.eaRecord.wins === 305 && stCr2.eaRecord.losses === 293, "stats: entered EA figures round-trip for the editor");
 
 // ---- users (L9) ----
 ok((await get(app, env, "/api/admin/users", H(modTok))).json.users.length === 3, "L5 can view users");

@@ -260,6 +260,8 @@ pub.get("/leaderboards", async (c) => {
 pub.get("/stats", async (c) => {
   // Club record: EA-synced baseline + everything logged since (always adds up).
   const clubRecord = await computeClubRecord(c.env);
+  const eaRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='ea_record'").first();
+  let eaRecord = null; try { eaRecord = eaRow ? JSON.parse(eaRow.value || "null") : null; } catch (e) {}
 
   // Chronological result stream for streaks + opposition head-to-head.
   const matches = rows(await c.env.DB.prepare(
@@ -386,6 +388,7 @@ pub.get("/stats", async (c) => {
     ok: true,
     // EA-synced club record (baseline + matches logged since); always adds up.
     clubRecord,
+    eaRecord,
     recorded: { count: matches.length, wins: logW, draws: logD, losses: logL, goalsFor: logGF, goalsAgainst: logGA, winStreak: winBest, unbeaten: unbBest },
     extremes: { bestWin, worstLoss, cleanSheets, goalFests, hatTricks: hats.reduce((a, h) => a + Number(h.n), 0) },
     boards, players, opposition
