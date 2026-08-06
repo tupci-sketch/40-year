@@ -317,8 +317,12 @@
       title = "Relegation Match";
       body = camp.result === "survived" ? "Survived — stayed up" : camp.result === "relegated" ? "Relegated" : "One-off — win to survive";
     } else {
-      var played = Number(camp.progress) || 0, total = Number(camp.target) || 0;
-      var rec = (camp.wins || camp.draws || camp.losses) ? " · " + (camp.wins || 0) + "W " + (camp.draws || 0) + "D " + (camp.losses || 0) + "L" : "";
+      // Playoff ties can't be drawn (golden goal / pens decide them), so every
+      // match is a W or an L: games played = wins + losses, and that's what the
+      // bar fills on. Record shown W–L only.
+      var w = Number(camp.wins) || 0, l = Number(camp.losses) || 0;
+      var played = w + l, total = Number(camp.target) || 0;
+      var rec = (w || l) ? " · " + w + "–" + l : "";
       title = (div ? div.label + " " : "") + "Playoffs";
       body = "Match " + played + (total ? " of " + total : "") + rec;
       if (total) bar = '<div class="camp-bar"><span style="width:' + Math.min(100, Math.round(played / total * 100)) + '%"></span></div>';
@@ -379,7 +383,9 @@
           "</div>";
         }
         function renderHome() {
-          mt.innerHTML = strip + campStrip +
+          // A live campaign usurps the league standing on the home page, just
+          // as it does in-game — show the campaign tracker in its place.
+          mt.innerHTML = (campStrip || strip) +
             '<div class="home-scope-head"><div class="section-label home-season-label">' + (scope === "all" ? "All-time record" : "This season") + "</div>" +
               '<div class="stat-toggle home-scope-toggle">' +
                 '<button class="tab' + (scope === "all" ? " active" : "") + '" data-scope="all">All-time</button>' +

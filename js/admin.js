@@ -807,25 +807,18 @@
           field("Type", '<select id="cm-kind"><option value="">None</option><option value="promotion">Promotion push</option><option value="relegation">Relegation match</option><option value="playoffs">Playoffs</option></select>') +
           field("Division", '<select id="cm-div"><option value="">—</option>' + DIVS.map(function (d) { return '<option value="' + d.id + '">' + esc(d.label) + "</option>"; }).join("") + "</select>") +
         "</div>" +
-        '<p class="admin-inline-note">Promotion: wins required (up to 5) + wins so far. Relegation: a one-off — set the result when it’s played. Playoffs: total matches + matches played, and the running W/D/L.</p>' +
+        '<p class="admin-inline-note">Promotion: wins required (up to 5) + wins so far. Relegation: a one-off — set the result when it’s played. Playoffs: total matches, plus the running W–L (matches played and the bar fill from wins + losses — playoff ties go to golden goal / pens, so there are no draws).</p>' +
         '<div class="field-row">' +
           field("Wins req / total matches", '<input type="number" min="0" id="cm-target">') +
-          field("Wins so far / played", '<input type="number" min="0" id="cm-progress">') +
+          field("Wins so far", '<input type="number" min="0" id="cm-progress">') +
         "</div>" +
         '<div class="field-row">' +
           field("Playoff W", '<input type="number" min="0" id="cm-w">') +
-          field("Playoff D", '<input type="number" min="0" id="cm-d">') +
           field("Playoff L", '<input type="number" min="0" id="cm-l">') +
         "</div>" +
         field("Relegation result", '<select id="cm-result"><option value="">Pending</option><option value="survived">Survived</option><option value="relegated">Relegated</option></select>') +
         '<div class="admin-actions"><button class="btn btn-gold btn-small" id="cm-save">Save campaign</button><span class="admin-inline-note" id="cm-msg"></span></div>' +
-      "</div>" +
-      (NET.isAdmin() ?
-        '<div class="panel">' +
-          '<div class="section-label">Data cleanup <span class="admin-inline-note">one-off admin actions</span></div>' +
-          '<p class="admin-inline-note">Retire Peter Nkuah and split his 7 keeper games between Pancake the Octopus (261, 263, 276, 278) and Ye Yu II (262, 269, 277). Safe to click once; does nothing if already done.</p>' +
-          '<div class="admin-actions"><button class="btn btn-ghost btn-small" id="cl-peter">Retire Peter Nkuah → split stats</button><span class="admin-inline-note" id="cl-peter-msg"></span></div>' +
-        "</div>" : "");
+      "</div>";
 
     function gv(id) { var el = U.$("#" + id, body); return el ? el.value : ""; }
     function iv(id) { return parseInt(gv(id), 10) || 0; }
@@ -892,17 +885,6 @@
       }).then(function (r) { if (r && r.ok) U.toast("League standing saved."); else U.$("#lg-msg", body).textContent = "✗ failed"; });
     });
 
-    var peterBtn = U.$("#cl-peter", body);
-    if (peterBtn) peterBtn.addEventListener("click", function () {
-      if (!confirm("Retire Peter Nkuah and reassign his 7 games to Pancake + Ye Yu? This can't be undone.")) return;
-      peterBtn.disabled = true;
-      var msg = U.$("#cl-peter-msg", body); msg.textContent = "Working…";
-      NET.adminReassignPeter().then(function (r) {
-        peterBtn.disabled = false;
-        if (r && r.ok) { msg.textContent = r.alreadyDone ? "Already done — Peter's gone." : "✓ Done — Peter retired, stats reassigned."; U.toast("Peter Nkuah retired."); }
-        else msg.textContent = "✗ " + ((r && r.code) || "failed");
-      });
-    });
   }
 
   function renderHonours(body) {
