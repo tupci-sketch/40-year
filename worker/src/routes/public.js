@@ -456,13 +456,16 @@ pub.get("/home", async (c) => {
 
   const leagueRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='league_status'").first();
   let leagueStatus = null; try { leagueStatus = leagueRow ? JSON.parse(leagueRow.value || "null") : null; } catch (e) {}
+  const campRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='campaign'").first();
+  let campaign = null; try { campaign = campRow ? JSON.parse(campRow.value || "null") : null; } catch (e) {}
+  if (campaign && !campaign.kind) campaign = null;
 
   const news = rows(await c.env.DB.prepare(
     "SELECT id,tag,date_iso,title FROM news_posts WHERE status='published' ORDER BY pinned DESC, date_iso DESC LIMIT 3"
   ).all());
   const bannerRow = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='banner'").first();
   let banner = null; try { banner = bannerRow ? JSON.parse(bannerRow.value || "null") : null; } catch (e) {}
-  return c.json({ ok: true, latestResult: latest, nextFixture, form, record, recordAll, leagueStatus, news, banner });
+  return c.json({ ok: true, latestResult: latest, nextFixture, form, record, recordAll, leagueStatus, campaign, news, banner });
 });
 
 export default pub;

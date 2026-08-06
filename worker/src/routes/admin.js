@@ -569,6 +569,29 @@ admin.post("/league-status", async (c) => {
   return c.json({ ok: true });
 });
 
+/* Campaign tracker (L5): promotion push (wins to go up), one-off relegation
+   match, or a playoff series (matches in a division). Shown on the home page.
+   Empty/kind='none' clears it. */
+admin.post("/campaign", async (c) => {
+  const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const b = await c.req.json().catch(() => ({}));
+  const kind = ["promotion", "relegation", "playoffs"].includes(b.kind) ? b.kind : "";
+  const val = kind ? JSON.stringify({
+    kind: kind,
+    divisionId: clean(b.divisionId, 20),
+    target: Math.max(0, intOr(b.target, 0)),
+    progress: Math.max(0, intOr(b.progress, 0)),
+    wins: Math.max(0, intOr(b.wins, 0)),
+    draws: Math.max(0, intOr(b.draws, 0)),
+    losses: Math.max(0, intOr(b.losses, 0)),
+    result: ["survived", "relegated", "promoted", "won", "lost"].includes(b.result) ? b.result : "",
+    note: clean(b.note, 120),
+  }) : "null";
+  await c.env.DB.prepare("INSERT INTO site_settings (key,value) VALUES ('campaign',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(val).run();
+  await audit(c.env, g.user.id, "campaign", "setting", "campaign", { kind: kind });
+  return c.json({ ok: true });
+});
+
 admin.post("/settings", async (c) => {
   const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
   const b = await c.req.json().catch(() => ({}));

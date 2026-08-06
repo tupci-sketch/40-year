@@ -800,6 +800,25 @@
         '<div class="field-row">' + field("Points", '<input type="number" min="0" id="lg-points">') + field("Target (blank = ∞)", '<input type="number" min="0" id="lg-target">') + field("Chances left", '<input type="number" min="0" id="lg-chances">') + "</div>" +
         '<div class="admin-actions"><button class="btn btn-gold btn-small" id="lg-save">Save league standing</button><span class="admin-inline-note" id="lg-msg"></span></div>' +
       "</div>" +
+      '<div class="panel">' +
+        '<div class="section-label">Campaign <span class="admin-inline-note">shows a tracker on the home page</span></div>' +
+        '<div class="field-row">' +
+          field("Type", '<select id="cm-kind"><option value="">None</option><option value="promotion">Promotion push</option><option value="relegation">Relegation match</option><option value="playoffs">Playoffs</option></select>') +
+          field("Division", '<select id="cm-div"><option value="">—</option>' + DIVS.map(function (d) { return '<option value="' + d.id + '">' + esc(d.label) + "</option>"; }).join("") + "</select>") +
+        "</div>" +
+        '<p class="admin-inline-note">Promotion: wins required (up to 5) + wins so far. Relegation: a one-off — set the result when it’s played. Playoffs: total matches + matches played, and the running W/D/L.</p>' +
+        '<div class="field-row">' +
+          field("Wins req / total matches", '<input type="number" min="0" id="cm-target">') +
+          field("Wins so far / played", '<input type="number" min="0" id="cm-progress">') +
+        "</div>" +
+        '<div class="field-row">' +
+          field("Playoff W", '<input type="number" min="0" id="cm-w">') +
+          field("Playoff D", '<input type="number" min="0" id="cm-d">') +
+          field("Playoff L", '<input type="number" min="0" id="cm-l">') +
+        "</div>" +
+        field("Relegation result", '<select id="cm-result"><option value="">Pending</option><option value="survived">Survived</option><option value="relegated">Relegated</option></select>') +
+        '<div class="admin-actions"><button class="btn btn-gold btn-small" id="cm-save">Save campaign</button><span class="admin-inline-note" id="cm-msg"></span></div>' +
+      "</div>" +
       (NET.isAdmin() ?
         '<div class="panel">' +
           '<div class="section-label">Data cleanup <span class="admin-inline-note">one-off admin actions</span></div>' +
@@ -849,6 +868,19 @@
       if (ls.target != null) setv("lg-target", ls.target);
       if (ls.chances != null && ls.chances !== "") setv("lg-chances", ls.chances);
       else if (ls.position) { var mm = String(ls.position).match(/\d+/); if (mm) setv("lg-chances", mm[0]); }
+      var cm = (res && res.campaign) || {};
+      if (cm.kind) U.$("#cm-kind", body).value = cm.kind;
+      if (cm.divisionId) U.$("#cm-div", body).value = cm.divisionId;
+      setv("cm-target", cm.target); setv("cm-progress", cm.progress);
+      setv("cm-w", cm.wins); setv("cm-d", cm.draws); setv("cm-l", cm.losses);
+      if (cm.result) U.$("#cm-result", body).value = cm.result;
+    });
+    U.$("#cm-save", body).addEventListener("click", function () {
+      NET.adminCampaign({
+        kind: gv("cm-kind"), divisionId: gv("cm-div"),
+        target: iv("cm-target"), progress: iv("cm-progress"),
+        wins: iv("cm-w"), draws: iv("cm-d"), losses: iv("cm-l"), result: gv("cm-result")
+      }).then(function (r) { if (r && r.ok) U.toast(gv("cm-kind") ? "Campaign saved." : "Campaign cleared."); else U.$("#cm-msg", body).textContent = "✗ failed"; });
     });
     U.$("#lg-save", body).addEventListener("click", function () {
       var div = (window.DIVISIONS || []).filter(function (x) { return x.id === selDiv; })[0];

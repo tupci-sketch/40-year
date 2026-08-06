@@ -296,6 +296,40 @@
     });
   }
 
+  /* Home campaign banner: a promotion push (wins to go up), a one-off relegation
+     match, or a playoff series — set in Housekeeping → League & Record. */
+  function campaignBanner(camp) {
+    if (!camp || !camp.kind) return "";
+    var DIVS = window.DIVISIONS || [];
+    var ids = DIVS.map(function (d) { return d.id; });
+    var i = ids.indexOf(camp.divisionId);
+    var div = i >= 0 ? DIVS[i] : null;
+    function bdg(d) { return d ? U.divBadge(d.id, 50) : ""; }
+    var title = "", body = "", bar = "", badges = bdg(div);
+    if (camp.kind === "promotion") {
+      var up = (i >= 0 && i < DIVS.length - 1) ? DIVS[i + 1] : null;
+      var t = Number(camp.target) || 0, p = Number(camp.progress) || 0;
+      title = "Promotion Push";
+      body = (div ? div.label : "") + (up ? " → " + up.label : "") + " · " + p + (t ? " / " + t : "") + (t === 1 ? " win" : " wins");
+      if (t) bar = '<div class="camp-bar"><span style="width:' + Math.min(100, Math.round(p / t * 100)) + '%"></span></div>';
+      if (up) badges += '<span class="camp-arrow">→</span>' + bdg(up);
+    } else if (camp.kind === "relegation") {
+      title = "Relegation Match";
+      body = camp.result === "survived" ? "Survived — stayed up" : camp.result === "relegated" ? "Relegated" : "One-off — win to survive";
+    } else {
+      var played = Number(camp.progress) || 0, total = Number(camp.target) || 0;
+      var rec = (camp.wins || camp.draws || camp.losses) ? " · " + (camp.wins || 0) + "W " + (camp.draws || 0) + "D " + (camp.losses || 0) + "L" : "";
+      title = (div ? div.label + " " : "") + "Playoffs";
+      body = "Match " + played + (total ? " of " + total : "") + rec;
+      if (total) bar = '<div class="camp-bar"><span style="width:' + Math.min(100, Math.round(played / total * 100)) + '%"></span></div>';
+    }
+    return '<div class="league-strip panel camp-strip">' +
+      '<div class="camp-badges">' + badges + "</div>" +
+      '<div class="camp-info"><span class="camp-title">' + U.esc(title) + "</span>" +
+        '<span class="camp-body">' + U.esc(body) + "</span>" + bar + "</div>" +
+    "</div>";
+  }
+
   /* ========================================================
      HOME
      ======================================================== */
@@ -316,15 +350,17 @@
         var strip;
         if (lsDiv) {
           var ptsStr = ls.points != null && ls.points !== "" ? (String(ls.points) + (ls.target ? " / " + ls.target : "")) : "";
-          var chStr = ls.chances != null && ls.chances !== "" ? (ls.chances + (Number(ls.chances) === 1 ? " chance" : " chances")) : "";
+          var ptsLab = Number(ls.points) === 1 ? "Point" : "Points";
+          var chVal = ls.chances != null && ls.chances !== "" ? String(ls.chances) : "";
           strip = '<div class="league-strip panel league-strip-div">' +
             '<div class="league-badge">' + U.divBadge(lsDiv.id, 62) + "</div>" +
-            '<div class="league-row">' + cell(lsDiv.label, "Division") + cell(chStr, "Remaining") + cell(ptsStr, "Points") + "</div>" +
+            '<div class="league-row">' + cell(lsDiv.label, "Division") + cell(chVal, "Chances Remaining") + cell(ptsStr, ptsLab) + "</div>" +
           "</div>";
         } else if (ls.division || ls.position || ls.points) {
           strip = '<div class="league-strip panel"><div class="league-row">' +
             cell(ls.division, "Division") + cell(ls.position, "Position") + cell(ls.points, "Points") + "</div></div>";
         } else strip = "";
+        var campStrip = campaignBanner(res.campaign);
 
         // The complete verified record is the default; a toggle drops to the
         // current-season slice. Goals for/against only shown for all-time
@@ -343,7 +379,7 @@
           "</div>";
         }
         function renderHome() {
-          mt.innerHTML = strip +
+          mt.innerHTML = strip + campStrip +
             '<div class="home-scope-head"><div class="section-label home-season-label">' + (scope === "all" ? "All-time record" : "This season") + "</div>" +
               '<div class="stat-toggle home-scope-toggle">' +
                 '<button class="tab' + (scope === "all" ? " active" : "") + '" data-scope="all">All-time</button>' +
@@ -1148,7 +1184,12 @@
             (p.identity ? '<p><span class="badge badge-human">' + U.esc(p.identity.name) + "</span></p>" : "") +
             (p.titles && p.titles.length ? '<p>' + p.titles.map(function (t) { return '<span class="pill">' + U.esc(t.icon || "") + " " + U.esc(t.name) + "</span>"; }).join(" ") + "</p>" : "") +
             (p.bio ? "<p>" + U.esc(p.bio) + "</p>" : "") +
-            (p.linkedPlayer ? '<p><a href="#player/' + p.linkedPlayer.id + '">On the pitch: ' + U.esc(p.linkedPlayer.name) + " #" + p.linkedPlayer.number + "</a></p>" : "") +
+            (p.linkedPlayer ? '<a class="linked-player" href="#player/' + p.linkedPlayer.id + '">' +
+              '<img class="linked-player-img" src="' + U.esc(p.linkedPlayer.card || ("assets/img/" + p.linkedPlayer.number + ".jpg")) + '" alt="' + U.esc(p.linkedPlayer.name) + '" loading="lazy" decoding="async" onerror="this.onerror=null;this.src=\'assets/img/crest.png\'">' +
+              '<div class="linked-player-info"><span class="linked-player-eyebrow">On the pitch</span>' +
+                '<span class="linked-player-name">' + U.esc(p.linkedPlayer.name) + ' <span class="player-num">#' + p.linkedPlayer.number + "</span></span>" +
+                '<div class="linked-player-stats"><span><b>' + U.num(p.linkedPlayer.apps) + "</b> apps</span><span><b>" + U.num(p.linkedPlayer.goals) + "</b> goals</span><span><b>" + U.num(p.linkedPlayer.assists) + "</b> assists</span></div>" +
+              "</div></a>" : "") +
             (NET.me && !mine ? '<button class="btn btn-primary btn-small" id="prof-dm">Message</button>' : "") +
           "</div>" +
           (mine ? '<div id="profile-clubhouse"></div><div id="profile-security"></div>' : "");

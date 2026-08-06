@@ -36,7 +36,22 @@ async function buildPublicProfile(env, user) {
 
   let linkedPlayer = null;
   if (prof && prof.linked_player_id && Number(prof.show_linked) === 1) {
-    linkedPlayer = await env.DB.prepare("SELECT id,name,number FROM players WHERE id=?").bind(prof.linked_player_id).first();
+    const pl = await env.DB.prepare("SELECT id,name,number FROM players WHERE id=?").bind(prof.linked_player_id).first();
+    if (pl) {
+      const card = await env.DB.prepare("SELECT public_url FROM player_card_assets WHERE player_id=? AND status='active' ORDER BY version DESC LIMIT 1").bind(pl.id).first();
+      const base = await env.DB.prepare("SELECT apps,goals,assists,as_of_seq FROM player_career_baselines WHERE player_id=?").bind(pl.id).first();
+      let apps, goals, assists;
+      if (base) {
+        const after = await env.DB.prepare("SELECT COUNT(*) apps, COALESCE(SUM(goals),0) goals, COALESCE(SUM(assists),0) assists FROM match_player_stats WHERE player_id=? AND match_id > ?").bind(pl.id, Number(base.as_of_seq) || 0).first();
+        apps = (Number(base.apps) || 0) + (Number(after.apps) || 0);
+        goals = (Number(base.goals) || 0) + (Number(after.goals) || 0);
+        assists = (Number(base.assists) || 0) + (Number(after.assists) || 0);
+      } else {
+        const rec = await env.DB.prepare("SELECT COUNT(*) apps, COALESCE(SUM(goals),0) goals, COALESCE(SUM(assists),0) assists FROM match_player_stats WHERE player_id=?").bind(pl.id).first();
+        apps = Number(rec.apps) || 0; goals = Number(rec.goals) || 0; assists = Number(rec.assists) || 0;
+      }
+      linkedPlayer = { id: pl.id, name: pl.name, number: pl.number, card: card ? card.public_url : null, apps: apps, goals: goals, assists: assists };
+    }
   }
 
   return {

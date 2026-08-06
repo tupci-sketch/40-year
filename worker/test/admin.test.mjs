@@ -97,6 +97,11 @@ ok((await post(app, env, "/api/admin/league-status", { divisionId: "elite", poin
 const homeLs = (await get(app, env, "/api/home")).json;
 ok(homeLs.leagueStatus.divisionId === "elite" && homeLs.leagueStatus.points === 1 && homeLs.leagueStatus.chances === 3, "home: structured league status round-trips");
 ok(homeLs.leagueStatus.division === "Elite", "home: legacy league fields kept for fallback");
+// campaign tracker (L5)
+ok((await post(app, env, "/api/admin/campaign", { kind: "playoffs", divisionId: "elite", target: 8, progress: 2, wins: 1, draws: 0, losses: 1 }, H(modTok))).json.ok, "campaign saved (L5)");
+const homeCamp = (await get(app, env, "/api/home")).json.campaign;
+ok(homeCamp && homeCamp.kind === "playoffs" && homeCamp.target === 8 && homeCamp.progress === 2, "home: campaign round-trips");
+ok((await post(app, env, "/api/admin/campaign", { kind: "" }, H(modTok))).json.ok && (await get(app, env, "/api/home")).json.campaign === null, "campaign cleared with empty kind");
 // Club record editor: sync from EA (L5, so Dan can). No matches in this DB, so
 // the record reconciles to exactly the baseline and adds up.
 ok((await post(app, env, "/api/admin/club-record", { wins: 305, draws: 87, losses: 293, goalsFor: 1932, goalsAgainst: 1861, leagueApps: 638, playoffApps: 47 }, H(modTok))).json.ok, "club record synced (L5)");
