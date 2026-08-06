@@ -102,6 +102,10 @@ ok((await post(app, env, "/api/admin/campaign", { kind: "playoffs", divisionId: 
 const homeCamp = (await get(app, env, "/api/home")).json.campaign;
 ok(homeCamp && homeCamp.kind === "playoffs" && homeCamp.target === 8 && homeCamp.progress === 2, "home: campaign round-trips");
 ok((await post(app, env, "/api/admin/campaign", { kind: "" }, H(modTok))).json.ok && (await get(app, env, "/api/home")).json.campaign === null, "campaign cleared with empty kind");
+// custom trophies / honours (L5)
+ok((await post(app, env, "/api/admin/honours", { honours: [{ icon: "🏆", title: "Division 2 Champions", year: "FC26", sub: "Promoted unbeaten" }, { title: "" }] }, H(modTok))).json.honours.length === 1, "honours saved, blank titles dropped (L5)");
+const hon = (await get(app, env, "/api/honours")).json;
+ok(hon.honours.length === 1 && hon.honours[0].title === "Division 2 Champions" && hon.honours[0].icon === "🏆", "honours round-trip on public read");
 // Club record editor: sync from EA (L5, so Dan can). No matches in this DB, so
 // the record reconciles to exactly the baseline and adds up.
 ok((await post(app, env, "/api/admin/club-record", { wins: 305, draws: 87, losses: 293, goalsFor: 1932, goalsAgainst: 1861, leagueApps: 638, playoffApps: 47 }, H(modTok))).json.ok, "club record synced (L5)");

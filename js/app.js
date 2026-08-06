@@ -1445,13 +1445,20 @@
     enter: function () {
       var cabinet = U.$("#honours-cabinet"), timeline = U.$("#honours-timeline");
       cabinet.innerHTML = U.emptyState("Opening the cabinet…", "", "🏆"); timeline.innerHTML = "";
-      Promise.all([NET.stats(), NET.seasons()]).then(function (results) {
+      Promise.all([NET.stats(), NET.seasons(), NET.honours().catch(function () { return null; })]).then(function (results) {
         var st = results[0], seasonsRes = results[1];
+        var trophies = (results[2] && results[2].honours) || [];
+        var trophyHtml = trophies.length ? '<div class="trophy-shelf">' + trophies.map(function (h) {
+          return '<div class="trophy-card"><span class="trophy-ic">' + U.esc(h.icon || "🏆") + "</span>" +
+            '<span class="trophy-title">' + U.esc(h.title) + "</span>" +
+            (h.year ? '<span class="trophy-year">' + U.esc(h.year) + "</span>" : "") +
+            (h.sub ? '<span class="trophy-sub">' + U.esc(h.sub) + "</span>" : "") + "</div>";
+        }).join("") + "</div>" : "";
         var block = liveBlock(st, "the trophy cabinet");
-        if (block) { cabinet.innerHTML = block; }
+        if (block) { cabinet.innerHTML = trophyHtml + block; }
         else {
           var x = st.extremes || {};
-          cabinet.innerHTML = '<div class="tile-row">' +
+          cabinet.innerHTML = trophyHtml + '<div class="tile-row">' +
             (x.bestWin ? U.statTile("Biggest win", x.bestWin.our + "–" + x.bestWin.their, { accent: "win", sub: "vs " + x.bestWin.opp }) : "") +
             (x.worstLoss ? U.statTile("Heaviest defeat", x.worstLoss.our + "–" + x.worstLoss.their, { accent: "loss", sub: "vs " + x.worstLoss.opp + " · character building" }) : "") +
             U.statTile("Clean sheets", U.num(x.cleanSheets), { accent: "electric", sub: "recorded games" }) +

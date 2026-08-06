@@ -592,6 +592,18 @@ admin.post("/campaign", async (c) => {
   return c.json({ ok: true });
 });
 
+/* Custom trophies for the Honours cabinet (L5). Client sends the whole list. */
+admin.post("/honours", async (c) => {
+  const g = await requireLevel(c, 5); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
+  const b = await c.req.json().catch(() => ({}));
+  const list = (Array.isArray(b.honours) ? b.honours : []).slice(0, 60).map(function (h) {
+    return { title: clean(h && h.title, 80), sub: clean(h && h.sub, 120), year: clean(h && h.year, 20), icon: clean(h && h.icon, 8) || "🏆" };
+  }).filter(function (h) { return h.title; });
+  await c.env.DB.prepare("INSERT INTO site_settings (key,value) VALUES ('honours',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(JSON.stringify(list)).run();
+  await audit(c.env, g.user.id, "honours", "setting", "honours", { count: list.length });
+  return c.json({ ok: true, honours: list });
+});
+
 admin.post("/settings", async (c) => {
   const g = await requireLevel(c, 9); if (g.err) return c.json({ ok: false, error: g.err, code: g.err }, g.status);
   const b = await c.req.json().catch(() => ({}));

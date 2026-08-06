@@ -396,6 +396,13 @@ pub.get("/stats", async (c) => {
 });
 
 /* ---- socials (editable handles for the Social page) ---- */
+/* Custom trophies for the Honours cabinet (owner-managed in Housekeeping). */
+pub.get("/honours", async (c) => {
+  const row = await c.env.DB.prepare("SELECT value FROM site_settings WHERE key='honours'").first();
+  let honours = []; try { honours = row ? JSON.parse(row.value || "[]") : []; } catch (e) {}
+  return c.json({ ok: true, honours: Array.isArray(honours) ? honours : [] });
+});
+
 /* Editable name pool for the Funhouse manager-spin wheel (owner-managed in
    Housekeeping → Gaffers). Empty until set; the client folds in squad names and
    its own defaults. */

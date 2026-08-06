@@ -31,7 +31,8 @@
     { name: "The Club", items: [
       ["squad", "Squad & Cards", "👕", 5, "Players, positions & card uploads"],
       ["seasons", "Seasons", "🗓️", 9, "Labels, current & archived"],
-      ["news", "News", "📰", 5, "Publish to the Gazette"]
+      ["news", "News", "📰", 5, "Publish to the Gazette"],
+      ["honours", "Honours", "🥇", 5, "Custom trophies & the cabinet"]
     ] },
     { name: "Community", items: [
       ["users", "Users", "👥", 5, "Levels, bans & player links"],
@@ -110,8 +111,8 @@
     var body = U.$("#admin-body", root);
     body.innerHTML = U.emptyState("Loading…", "", "🗝");
     var fn = { matches: renderMatches, fixtures: renderFixtures, squad: renderSquad, gaffers: renderGaffers,
-      league: renderLeague, news: renderNews, seasons: renderSeasons, users: renderUsers, points: renderPoints,
-      titles: renderTitles, moderation: renderModeration, settings: renderSettings }[tab];
+      league: renderLeague, honours: renderHonours, news: renderNews, seasons: renderSeasons, users: renderUsers,
+      points: renderPoints, titles: renderTitles, moderation: renderModeration, settings: renderSettings }[tab];
     if (fn) fn(body);
   }
 
@@ -902,6 +903,44 @@
         else msg.textContent = "✗ " + ((r && r.code) || "failed");
       });
     });
+  }
+
+  function renderHonours(body) {
+    var list = [];
+    function save() { NET.adminHonours(list).then(function (r) { if (r && r.ok) { list = r.honours || list; draw(); U.toast("Cabinet saved."); } else U.toast("✗ save failed"); }); }
+    function draw() {
+      body.innerHTML =
+        '<div class="panel">' +
+          '<div class="section-label">Add a trophy <span class="admin-inline-note">appears in the Honours cabinet</span></div>' +
+          '<div class="field-row">' +
+            field("Icon", '<input type="text" id="hn-icon" maxlength="4" value="🏆">') +
+            field("Title", '<input type="text" id="hn-title" maxlength="80" placeholder="e.g. Division 2 Champions">') +
+          "</div>" +
+          '<div class="field-row">' +
+            field("Year / season", '<input type="text" id="hn-year" maxlength="20" placeholder="e.g. FC26">') +
+            field("Subtitle", '<input type="text" id="hn-sub" maxlength="120" placeholder="e.g. Promoted unbeaten">') +
+          "</div>" +
+          '<div class="admin-actions"><button class="btn btn-gold btn-small" id="hn-add">Add trophy</button></div>' +
+        "</div>" +
+        '<div class="panel">' +
+          '<div class="section-label">The cabinet</div>' +
+          (list.length ? '<div class="admin-sublist">' + list.map(function (h, i) {
+            return '<div class="admin-row"><span class="admin-row-main">' + esc(h.icon || "🏆") + " " + esc(h.title) +
+              (h.year ? " · " + esc(h.year) : "") + (h.sub ? " — " + esc(h.sub) : "") + '</span>' +
+              '<button class="btn btn-ghost btn-small hn-del" data-i="' + i + '">Remove</button></div>';
+          }).join("") + "</div>" : '<p class="admin-inline-note">No custom trophies yet — add one above.</p>') +
+        "</div>";
+      U.$("#hn-add", body).addEventListener("click", function () {
+        var title = U.$("#hn-title", body).value.trim();
+        if (!title) return;
+        list.unshift({ icon: U.$("#hn-icon", body).value.trim() || "🏆", title: title, year: U.$("#hn-year", body).value.trim(), sub: U.$("#hn-sub", body).value.trim() });
+        save();
+      });
+      U.$$(".hn-del", body).forEach(function (btn) {
+        btn.addEventListener("click", function () { list.splice(parseInt(btn.getAttribute("data-i"), 10), 1); save(); });
+      });
+    }
+    NET.honours().then(function (r) { list = (r && r.honours) || []; draw(); });
   }
 
   function renderSettings(body) {
